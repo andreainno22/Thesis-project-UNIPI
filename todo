@@ -1,0 +1,7 @@
+#TODO: 
+* caricare tutto su drive
+* scaricare le scale (da pianerottolo in giù)
+* aggiungere ostacoli fittizi con copy paste/ostacoli fake per pipeline 2
+* fare bounding box sia a immagine baseline che a immagine con ostacolo (per pipeline 2)
+* generare occlusioni anche su dataset di p3 (usabile anche per p1 e p2)
+* Per P1: testare yolo 26, yolo 11 e rcnn
