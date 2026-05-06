@@ -7,52 +7,85 @@ from PIL import Image
 # CONFIGURAZIONE DEI PERCORSI E PARAMETRI
 # ========================================================
 
-# 1. Cartella contenente le immagini di sfondo (corridoi, porte vuote)
-BACKGROUNDS_DIR = r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\non_ostruite\porte"
-
-# 2. Dizionario che mappa la cartella degli oggetti al loro Class ID (YOLO)
-
-OBJECT_CLASSES = {
-    r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\oggetti_fine_tuning\cart.v1i.yolo26\train": 0, # Ostacolo generico
-    r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\oggetti_fine_tuning\only-wheelchair.v1i.yolo26\train": 0, # Ostacolo generico   
-    r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\oggetti_fine_tuning\Stretcher.v1i.yolo26\train": 0, # Ostacolo generico
-    r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\oggetti_fine_tuning\waste_bin.v1i.yolo26\train": 0 # Ostacolo generico
+# 1. Cartelle contenenti le immagini di sfondo (venue diverse)
+BACKGROUND_VENUES = {
+    "porte": r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\non_ostruite\porte",
+    "corridoi": r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\non_ostruite\corridoi",
 }
 
-# 3. Cartella dove verrà salvato il nuovo dataset pronto per l'addestramento YOLO
-OUTPUT_DIR = r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\ostruzioni_reali\porte"
+# 2. Sfondi campionati per venue 
+BACKGROUNDS_PER_VENUE = 150
 
-# 4. Quante immagini sintetiche vuoi generare in totale?
-NUM_IMAGES_TO_GENERATE = 10
+# 3. Cartelle degli oggetti per categoria (classe unica YOLO)
+OBJECT_CATEGORIES = {
+    "carrello": r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\oggetti_fine_tuning\cart.v1i.yolo26\train",
+    "sedia": r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\oggetti_fine_tuning\only-wheelchair.v1i.yolo26\train",
+    "scatola": r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\oggetti_fine_tuning\boxes.v1i.yolo26\train",
+    "barella": r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\oggetti_fine_tuning\Stretcher.v1i.yolo26\train",
+    "cestino": r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\oggetti_fine_tuning\waste_bin.v1i.yolo26\train",
+}
 
-# 5. Numero massimo di oggetti da inserire in una singola foto
-MAX_OBJECTS_PER_IMAGE = 1
+CLASS_ID = 0
+
+# 4. Cartella dove verrà salvato il nuovo dataset pronto per l'addestramento YOLO
+OUTPUT_DIR = r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\ostruzioni_reali"
+
+# 5. Oggetti per immagine (1-3 random)
+MIN_OBJECTS_PER_IMAGE = 1
+MAX_OBJECTS_PER_IMAGE = 3
+
+# 6. Variazioni per sfondo (scala + posizione diverse)
+VARIATIONS_PER_BACKGROUND_RANGE = (2, 3)
+
+# 7. Parametri di posizionamento e overlap
+SCALE_RANGE = (0.15, 0.50)
+MIN_Y_FRACTION = 0.50
+MAX_IOU = 0.10
+MAX_PLACEMENT_ATTEMPTS = 30
+
+# 8. Riproducibilita (None = casuale)
+RNG_SEED = None
 
 # ========================================================
 # FUNZIONI PRINCIPALI
 # ========================================================
 
-def load_paths():
-    """Carica i percorsi di tutti gli sfondi e di tutti gli oggetti divisi per classe."""
-    # Carica sfondi
-    bg_paths = []
-    for ext in ["*.jpg", "*.jpeg", "*.png"]:
-        bg_paths.extend(glob.glob(os.path.join(BACKGROUNDS_DIR, ext)))
-    
-    if not bg_paths:
-        print(f"ATTENZIONE: Nessuno sfondo trovato in {BACKGROUNDS_DIR}")
-        
-    # Carica oggetti
-    objects_dict = {}
-    for obj_dir, class_id in OBJECT_CLASSES.items():
+def load_backgrounds_by_venue():
+    """Carica i percorsi di tutti gli sfondi, campionandoli per venue."""
+    backgrounds_by_venue = {}
+    for venue, venue_dir in BACKGROUND_VENUES.items():
+        venue_paths = []
+        for ext in ["*.jpg", "*.jpeg", "*.png"]:
+            venue_paths.extend(glob.glob(os.path.join(venue_dir, ext)))
+
+        if not venue_paths:
+            print(f"ATTENZIONE: Nessuno sfondo trovato in {venue_dir}")
+            backgrounds_by_venue[venue] = []
+            continue
+
+        total_paths = len(venue_paths)
+        venue_paths = sorted(venue_paths)
+        if total_paths > BACKGROUNDS_PER_VENUE:
+            venue_paths = random.sample(venue_paths, BACKGROUNDS_PER_VENUE)
+
+        print(f"Venue {venue}: selezionati {len(venue_paths)}/{total_paths} sfondi.")
+        backgrounds_by_venue[venue] = venue_paths
+
+    return backgrounds_by_venue
+
+
+def load_objects_by_category():
+    """Carica i percorsi di tutti gli oggetti per categoria."""
+    objects_by_category = {}
+    for category, obj_dir in OBJECT_CATEGORIES.items():
         obj_paths = []
-        for ext in ["*.png"]: # Gli oggetti scontornati sono PNG
+        for ext in ["*.png"]:  # Gli oggetti scontornati sono PNG
             obj_paths.extend(glob.glob(os.path.join(obj_dir, ext)))
-        
-        objects_dict[class_id] = obj_paths
-        print(f"Classe {class_id}: trovati {len(obj_paths)} oggetti ritagliati.")
-        
-    return bg_paths, objects_dict
+
+        objects_by_category[category] = obj_paths
+        print(f"Categoria {category}: trovati {len(obj_paths)} oggetti ritagliati.")
+
+    return objects_by_category
 
 def create_yolo_label(bg_w, bg_h, fg_x, fg_y, fg_w, fg_h, class_id):
     """Calcola le coordinate YOLO (normalizzate) per l'oggetto incollato."""
@@ -69,105 +102,178 @@ def create_yolo_label(bg_w, bg_h, fg_x, fg_y, fg_w, fg_h, class_id):
     # Assicurati che i valori siano formattati a 6 cifre decimali
     return f"{class_id} {norm_x:.6f} {norm_y:.6f} {norm_w:.6f} {norm_h:.6f}"
 
+
+def compute_iou(box_a, box_b):
+    """Calcola la IoU tra due bounding box (x, y, w, h)."""
+    ax, ay, aw, ah = box_a
+    bx, by, bw, bh = box_b
+
+    ax2 = ax + aw
+    ay2 = ay + ah
+    bx2 = bx + bw
+    by2 = by + bh
+
+    inter_x1 = max(ax, bx)
+    inter_y1 = max(ay, by)
+    inter_x2 = min(ax2, bx2)
+    inter_y2 = min(ay2, by2)
+
+    inter_w = max(0, inter_x2 - inter_x1)
+    inter_h = max(0, inter_y2 - inter_y1)
+    inter_area = inter_w * inter_h
+
+    if inter_area <= 0:
+        return 0.0
+
+    union_area = (aw * ah) + (bw * bh) - inter_area
+    if union_area <= 0:
+        return 0.0
+
+    return inter_area / union_area
+
+
+def find_non_overlapping_placement(bg_w, bg_h, fg_img, existing_boxes):
+    """Trova una posizione che rispetti la soglia di overlap."""
+    aspect_ratio = fg_img.width / fg_img.height
+
+    for _ in range(MAX_PLACEMENT_ATTEMPTS):
+        scale_factor = random.uniform(SCALE_RANGE[0], SCALE_RANGE[1])
+        new_fg_h = int(bg_h * scale_factor)
+        if new_fg_h <= 1:
+            continue
+
+        new_fg_w = int(new_fg_h * aspect_ratio)
+        if new_fg_w <= 1:
+            continue
+
+        if new_fg_w >= bg_w or new_fg_h >= bg_h:
+            continue
+
+        min_y = int(bg_h * MIN_Y_FRACTION)
+        max_y = bg_h - new_fg_h
+        if max_y < 0:
+            continue
+
+        if max_y <= min_y:
+            paste_y = max(0, max_y)
+        else:
+            paste_y = random.randint(min_y, max_y)
+
+        max_x = bg_w - new_fg_w
+        if max_x < 0:
+            continue
+
+        paste_x = random.randint(0, max_x)
+
+        candidate_box = (paste_x, paste_y, new_fg_w, new_fg_h)
+        if all(compute_iou(candidate_box, box) < MAX_IOU for box in existing_boxes):
+            resized = fg_img.resize((new_fg_w, new_fg_h), Image.Resampling.LANCZOS)
+            return resized, candidate_box
+
+    return None
+
 def generate_dataset():
+    if RNG_SEED is not None:
+        random.seed(RNG_SEED)
+
     # Prepara le cartelle di output per immagini e label (stile YOLO)
     images_out_dir = os.path.join(OUTPUT_DIR, "images")
     labels_out_dir = os.path.join(OUTPUT_DIR, "labels")
     os.makedirs(images_out_dir, exist_ok=True)
     os.makedirs(labels_out_dir, exist_ok=True)
-    
-    bg_paths, objects_dict = load_paths()
-    
-    if not bg_paths or not any(objects_dict.values()):
+
+    backgrounds_by_venue = load_backgrounds_by_venue()
+    objects_by_category = load_objects_by_category()
+
+    available_categories = [c for c, paths in objects_by_category.items() if paths]
+    if not any(backgrounds_by_venue.values()) or not available_categories:
         print("Errore: Sfondi o oggetti mancanti. Controlla i percorsi in alto.")
         return
 
-    # Estrai tutte le classi disponibili che hanno almeno un'immagine
-    available_classes = [c for c, paths in objects_dict.items() if paths]
+    total_generated = 0
+    total_skipped = 0
 
-    # Ordina i percorsi degli sfondi per avere un ordine deterministico
-    bg_paths = sorted(bg_paths)
-
-    for i in range(NUM_IMAGES_TO_GENERATE):
-        # 1. Scegli uno sfondo in ordine
-        bg_path = bg_paths[i % len(bg_paths)]
-        try:
-            bg_img = Image.open(bg_path).convert("RGB")
-        except Exception as e:
-            print(f"Errore caricamento sfondo {bg_path}: {e}")
+    for venue, bg_paths in backgrounds_by_venue.items():
+        if not bg_paths:
             continue
-            
-        bg_w, bg_h = bg_img.size
-        
-        # Scegli quanti oggetti incollare in questa immagine (da 1 a MAX)
-        num_objects = random.randint(1, MAX_OBJECTS_PER_IMAGE)
-        
-        labels_list = []
-        
-        # 2. Incolla gli oggetti
-        for _ in range(num_objects):
-            class_id = random.choice(available_classes)
-            fg_path = random.choice(objects_dict[class_id])
-            
+
+        generated_for_venue = 0
+
+        for bg_idx, bg_path in enumerate(bg_paths, start=1):
             try:
-                fg_img = Image.open(fg_path).convert("RGBA") # Importante: RGBA per la trasparenza
+                bg_img = Image.open(bg_path).convert("RGB")
             except Exception as e:
+                print(f"Errore caricamento sfondo {bg_path}: {e}")
                 continue
-                
-            # --- LOGICA DI RIDIMENSIONAMENTO E POSIZIONAMENTO ---
-            # Scala l'oggetto casualmente per simulare distanza (es. dal 30% all'80% dell'altezza dello sfondo)
-            scale_factor = random.uniform(0.15, 0.50)
-            new_fg_h = int(bg_h * scale_factor)
-            
-            # Mantieni le proporzioni originali dell'oggetto
-            aspect_ratio = fg_img.width / fg_img.height
-            new_fg_w = int(new_fg_h * aspect_ratio)
-            
-            fg_img = fg_img.resize((new_fg_w, new_fg_h), Image.Resampling.LANCZOS)
-            
-            # Posizionamento: Varietà massima sul pavimento
-            # Y: Mettiamolo nella metà inferiore per evitare oggetti sul soffitto
-            min_y = int(bg_h * 0.5) # Parte dal 50% dell'altezza
-            max_y = bg_h - new_fg_h
-            
-            if max_y <= min_y:
-                # Se l'oggetto è troppo grande per lo sfondo, mettilo alla base
-                paste_y = bg_h - new_fg_h
-            else:
-                paste_y = random.randint(min_y, max_y)
-                
-            # X: Casuale su tutta la larghezza dell'immagine (per massima varianza)
-            max_x = bg_w - new_fg_w
-            paste_x = random.randint(0, max(0, max_x))
-            
-            # 3. Incolla usando il canale Alpha (trasparenza) come maschera
-            bg_img.paste(fg_img, (paste_x, paste_y), fg_img)
-            
-            # 4. Genera la label YOLO
-            yolo_label = create_yolo_label(bg_w, bg_h, paste_x, paste_y, new_fg_w, new_fg_h, class_id)
-            labels_list.append(yolo_label)
-            
-        # 5. Salva l'immagine generata e il file txt
-        bg_filename = os.path.splitext(os.path.basename(bg_path))[0]
-        
-        # Nome base
-        output_filename = f"{bg_filename}_ostruita"
-        # Se stiamo ciclando di nuovo sugli sfondi, aggiungiamo un numero per evitare sovrascritture
-        if i >= len(bg_paths):
-            output_filename = f"{output_filename}_{i // len(bg_paths)}"
-        
-        img_save_path = os.path.join(images_out_dir, f"{output_filename}.jpg")
-        bg_img.save(img_save_path, "JPEG", quality=95)
-        
-        txt_save_path = os.path.join(labels_out_dir, f"{output_filename}.txt")
-        with open(txt_save_path, "w") as f:
-            f.write("\n".join(labels_list))
-            
-        if (i+1) % 10 == 0:
-            print(f"Generate {i+1}/{NUM_IMAGES_TO_GENERATE} immagini sintetiche...")
+
+            bg_w, bg_h = bg_img.size
+            bg_filename = os.path.splitext(os.path.basename(bg_path))[0]
+            num_variations = random.randint(
+                VARIATIONS_PER_BACKGROUND_RANGE[0],
+                VARIATIONS_PER_BACKGROUND_RANGE[1],
+            )
+
+            for variation_idx in range(1, num_variations + 1):
+                composed_img = bg_img.copy()
+                labels_list = []
+                placed_boxes = []
+
+                num_objects = random.randint(MIN_OBJECTS_PER_IMAGE, MAX_OBJECTS_PER_IMAGE)
+
+                for _ in range(num_objects):
+                    category = random.choice(available_categories)
+                    fg_path = random.choice(objects_by_category[category])
+
+                    try:
+                        with Image.open(fg_path) as fg_img:
+                            fg_img = fg_img.convert("RGBA")
+                            placement = find_non_overlapping_placement(
+                                bg_w, bg_h, fg_img, placed_boxes
+                            )
+                    except Exception:
+                        continue
+
+                    if placement is None:
+                        continue
+
+                    resized_img, (paste_x, paste_y, new_fg_w, new_fg_h) = placement
+                    composed_img.paste(resized_img, (paste_x, paste_y), resized_img)
+                    placed_boxes.append((paste_x, paste_y, new_fg_w, new_fg_h))
+
+                    yolo_label = create_yolo_label(
+                        bg_w, bg_h, paste_x, paste_y, new_fg_w, new_fg_h, CLASS_ID
+                    )
+                    labels_list.append(yolo_label)
+
+                if not labels_list:
+                    total_skipped += 1
+                    continue
+
+                output_filename = (
+                    f"{venue}_{bg_idx:04d}_{bg_filename}_v{variation_idx:02d}"
+                )
+                img_save_path = os.path.join(images_out_dir, f"{output_filename}.jpg")
+                composed_img.save(img_save_path, "JPEG", quality=95)
+
+                txt_save_path = os.path.join(labels_out_dir, f"{output_filename}.txt")
+                with open(txt_save_path, "w") as f:
+                    f.write("\n".join(labels_list))
+
+                total_generated += 1
+                generated_for_venue += 1
+
+                if total_generated % 50 == 0:
+                    print(f"Generate {total_generated} immagini sintetiche...")
+
+            bg_img.close()
+
+        print(f"Venue {venue}: generate {generated_for_venue} immagini.")
 
     print(f"\nCOMPLETATO! Dataset sintetico salvato in: {OUTPUT_DIR}")
-    print(f"Pronto per l'addestramento con YOLO!")
+    print(f"Immagini generate: {total_generated}")
+    if total_skipped:
+        print(f"Immagini scartate (nessun oggetto piazzato): {total_skipped}")
+    print("Pronto per l'addestramento con YOLO!")
 
 if __name__ == "__main__":
     generate_dataset()
