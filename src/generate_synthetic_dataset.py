@@ -1,6 +1,7 @@
 import os
 import random
 import glob
+import hashlib
 from PIL import Image
 
 # ========================================================
@@ -13,8 +14,8 @@ BACKGROUND_VENUES = {
     "corridoi": r"C:\Users\andrea\OneDrive - University of Pisa\Università\Unipi\tesi\Dataset\non_ostruite\corridoi",
 }
 
-# 2. Sfondi campionati per venue 
-BACKGROUNDS_PER_VENUE = 150
+# 2. Sfondi campionati per venue (None = usa tutti gli sfondi)
+BACKGROUNDS_PER_VENUE = None
 
 # 3. Cartelle degli oggetti per categoria (classe unica YOLO)
 OBJECT_CATEGORIES = {
@@ -35,7 +36,7 @@ MIN_OBJECTS_PER_IMAGE = 1
 MAX_OBJECTS_PER_IMAGE = 3
 
 # 6. Variazioni per sfondo (scala + posizione diverse)
-VARIATIONS_PER_BACKGROUND_RANGE = (2, 3)
+VARIATIONS_PER_BACKGROUND_RANGE = (1, 1)
 
 # 7. Parametri di posizionamento e overlap
 SCALE_RANGE = (0.15, 0.50)
@@ -45,6 +46,10 @@ MAX_PLACEMENT_ATTEMPTS = 30
 
 # 8. Riproducibilita (None = casuale)
 RNG_SEED = None
+
+# 9. Percentuale di background da lasciare puliti (negative samples)
+NEGATIVE_BG_RATIO = 0.10
+NEGATIVE_BG_SEED = 42
 
 # ========================================================
 # FUNZIONI PRINCIPALI
@@ -65,13 +70,31 @@ def load_backgrounds_by_venue():
 
         total_paths = len(venue_paths)
         venue_paths = sorted(venue_paths)
-        if total_paths > BACKGROUNDS_PER_VENUE:
+        if BACKGROUNDS_PER_VENUE and total_paths > BACKGROUNDS_PER_VENUE:
             venue_paths = random.sample(venue_paths, BACKGROUNDS_PER_VENUE)
 
         print(f"Venue {venue}: selezionati {len(venue_paths)}/{total_paths} sfondi.")
         backgrounds_by_venue[venue] = venue_paths
 
     return backgrounds_by_venue
+
+
+def seed_from_value(value: str) -> int:
+    return int(hashlib.sha1(value.encode("utf-8")).hexdigest()[:8], 16)
+
+
+def select_negative_backgrounds(venue_paths, venue_name: str) -> set[str]:
+    if NEGATIVE_BG_RATIO <= 0:
+        return set()
+
+    bg_stems = [os.path.splitext(os.path.basename(p))[0] for p in venue_paths]
+    count = int(len(bg_stems) * NEGATIVE_BG_RATIO)
+    if count <= 0:
+        return set()
+
+    seed = NEGATIVE_BG_SEED if NEGATIVE_BG_SEED is not None else (RNG_SEED or 42)
+    rng = random.Random(seed_from_value(f"{seed}:{venue_name}"))
+    return set(rng.sample(bg_stems, count))
 
 
 def load_objects_by_category():
@@ -198,6 +221,12 @@ def generate_dataset():
             continue
 
         generated_for_venue = 0
+        skipped_backgrounds = 0
+        negative_bg_stems = select_negative_backgrounds(bg_paths, venue)
+        if negative_bg_stems:
+            print(
+                f"Venue {venue}: {len(negative_bg_stems)} background lasciati puliti (negative)"
+            )
 
         for bg_idx, bg_path in enumerate(bg_paths, start=1):
             try:
@@ -208,6 +237,10 @@ def generate_dataset():
 
             bg_w, bg_h = bg_img.size
             bg_filename = os.path.splitext(os.path.basename(bg_path))[0]
+            if bg_filename in negative_bg_stems:
+                skipped_backgrounds += 1
+                bg_img.close()
+                continue
             num_variations = random.randint(
                 VARIATIONS_PER_BACKGROUND_RANGE[0],
                 VARIATIONS_PER_BACKGROUND_RANGE[1],
@@ -268,6 +301,8 @@ def generate_dataset():
             bg_img.close()
 
         print(f"Venue {venue}: generate {generated_for_venue} immagini.")
+        if skipped_backgrounds:
+            print(f"Venue {venue}: background puliti (skip) {skipped_backgrounds}.")
 
     print(f"\nCOMPLETATO! Dataset sintetico salvato in: {OUTPUT_DIR}")
     print(f"Immagini generate: {total_generated}")
