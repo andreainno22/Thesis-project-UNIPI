@@ -3,18 +3,20 @@ PatchCore — Anomaly Detection
 ====================================================================
 Uso:
   1. BUILD memory bank da una singola immagine di riferimento:
-       python patchcore_door.py build --ref porta.jpg --bank memory_bank.pt
+       python anomaly_detection_patch_core.py build --ref porta.jpg --bank memory_bank.pt
 
   2. TEST su un'immagine (con o senza occlusione):
-       python patchcore_door.py test --bank memory_bank.pt --img test.jpg
+       python anomaly_detection_patch_core.py test --bank memory_bank.pt --img test.jpg
 
   3. TEST con ROI (opzionale): usando --roi "x,y,w,h" in pixel
-       python patchcore_door.py test --bank memory_bank.pt --img test.jpg --roi "100,50,300,400"
+       python anomaly_detection_patch_core.py test --bank memory_bank.pt --img test.jpg --roi "100,50,300,400"
 
 Dipendenze: torch torchvision pillow numpy scikit-learn opencv-python
 """
 
 # TODO: capire se adattare il re- weighting come nel paper o lasciare così com'è
+# TODO: rimandare test su vm, salvare csv e rivedere la tabella results del db
+# TODO: capire come attuare la visualizzazione di heatmap su i vari test (media di heatmap (?) o heatmap di un test specifico (es. quello con occlusione più evidente)
 import argparse
 import json
 import sqlite3
@@ -49,7 +51,8 @@ DEFAULT_DB_PATH = ROOT_DIR / "Aggregated_dataset_db" / "occlusion.db"
 # ── Augmentation fotometrica ────────────────────────────────────────────────
 
 def augment_reference(img_pil: Image.Image, n: int = 15,
-                      seed: int = 42) -> list[Image.Image]:
+                      seed: int = 42,
+                      include_original: bool = True) -> list[Image.Image]:
     """
     Genera n varianti fotometriche di una singola immagine.
     Varia: luminosità, contrasto, saturazione, temperatura colore,
@@ -59,12 +62,17 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
     Args:
         seed: seme RNG. Usare semi diversi per bank vs calibrazione vs test
               in modo da garantire varianti statisticamente indipendenti.
+        include_original: se True, l'originale è incluso come primo elemento
+                          e vengono generate n-1 augmentazioni (totale n).
+                          Se False, vengono generate n augmentazioni pure
+                          senza l'originale — usare in evaluate_from_db per
+                          riservare ref_img come campione di test indipendente.
     """
-    variants = [img_pil]  # includi l'originale
+    variants = [img_pil] if include_original else []
 
     rng = np.random.default_rng(seed)
 
-    for _ in range(n - 1):
+    for _ in range(n - 1 if include_original else n):
         img = img_pil.copy()
 
         # Luminosità: simula mattina/sera/notte/luce artificiale
@@ -856,6 +864,7 @@ def insert_experiment(
     dataset_filter: dict,
     hyperparams: dict,
     artifact_path: str | None,
+    status: str = "running",
 ) -> int:
     cur = conn.execute(
         "INSERT INTO experiments (pipeline, model_variant, dataset_filter, hyperparams, "
@@ -866,7 +875,7 @@ def insert_experiment(
             json.dumps(dataset_filter) if dataset_filter else None,
             json.dumps(hyperparams) if hyperparams else None,
             artifact_path,
-            "done",
+            status,
         ),
     )
     return int(cur.lastrowid)
@@ -909,10 +918,11 @@ def evaluate_from_db(
     n_cal: int,
     coreset_p: float,
     out_csv: str | None,
-    results_split: str,
     model_variant: str,
     test_normal: bool = True,
 ) -> None:
+    results_split = split if split is not None else "test"
+
     dataset_root_path = Path(dataset_root)
     if not dataset_root_path.exists():
         raise FileNotFoundError(f"Dataset root not found: {dataset_root_path}")
@@ -933,6 +943,31 @@ def evaluate_from_db(
             return
 
         roi_tuple = parse_roi(roi)
+
+        artifact_path = str(Path(out_csv)) if out_csv else None
+        dataset_filter = {
+            "split": split,
+            "venue": venue,
+            "ref_source": ref_source,
+            "ob_source": ob_source,
+            "reference_only_with_pairs": True,
+        }
+        hyperparams = {
+            "n_augments": n_augments,
+            "n_cal": n_cal,
+            "coreset_p": coreset_p,
+            "k_sigma": k_sigma,
+            "roi": roi,
+            "test_normal": test_normal,
+        }
+        exp_id = insert_experiment(
+            conn,
+            model_variant=model_variant,
+            dataset_filter=dataset_filter,
+            hyperparams=hyperparams,
+            artifact_path=artifact_path,
+            status="running",
+        )
 
         model = FeatureExtractor().to(DEVICE).eval()
 
@@ -963,8 +998,8 @@ def evaluate_from_db(
 
             ref_img = Image.open(ref_path).convert("RGB")
 
-            bank_variants = augment_reference(ref_img, n=n_augments, seed=42)
-            cal_variants = augment_reference(ref_img, n=n_cal, seed=1000)
+            bank_variants = augment_reference(ref_img, n=n_augments, seed=42, include_original=False)
+            cal_variants = augment_reference(ref_img, n=n_cal, seed=1000, include_original=False)
 
             all_features = []
             for img in bank_variants:
@@ -990,6 +1025,8 @@ def evaluate_from_db(
                 {
                     "normal_scores": [],
                     "ob_scores": [],
+                    "normal_scores_norm": [],
+                    "ob_scores_norm": [],
                     "thresholds": [],
                     "fp": 0,
                     "tp": 0,
@@ -1001,7 +1038,9 @@ def evaluate_from_db(
             if test_normal:
                 ref_score = compute_image_score_from_pil(model, ref_img, bank, roi_tuple)
                 is_fp = ref_score > threshold
+                norm_ref_score = (ref_score - mu) / (sigma + 1e-8)
                 stats["normal_scores"].append(ref_score)
+                stats["normal_scores_norm"].append(norm_ref_score)
                 if is_fp:
                     stats["fp"] += 1
 
@@ -1013,6 +1052,7 @@ def evaluate_from_db(
                         "venue_type": ref.venue_type,
                         "file_path": ref.file_path,
                         "score": round(ref_score, 6),
+                        "normalized_score": round(norm_ref_score, 6),
                         "threshold": round(threshold, 6),
                         "is_anomaly": int(is_fp),
                     }
@@ -1027,7 +1067,9 @@ def evaluate_from_db(
                 ob_img = Image.open(ob_path).convert("RGB")
                 ob_score = compute_image_score_from_pil(model, ob_img, bank, roi_tuple)
                 is_tp = ob_score > threshold
+                norm_ob_score = (ob_score - mu) / (sigma + 1e-8)
                 stats["ob_scores"].append(ob_score)
+                stats["ob_scores_norm"].append(norm_ob_score)
                 if is_tp:
                     stats["tp"] += 1
                 else:
@@ -1041,6 +1083,7 @@ def evaluate_from_db(
                         "venue_type": ob.venue_type,
                         "file_path": ob.file_path,
                         "score": round(ob_score, 6),
+                        "normalized_score": round(norm_ob_score, 6),
                         "threshold": round(threshold, 6),
                         "is_anomaly": int(is_tp),
                     }
@@ -1049,11 +1092,9 @@ def evaluate_from_db(
             if idx % 10 == 0:
                 print(f"  Processati {idx}/{len(refs)} riferimenti...")
 
-        artifact_path = None
         if out_csv:
             import csv
 
-            artifact_path = str(Path(out_csv))
             with open(out_csv, "w", newline="", encoding="utf-8") as csvfile:
                 fieldnames = [
                     "reference_id",
@@ -1062,6 +1103,7 @@ def evaluate_from_db(
                     "venue_type",
                     "file_path",
                     "score",
+                    "normalized_score",
                     "threshold",
                     "is_anomaly",
                 ]
@@ -1070,33 +1112,11 @@ def evaluate_from_db(
                 for row in per_item_results:
                     writer.writerow(row)
 
-        dataset_filter = {
-            "split": split,
-            "venue": venue,
-            "ref_source": ref_source,
-            "ob_source": ob_source,
-            "reference_only_with_pairs": True,
-        }
-        hyperparams = {
-            "n_augments": n_augments,
-            "n_cal": n_cal,
-            "coreset_p": coreset_p,
-            "k_sigma": k_sigma,
-            "roi": roi,
-            "test_normal": test_normal,
-        }
-
-        exp_id = insert_experiment(
-            conn,
-            model_variant=model_variant,
-            dataset_filter=dataset_filter,
-            hyperparams=hyperparams,
-            artifact_path=artifact_path,
-        )
-
         for venue_type, stats in venue_stats.items():
             normal_scores = stats["normal_scores"]
             ob_scores = stats["ob_scores"]
+            normal_scores_norm = stats["normal_scores_norm"]
+            ob_scores_norm = stats["ob_scores_norm"]
             fp = stats["fp"]
             tp = stats["tp"]
             fn = stats["fn"]
@@ -1112,13 +1132,13 @@ def evaluate_from_db(
                 f1 = 2 * precision * recall / (precision + recall)
 
             auroc = None
-            if normal_scores and ob_scores:
+            if normal_scores_norm and ob_scores_norm:
                 try:
                     from sklearn.metrics import roc_auc_score
 
-                    all_scores = normal_scores + ob_scores
-                    all_labels = [0] * len(normal_scores) + [1] * len(ob_scores)
-                    auroc = float(roc_auc_score(all_labels, all_scores))
+                    all_scores_norm = normal_scores_norm + ob_scores_norm
+                    all_labels = [0] * len(normal_scores_norm) + [1] * len(ob_scores_norm)
+                    auroc = float(roc_auc_score(all_labels, all_scores_norm))
                 except Exception:
                     auroc = None
 
@@ -1139,6 +1159,7 @@ def evaluate_from_db(
                 },
             )
 
+        conn.execute("UPDATE experiments SET status = 'done' WHERE exp_id = ?", (exp_id,))
         conn.commit()
 
         print("\nValutazione completata.")
@@ -1245,9 +1266,6 @@ def main():
                            help=f"Frazione coreset (default: {CORESET_P})")
     p_eval_db.add_argument("--out-csv", default=None,
                            help="Percorso CSV output (opzionale)")
-    p_eval_db.add_argument("--results-split", default="train",
-                           choices=["train", "val", "test"],
-                           help="Split da salvare in tabella results")
     p_eval_db.add_argument("--model-variant", default="wide_resnet50_2",
                            help="Etichetta modello per tabella experiments")
 
@@ -1290,7 +1308,6 @@ def main():
             n_cal=args.cal,
             coreset_p=args.coreset_p,
             out_csv=args.out_csv,
-            results_split=args.results_split,
             model_variant=args.model_variant,
         )
 
