@@ -884,16 +884,16 @@ def insert_experiment(
 def insert_results(
     conn: sqlite3.Connection,
     exp_id: int,
-    results_split: str,
     venue_type: str,
     metrics: dict,
+    fold: str | None = None,
 ) -> None:
     conn.execute(
-        "INSERT INTO results (exp_id, split, venue_type, precision, recall, F1, auroc, "
+        "INSERT INTO results (exp_id, fold, venue_type, precision, recall, F1, auroc, "
         "anomaly_threshold, false_alarm_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             exp_id,
-            results_split,
+            fold,
             venue_type,
             metrics.get("precision"),
             metrics.get("recall"),
@@ -921,12 +921,11 @@ def evaluate_from_db(
     model_variant: str,
     test_normal: bool = True,
 ) -> None:
-    results_split = split if split is not None else "test"
-
     dataset_root_path = Path(dataset_root)
     if not dataset_root_path.exists():
         raise FileNotFoundError(f"Dataset root not found: {dataset_root_path}")
 
+    csv_file = None
     conn = sqlite3.connect(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON;")
@@ -971,7 +970,18 @@ def evaluate_from_db(
 
         model = FeatureExtractor().to(DEVICE).eval()
 
-        per_item_results: list[dict] = []
+        import csv as _csv
+        _csv_fieldnames = [
+            "reference_id", "test_id", "test_type", "venue_type",
+            "file_path", "score", "normalized_score", "threshold", "is_anomaly",
+        ]
+        csv_writer = None
+        if out_csv:
+            csv_file = open(out_csv, "w", newline="", encoding="utf-8")
+            csv_writer = _csv.DictWriter(csv_file, fieldnames=_csv_fieldnames)
+            csv_writer.writeheader()
+            csv_file.flush()
+
         missing_files: list[str] = []
         venue_stats: dict[str, dict] = {}
 
@@ -1044,8 +1054,8 @@ def evaluate_from_db(
                 if is_fp:
                     stats["fp"] += 1
 
-                per_item_results.append(
-                    {
+                if csv_writer:
+                    csv_writer.writerow({
                         "reference_id": ref.frame_id,
                         "test_id": ref.frame_id,
                         "test_type": "normal",
@@ -1055,8 +1065,8 @@ def evaluate_from_db(
                         "normalized_score": round(norm_ref_score, 6),
                         "threshold": round(threshold, 6),
                         "is_anomaly": int(is_fp),
-                    }
-                )
+                    })
+                    csv_file.flush()
 
             for ob in ob_map.get(ref.frame_id, []):
                 ob_path = resolve_dataset_path(dataset_root_path, ob.file_path)
@@ -1075,8 +1085,8 @@ def evaluate_from_db(
                 else:
                     stats["fn"] += 1
 
-                per_item_results.append(
-                    {
+                if csv_writer:
+                    csv_writer.writerow({
                         "reference_id": ref.frame_id,
                         "test_id": ob.frame_id,
                         "test_type": "obstructed",
@@ -1086,31 +1096,14 @@ def evaluate_from_db(
                         "normalized_score": round(norm_ob_score, 6),
                         "threshold": round(threshold, 6),
                         "is_anomaly": int(is_tp),
-                    }
-                )
+                    })
+                    csv_file.flush()
 
             if idx % 10 == 0:
                 print(f"  Processati {idx}/{len(refs)} riferimenti...")
 
-        if out_csv:
-            import csv
-
-            with open(out_csv, "w", newline="", encoding="utf-8") as csvfile:
-                fieldnames = [
-                    "reference_id",
-                    "test_id",
-                    "test_type",
-                    "venue_type",
-                    "file_path",
-                    "score",
-                    "normalized_score",
-                    "threshold",
-                    "is_anomaly",
-                ]
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                writer.writeheader()
-                for row in per_item_results:
-                    writer.writerow(row)
+        if csv_file:
+            csv_file.close()
 
         for venue_type, stats in venue_stats.items():
             normal_scores = stats["normal_scores"]
@@ -1147,7 +1140,6 @@ def evaluate_from_db(
             insert_results(
                 conn,
                 exp_id=exp_id,
-                results_split=results_split,
                 venue_type=venue_type,
                 metrics={
                     "precision": precision,
@@ -1174,6 +1166,8 @@ def evaluate_from_db(
         if artifact_path:
             print(f"  CSV salvato: {artifact_path}")
     finally:
+        if csv_file:
+            csv_file.close()
         conn.close()
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
