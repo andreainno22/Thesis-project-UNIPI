@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS results (
     pro_score REAL,
     anomaly_threshold REAL,
     latency_ms REAL,
-    false_alarm_rate REAL
+    false_alarm_rate REAL,
+    false_negative_rate REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_results_exp ON results(exp_id);

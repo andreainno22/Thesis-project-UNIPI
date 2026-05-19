@@ -111,7 +111,8 @@ CREATE TABLE results (
     anomaly_threshold  REAL,
     -- metriche deployment
     latency_ms         REAL,
-    false_alarm_rate   REAL
+    false_alarm_rate   REAL,
+    false_negative_rate REAL               -- FN / (FN+TP) = 1 − recall
 );
 
 CREATE INDEX idx_results_exp ON results(exp_id);

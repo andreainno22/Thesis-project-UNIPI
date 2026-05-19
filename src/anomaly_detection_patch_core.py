@@ -18,6 +18,7 @@ Dipendenze: torch torchvision pillow numpy scikit-learn opencv-python
 # TODO: rimandare test su vm, salvare csv e rivedere la tabella results del db
 # TODO: capire come attuare la visualizzazione di heatmap su i vari test (media di heatmap (?) o heatmap di un test specifico (es. quello con occlusione più evidente)
 import argparse
+import csv
 import json
 import sqlite3
 import sys
@@ -32,6 +33,7 @@ import torch.nn as nn
 import torchvision.transforms as T
 from PIL import Image, ImageEnhance, ImageFilter
 from torchvision.models import wide_resnet50_2, Wide_ResNet50_2_Weights
+from sklearn.metrics import roc_auc_score
 from sklearn.random_projection import SparseRandomProjection
 
 
@@ -39,7 +41,7 @@ from sklearn.random_projection import SparseRandomProjection
 
 IMG_SIZE   = 224          # dimensione input al backbone
 PATCH_SIZE = 3            # neighbourhood aggregation (paper: p=3)
-LAYERS     = [2, 3]       # livelli intermedi WideResNet50 (paper: j=2,3)
+LAYERS     = [2, 3]       # livelli intermedi WideResNet50 usati (paper: j=2,3); usati in FeatureExtractor.forward()
 CORESET_P  = 0.01         # fraction of the memory bank retained after coreset reduction (1%)
 DEVICE     = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -114,7 +116,7 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
 class FeatureExtractor(nn.Module):
     """
     WideResNet50-2 pre-addestrato su ImageNet.
-    Estrae feature map dai livelli intermedi (layer2, layer3).
+    Estrae feature map dai livelli indicati in LAYERS (default: layer2, layer3).
     """
     def __init__(self):
         super().__init__()
@@ -138,8 +140,8 @@ class FeatureExtractor(nn.Module):
     def forward(self, x):
         x = self.layer0(x)
         x = self.layer1(x)
-        f2 = self.layer2(x)   # feature map livello 2
-        f3 = self.layer3(f2)  # feature map livello 3
+        f2 = self.layer2(x)   # feature map LAYERS[0]=2
+        f3 = self.layer3(f2)  # feature map LAYERS[1]=3
         return f2, f3
 
 
@@ -172,7 +174,7 @@ def extract_patch_features(model: FeatureExtractor,
             )
 
         # Flatten spatial dimensions: [B, C, H, W] -> [B*H*W, C]
-        B, C, H, W = feat.shape
+        _, C, H, W = feat.shape
         feat = feat.permute(0, 2, 3, 1).reshape(-1, C)
 
     return feat.cpu(), H, W
@@ -211,7 +213,8 @@ def compute_image_score_from_pil(
     img_pil: Image.Image,
     memory_bank: torch.Tensor,
     roi: tuple[int, int, int, int] | None,
-) -> float:
+    return_map: bool = False,
+) -> "float | tuple[float, np.ndarray]":
     orig_w, orig_h = img_pil.size
     tensor = load_image_tensor(img_pil)
     test_feats, H_t, W_t = extract_patch_features(model, tensor)
@@ -233,7 +236,10 @@ def compute_image_score_from_pil(
             roi_mask[y0:y1, x0:x1] = 1
         anomaly_map_smooth = anomaly_map_smooth * roi_mask
 
-    return float(anomaly_map_smooth.max())
+    score = float(anomaly_map_smooth.max())
+    if return_map:
+        return score, anomaly_map_smooth
+    return score
 
 
 @dataclass(frozen=True)
@@ -358,14 +364,12 @@ def compute_patch_scores(test_feats: torch.Tensor,
     # L2-normalising would project everything onto the unit sphere, turning
     # the distance into a cosine-based measure, which is not what eq. 6/7 assume.
     batch_size = 256
+    k_neighbors = min(9, len(memory_bank))
     scores = []
     for i in range(0, len(test_feats), batch_size):
         batch = test_feats[i:i+batch_size]                        # [b, D]
-        dists = torch.cdist(batch.unsqueeze(0),
-                            memory_bank.unsqueeze(0)).squeeze(0)  # [b, N]
+        dists = torch.cdist(batch, memory_bank)                   # [b, N]
         min_dists, nn_idx = dists.min(dim=1)                      # [b], [b]
-
-        k_neighbors = min(9, len(memory_bank))
 
         # Re-weighting as in paper eq. 7:
         #   s = (1 - exp(||m_test - m*||) /
@@ -407,13 +411,15 @@ def compute_patch_scores(test_feats: torch.Tensor,
 
 # ── Coreset subsampling ─────────────────────────────────────────────────────
 
-def greedy_coreset(features: np.ndarray, target_size: int) -> np.ndarray:
+def greedy_coreset(features: np.ndarray, target_size: int,
+                   verbose: bool = True) -> np.ndarray:
     """
     Greedy minimax facility location coreset.
     Seleziona target_size punti che massimizzano la copertura dello spazio.
     Usa proiezione casuale per efficienza (Johnson-Lindenstrauss).
     """
-    print(f"  Coreset: {len(features)} → {target_size} punti...")
+    if verbose:
+        print(f"  Coreset: {len(features)} → {target_size} punti...")
 
     # Proiezione casuale per ridurre dimensionalità (JL theorem)
     proj_dim = min(128, features.shape[1])
@@ -559,7 +565,6 @@ def test_image(bank_path: str, img_path: str, roi: str = None,
     except TypeError:
         checkpoint = torch.load(bank_path, map_location="cpu")
     memory_bank = checkpoint["memory_bank"]  # [N, D]
-    H_feat, W_feat = checkpoint["patch_hw"]
     print(f"[1/4] Memory bank caricata: {memory_bank.shape}")
 
     # 2. Estrai feature dall'immagine di test
@@ -693,9 +698,6 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
         test_aug_seeds: lista di seed per le augmented test images (default: [2000,2001,2002])
         out_csv       : path CSV con risultati per immagine
     """
-    import csv
-    import json
-
     if test_aug_seeds is None:
         test_aug_seeds = [2000, 2001, 2002]
 
@@ -744,7 +746,7 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
         memory_bank_raw = torch.cat(all_features, dim=0)
         target_size = max(50, int(len(memory_bank_raw) * coreset_p))
         bank_np = memory_bank_raw.numpy()
-        bank = torch.from_numpy(greedy_coreset(bank_np, target_size))
+        bank = torch.from_numpy(greedy_coreset(bank_np, target_size, verbose=False))
 
         # ── Calibrazione soglia su cal_variants (unseen) ──────────────────
         cal_scores_img = [
@@ -890,7 +892,7 @@ def insert_results(
 ) -> None:
     conn.execute(
         "INSERT INTO results (exp_id, fold, venue_type, precision, recall, F1, auroc, "
-        "anomaly_threshold, false_alarm_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "anomaly_threshold, false_alarm_rate, false_negative_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             exp_id,
             fold,
@@ -901,6 +903,7 @@ def insert_results(
             metrics.get("auroc"),
             metrics.get("anomaly_threshold"),
             metrics.get("false_alarm_rate"),
+            metrics.get("false_negative_rate"),
         ),
     )
 
@@ -970,7 +973,6 @@ def evaluate_from_db(
 
         model = FeatureExtractor().to(DEVICE).eval()
 
-        import csv as _csv
         _csv_fieldnames = [
             "reference_id", "test_id", "test_type", "venue_type",
             "file_path", "score", "normalized_score", "threshold", "is_anomaly",
@@ -978,7 +980,7 @@ def evaluate_from_db(
         csv_writer = None
         if out_csv:
             csv_file = open(out_csv, "w", newline="", encoding="utf-8")
-            csv_writer = _csv.DictWriter(csv_file, fieldnames=_csv_fieldnames)
+            csv_writer = csv.DictWriter(csv_file, fieldnames=_csv_fieldnames)
             csv_writer.writeheader()
             csv_file.flush()
 
@@ -1020,7 +1022,7 @@ def evaluate_from_db(
             memory_bank_raw = torch.cat(all_features, dim=0)
             target_size = max(50, int(len(memory_bank_raw) * coreset_p))
             bank_np = memory_bank_raw.numpy()
-            bank = torch.from_numpy(greedy_coreset(bank_np, target_size))
+            bank = torch.from_numpy(greedy_coreset(bank_np, target_size, verbose=False))
 
             cal_scores = [
                 compute_image_score_from_pil(model, img, bank, roi_tuple)
@@ -1037,6 +1039,7 @@ def evaluate_from_db(
                     "ob_scores": [],
                     "normal_scores_norm": [],
                     "ob_scores_norm": [],
+                    "ob_candidates": [],  # (score, ref_path_str, ob_path_str)
                     "thresholds": [],
                     "fp": 0,
                     "tp": 0,
@@ -1080,6 +1083,7 @@ def evaluate_from_db(
                 norm_ob_score = (ob_score - mu) / (sigma + 1e-8)
                 stats["ob_scores"].append(ob_score)
                 stats["ob_scores_norm"].append(norm_ob_score)
+                stats["ob_candidates"].append((ob_score, str(ref_path), str(ob_path)))
                 if is_tp:
                     stats["tp"] += 1
                 else:
@@ -1102,8 +1106,47 @@ def evaluate_from_db(
             if idx % 10 == 0:
                 print(f"  Processati {idx}/{len(refs)} riferimenti...")
 
-        if csv_file:
-            csv_file.close()
+        if out_csv:
+            heatmap_dir = Path(out_csv).parent / (Path(out_csv).stem + "_heatmaps")
+            heatmap_dir.mkdir(exist_ok=True)
+            print(f"\nGenerazione heatmap best/median/worst per venue → {heatmap_dir}/")
+
+            for venue_type, stats in venue_stats.items():
+                candidates = sorted(stats["ob_candidates"], key=lambda x: x[0])
+                if not candidates:
+                    continue
+                to_visualize = {
+                    "worst":  candidates[0],
+                    "median": candidates[len(candidates) // 2],
+                    "best":   candidates[-1],
+                }
+                for label, (score, ref_path_str, ob_path_str) in to_visualize.items():
+                    ref_img_v = Image.open(ref_path_str).convert("RGB")
+                    bv = augment_reference(ref_img_v, n=n_augments, seed=42, include_original=False)
+                    feats_list = []
+                    for img_v in bv:
+                        t = load_image_tensor(img_v)
+                        f, _, _ = extract_patch_features(model, t)
+                        feats_list.append(f)
+                    bank_raw = torch.cat(feats_list, dim=0)
+                    tsize = max(50, int(len(bank_raw) * coreset_p))
+                    bank_v = torch.from_numpy(greedy_coreset(bank_raw.numpy(), tsize, verbose=False))
+
+                    ob_img_v = Image.open(ob_path_str).convert("RGB")
+                    _, amap = compute_image_score_from_pil(
+                        model, ob_img_v, bank_v, roi_tuple, return_map=True
+                    )
+
+                    norm_map = (amap - amap.min()) / (amap.max() - amap.min() + 1e-8) * 255
+                    heatmap_color = cv2.applyColorMap(norm_map.astype(np.uint8), cv2.COLORMAP_JET)
+                    orig_cv = cv2.cvtColor(np.array(ob_img_v), cv2.COLOR_RGB2BGR)
+                    overlay = cv2.addWeighted(orig_cv, 0.5, heatmap_color, 0.5, 0)
+
+                    out_name = f"{venue_type}_{label}_score{score:.3f}_{Path(ob_path_str).stem}.jpg"
+                    Image.fromarray(cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)).save(
+                        heatmap_dir / out_name
+                    )
+                    print(f"  [{venue_type}] {label:6s} score={score:.4f} → {out_name}")
 
         for venue_type, stats in venue_stats.items():
             normal_scores = stats["normal_scores"]
@@ -1118,6 +1161,7 @@ def evaluate_from_db(
             ob_total = len(ob_scores)
 
             false_alarm_rate = fp / normal_total if normal_total else None
+            false_negative_rate = fn / ob_total if ob_total else None
             recall = tp / ob_total if ob_total else None
             precision = tp / (tp + fp) if (tp + fp) else None
             f1 = None
@@ -1127,8 +1171,6 @@ def evaluate_from_db(
             auroc = None
             if normal_scores_norm and ob_scores_norm:
                 try:
-                    from sklearn.metrics import roc_auc_score
-
                     all_scores_norm = normal_scores_norm + ob_scores_norm
                     all_labels = [0] * len(normal_scores_norm) + [1] * len(ob_scores_norm)
                     auroc = float(roc_auc_score(all_labels, all_scores_norm))
@@ -1148,6 +1190,7 @@ def evaluate_from_db(
                     "auroc": auroc,
                     "anomaly_threshold": threshold_mean,
                     "false_alarm_rate": false_alarm_rate,
+                    "false_negative_rate": false_negative_rate,
                 },
             )
 
