@@ -1102,14 +1102,16 @@ def _load_existing_csv_stats(
     csv_path: str,
     dataset_root: Path,
     conn: sqlite3.Connection,
-) -> tuple[set[str], dict[str, dict]]:
+) -> tuple[set[str], dict[str, dict], set[str]]:
     """
     Legge un CSV parziale e ricostruisce venue_stats + l'insieme dei reference_id
-    già processati. Usato da --resume per saltare il ricalcolo.
+    già processati. Ritorna anche refs_with_shadow: reference che hanno già almeno
+    una riga shadow_normal nel CSV, così da non rivalutarle nella passata shadow-only.
     """
     processed: set[str] = set()
     venue_stats: dict[str, dict] = {}
     seen_thresholds: dict[str, float] = {}
+    refs_with_shadow: set[str] = set()
 
     with open(csv_path, "r", newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
@@ -1159,12 +1161,13 @@ def _load_existing_csv_stats(
                     ref_path = str(dataset_root / ref_row[0])
                     stats["ob_candidates"].append((score, ref_path, ob_path))
             elif test_type == "shadow_normal":
+                refs_with_shadow.add(ref_id)
                 stats["shadow_normal_scores"].append(score)
                 stats["shadow_normal_scores_norm"].append(norm_score)
                 if is_anomaly:
                     stats["shadow_fp"] += 1
 
-    return processed, venue_stats
+    return processed, venue_stats, refs_with_shadow
 
 
 def evaluate_from_db(
@@ -1240,13 +1243,20 @@ def evaluate_from_db(
         # ── Resume: carica risultati esistenti e filtra i ref già processati ──
         venue_stats: dict[str, dict] = {}
         resume_skipped = 0
+        refs_shadow_only: list[DBFrame] = []   # processati senza shadow → solo shadow
         if resume and out_csv and Path(out_csv).exists():
-            processed_ids, venue_stats = _load_existing_csv_stats(
+            processed_ids, venue_stats, refs_with_shadow = _load_existing_csv_stats(
                 out_csv, dataset_root_path, conn
             )
             resume_skipped = len(processed_ids)
+            # Ref già processati ma senza righe shadow → passata shadow-only
+            shadow_only_ids = processed_ids - refs_with_shadow
+            refs_shadow_only = [r for r in refs if r.frame_id in shadow_only_ids]
+            # Ref da processare completamente
             refs = [r for r in refs if r.frame_id not in processed_ids]
-            print(f"  Resume: {resume_skipped} reference già nel CSV, rimangono {len(refs)}.")
+            print(f"  Resume: {resume_skipped} già nel CSV "
+                  f"({len(refs_shadow_only)} necessitano shadow-only), "
+                  f"{len(refs)} da processare completamente.")
 
         csv_writer = None
         if out_csv:
@@ -1261,7 +1271,8 @@ def evaluate_from_db(
         print("EVALUATE-DB — PatchCore con SQLite")
         print(f"  DB           : {db_path}")
         print(f"  Dataset root : {dataset_root_path}")
-        print(f"  References   : {len(refs) + resume_skipped} totali, {len(refs)} da processare")
+        print(f"  References   : {len(refs) + resume_skipped} totali, "
+              f"{len(refs)} nuovi + {len(refs_shadow_only)} shadow-only")
         print(f"  Split filter : {split or 'none'}")
         print(f"  Venue filter : {venue or 'none'}")
         print(f"  Ref source   : {ref_source or 'none'}")
@@ -1274,14 +1285,32 @@ def evaluate_from_db(
         print(f"{'='*60}\n")
 
         # ── Elaborazione parallela per reference ──────────────────────────────
-        shadow_normal_map = query_shadow_normal_frames(conn, [r.frame_id for r in refs])
+        # La query shadow copre sia i ref nuovi sia quelli shadow-only
+        all_refs_for_shadow = refs + refs_shadow_only
+        shadow_normal_map = query_shadow_normal_frames(
+            conn, [r.frame_id for r in all_refs_for_shadow]
+        )
+        # Scarta refs_shadow_only che non hanno ombre nel DB (niente da fare)
+        refs_shadow_only = [
+            r for r in refs_shadow_only if shadow_normal_map.get(r.frame_id)
+        ]
 
+        # Ref nuovi: test completo (normal + obstructed + shadow)
         worker_args_list = [
             (ref, ob_map.get(ref.frame_id, []),
              shadow_normal_map.get(ref.frame_id, []),
              dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, test_normal)
             for ref in refs
         ]
+        # Ref già processati senza shadow: solo shadow (ob_frames vuoto, test_normal=False)
+        worker_args_list += [
+            (ref, [],
+             shadow_normal_map.get(ref.frame_id, []),
+             dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, False)
+            for ref in refs_shadow_only
+        ]
+        if refs_shadow_only:
+            print(f"  Shadow-only: {len(refs_shadow_only)} reference da completare.")
 
         if n_workers > 1:
             print(f"Avvio elaborazione parallela con {n_workers} processi...")
