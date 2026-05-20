@@ -9,9 +9,10 @@ BUILD — costruisce la memory bank da una singola immagine normale:
   python anomaly_detection_patch_core.py build \
       --ref path/to/reference.jpg \
       --bank memory_bank.pt \
-      --aug 15 \          # varianti augmentation per la bank  (default: 15)
-      --cal 10 \          # varianti calibrazione soglia unseen (default: 10)
-      --coreset-p 0.01    # frazione coreset                   (default: 0.01)
+      --aug 15 \           # varianti augmentation per la bank  (default: 15)
+      --cal 10 \           # varianti calibrazione soglia unseen (default: 10)
+      --coreset-p 0.01 \   # frazione coreset                   (default: 0.01)
+      --shadow-prob 0.4    # prob. ombra sintetica per variante  (default: 0.0)
 
 TEST — score su una singola immagine:
   python anomaly_detection_patch_core.py test \
@@ -59,6 +60,10 @@ from pathlib import Path
 from typing import Iterable
 
 import cv2
+from generate_shadow_images import (
+    add_elliptical_shadow, add_directional_shadow, add_stripe_shadow,
+)
+_SHADOW_POOL = [add_elliptical_shadow, add_directional_shadow, add_stripe_shadow]
 import numpy as np
 import torch
 import torch.nn as nn
@@ -86,7 +91,8 @@ DEFAULT_DB_PATH = ROOT_DIR / "Aggregated_dataset_db" / "occlusion.db"
 
 def augment_reference(img_pil: Image.Image, n: int = 15,
                       seed: int = 42,
-                      include_original: bool = True) -> list[Image.Image]:
+                      include_original: bool = True,
+                      shadow_prob: float = 0.0) -> list[Image.Image]:
     """
     Genera n varianti fotometriche di una singola immagine.
     Varia: luminosità, contrasto, saturazione, temperatura colore,
@@ -101,6 +107,9 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
                           Se False, vengono generate n augmentazioni pure
                           senza l'originale — usare in evaluate_from_db per
                           riservare ref_img come campione di test indipendente.
+        shadow_prob: probabilità (0–1) di applicare un'ombra sintetica casuale
+                     a ciascuna variante, dopo le augmentazioni fotometriche.
+                     Default 0.0 (nessuna ombra). Usare ~0.4 per robustezza.
     """
     variants = [img_pil] if include_original else []
 
@@ -137,6 +146,14 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
         if rng.random() < 0.3:
             radius = rng.uniform(0.5, 1.5)
             img = img.filter(ImageFilter.GaussianBlur(radius=radius))
+
+        # Ombra sintetica opzionale — applicata dopo le aug fotometriche.
+        # k ∈ [1, 3] ombre in sequenza, allineato a generate_shadow_images.py random mode.
+        if shadow_prob > 0.0 and rng.random() < shadow_prob:
+            n_shadows = int(rng.integers(1, 4))
+            for _ in range(n_shadows):
+                shadow_fn = _SHADOW_POOL[int(rng.integers(len(_SHADOW_POOL)))]
+                img = shadow_fn(img, rng)
 
         variants.append(img)
 
@@ -521,7 +538,7 @@ def _ensure_worker_model() -> None:
 
 def _process_ref_worker(args: tuple) -> dict:
     (ref, ob_frames, shadow_normal_frames, dataset_root_path, n_augments, n_cal,
-     coreset_p, k_sigma, roi_tuple, test_normal) = args
+     coreset_p, k_sigma, roi_tuple, test_normal, shadow_prob) = args
 
     _ensure_worker_model()
     model = _worker_model
@@ -531,8 +548,8 @@ def _process_ref_worker(args: tuple) -> dict:
         return {"rows": [], "stats": None, "missing": [str(ref_path)]}
 
     ref_img = Image.open(ref_path).convert("RGB")
-    bank_variants = augment_reference(ref_img, n=n_augments, seed=42, include_original=False)
-    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, include_original=False)
+    bank_variants = augment_reference(ref_img, n=n_augments, seed=42, include_original=False, shadow_prob=shadow_prob)
+    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, include_original=False, shadow_prob=shadow_prob)
 
     all_features = []
     for img in bank_variants:
@@ -627,7 +644,7 @@ def _process_ref_worker(args: tuple) -> dict:
 
 def _process_bg_worker(args: tuple) -> dict:
     (bg_path_str, obstr_dir, roi_tuple, k_sigma, n_augments, n_cal,
-     coreset_p, test_aug_seeds) = args
+     coreset_p, test_aug_seeds, shadow_prob) = args
 
     _ensure_worker_model()
     model = _worker_model
@@ -636,8 +653,8 @@ def _process_bg_worker(args: tuple) -> dict:
     name    = bg_path.stem
     ref_img = Image.open(bg_path).convert("RGB")
 
-    bank_variants = augment_reference(ref_img, n=n_augments, seed=42)
-    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000)
+    bank_variants = augment_reference(ref_img, n=n_augments, seed=42, shadow_prob=shadow_prob)
+    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, shadow_prob=shadow_prob)
 
     all_features = []
     for img in bank_variants:
@@ -690,7 +707,8 @@ def _process_bg_worker(args: tuple) -> dict:
 # ── BUILD: costruzione memory bank ──────────────────────────────────────────
 
 def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
-                      n_cal: int = 10, coreset_p: float = CORESET_P):
+                      n_cal: int = 10, coreset_p: float = CORESET_P,
+                      shadow_prob: float = 0.0):
     """
     Costruisce la memory bank da una singola immagine di riferimento.
 
@@ -710,6 +728,7 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
     print(f"  Augmentazioni bank      : {n_augments}  (seed=42)")
     print(f"  Augmentazioni cal.      : {n_cal}  (seed=1000, unseen dalla bank)")
     print(f"  Coreset fraction        : {coreset_p*100:.1f}%")
+    print(f"  Shadow prob             : {shadow_prob:.2f}")
     print(f"  Salvataggio in          : {bank_path}")
     print(f"  Device                  : {DEVICE}")
     print(f"{'='*60}\n")
@@ -717,12 +736,12 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
     ref_img = Image.open(ref_path).convert("RGB")
 
     # 1a. Varianti per la memory bank (seed=42)
-    bank_variants = augment_reference(ref_img, n=n_augments, seed=42)
+    bank_variants = augment_reference(ref_img, n=n_augments, seed=42, shadow_prob=shadow_prob)
     print(f"[1/5] Augmentation bank : {len(bank_variants)} immagini (seed=42)")
 
     # 1b. Varianti per calibrazione soglia (seed=1000 → statisticamente indipendenti)
     #     NON entrano nella bank: simulano immagini normali future mai viste.
-    cal_variants = augment_reference(ref_img, n=n_cal, seed=1000)
+    cal_variants = augment_reference(ref_img, n=n_cal, seed=1000, shadow_prob=shadow_prob)
     print(f"      Augmentation cal.  : {len(cal_variants)} immagini (seed=1000)")
 
     # Salva preview
@@ -917,7 +936,8 @@ def test_image(bank_path: str, img_path: str, roi: str = None,
 def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
              k_sigma: float = 3.0, n_augments: int = 15, n_cal: int = 10,
              coreset_p: float = CORESET_P, test_aug_seeds: list = None,
-             out_csv: str = "eval_results.csv", n_workers: int = 1):
+             out_csv: str = "eval_results.csv", n_workers: int = 1,
+             shadow_prob: float = 0.0):
     """
     Valutazione sistematica di PatchCore su un dataset di immagini background.
 
@@ -962,6 +982,7 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
     print(f"  Aug bank/cal    : {n_augments} / {n_cal}")
     print(f"  Coreset         : {coreset_p*100:.1f}%")
     print(f"  Test aug seeds  : {test_aug_seeds}")
+    print(f"  Shadow prob     : {shadow_prob:.2f}")
     print(f"  Workers         : {n_workers}")
     print(f"{'='*60}\n")
 
@@ -969,7 +990,7 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
 
     worker_args_list = [
         (str(bg_path), obstr_dir, roi_tuple, k_sigma, n_augments, n_cal,
-         coreset_p, test_aug_seeds)
+         coreset_p, test_aug_seeds, shadow_prob)
         for bg_path in bg_paths
     ]
 
@@ -1187,6 +1208,7 @@ def evaluate_from_db(
     test_normal: bool = True,
     n_workers: int = 1,
     resume: bool = False,
+    shadow_prob: float = 0.0,
 ) -> None:
     dataset_root_path = Path(dataset_root)
     if not dataset_root_path.exists():
@@ -1225,6 +1247,7 @@ def evaluate_from_db(
             "k_sigma": k_sigma,
             "roi": roi,
             "test_normal": test_normal,
+            "shadow_prob": shadow_prob,
         }
         exp_id = insert_experiment(
             conn,
@@ -1281,6 +1304,7 @@ def evaluate_from_db(
         print(f"  Soglia       : mu + {k_sigma}*sigma")
         print(f"  Aug bank/cal : {n_augments} / {n_cal}")
         print(f"  Coreset      : {coreset_p*100:.1f}%")
+        print(f"  Shadow prob  : {shadow_prob:.2f}")
         print(f"  Workers      : {n_workers}")
         print(f"{'='*60}\n")
 
@@ -1299,14 +1323,14 @@ def evaluate_from_db(
         worker_args_list = [
             (ref, ob_map.get(ref.frame_id, []),
              shadow_normal_map.get(ref.frame_id, []),
-             dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, test_normal)
+             dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, test_normal, shadow_prob)
             for ref in refs
         ]
         # Ref già processati senza shadow: solo shadow (ob_frames vuoto, test_normal=False)
         worker_args_list += [
             (ref, [],
              shadow_normal_map.get(ref.frame_id, []),
-             dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, False)
+             dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, False, shadow_prob)
             for ref in refs_shadow_only
         ]
         if refs_shadow_only:
@@ -1386,7 +1410,7 @@ def evaluate_from_db(
                 }
                 for label, (score, ref_path_str, ob_path_str) in to_visualize.items():
                     ref_img_v = Image.open(ref_path_str).convert("RGB")
-                    bv = augment_reference(ref_img_v, n=n_augments, seed=42, include_original=False)
+                    bv = augment_reference(ref_img_v, n=n_augments, seed=42, include_original=False, shadow_prob=shadow_prob)
                     feats_list = []
                     for img_v in bv:
                         t = load_image_tensor(img_v)
@@ -1502,6 +1526,9 @@ def main():
     p_build.add_argument("--coreset-p", type=float, default=CORESET_P,
                          help=f"Frazione coreset (default: {CORESET_P}). "
                               f"Aumentare a 0.05-0.10 per bank da singola immagine.")
+    p_build.add_argument("--shadow-prob", type=float, default=0.0,
+                         help="Probabilità ombra sintetica per variante augmentata (default: 0.0). "
+                              "Usare ~0.4 per robustezza alle ombre.")
 
     # ── Comando TEST ──────────────────────────────────────────────────────────
     p_test = sub.add_parser("test", help="Testa un'immagine per anomalie")
@@ -1537,6 +1564,8 @@ def main():
                         help="Seed CSV per test augmentations (default: 2000,2001,2002)")
     p_eval.add_argument("--out-csv",    default="eval_results.csv",
                         help="Percorso output CSV risultati (default: eval_results.csv)")
+    p_eval.add_argument("--shadow-prob", type=float, default=0.0,
+                        help="Probabilità ombra sintetica per variante augmentata (default: 0.0)")
     p_eval.add_argument("--workers",    type=int, default=1,
                         help="Numero processi paralleli (default: 1)")
 
@@ -1579,6 +1608,8 @@ def main():
                            help="Numero processi paralleli (default: 1)")
     p_eval_db.add_argument("--resume", action="store_true", default=False,
                            help="Riprende da un CSV parziale esistente, salta i reference già processati")
+    p_eval_db.add_argument("--shadow-prob", type=float, default=0.0,
+                           help="Probabilità ombra sintetica per variante augmentata (default: 0.0)")
 
     args = parser.parse_args()
 
@@ -1588,6 +1619,7 @@ def main():
             n_augments=args.aug,
             n_cal=args.cal,
             coreset_p=args.coreset_p,
+            shadow_prob=args.shadow_prob,
         )
     elif args.command == "test":
         test_image(args.bank, args.img,
@@ -1605,6 +1637,7 @@ def main():
             test_aug_seeds=seeds,
             out_csv=args.out_csv,
             n_workers=args.workers,
+            shadow_prob=args.shadow_prob,
         )
     elif args.command == "evaluate-db":
         evaluate_from_db(
@@ -1623,6 +1656,7 @@ def main():
             model_variant=args.model_variant,
             n_workers=args.workers,
             resume=args.resume,
+            shadow_prob=args.shadow_prob,
         )
 
 

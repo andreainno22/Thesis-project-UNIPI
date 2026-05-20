@@ -232,3 +232,90 @@ shadow_FPR = shadow_fp / n_shadow_normal_tested
 ```
 
 Un sistema robusto deve avere shadow_FPR comparabile alla FPR standard: se i due valori sono simili, l'ombra non costituisce una fonte di FP aggiuntiva rispetto alla variabilità fotometrica già coperta dall'augmentazione della bank.
+
+---
+
+### 3.6 Risultati empirici sul test shadow
+
+La valutazione su 990 campioni per categoria (corridoi e porte, split test) produce la seguente distribuzione degli anomaly score:
+
+| Categoria | Score medio | Std | Min | Max | FPR / TPR |
+|---|---|---|---|---|---|
+| `normal` | 2.309 | 0.156 | 1.871 | 3.129 | **FPR 0.5%** |
+| `shadow_normal` | 3.189 | 0.495 | 2.097 | 4.507 | **FPR 90.1%** |
+| `obstructed` | 4.648 | 0.348 | 3.542 | 5.866 | **TPR 100%** |
+
+Il modello si comporta correttamente sui campioni normali e ostruiti, ma **classifica come anomalia il 90.1% delle scene normali con ombra**. Questo è il failure mode esatto descritto in §3.1: le ombre, pur non essendo ostruzioni, generano feature distanti dalla bank e superano la soglia calibrata.
+
+Il risultato è coerente con la motivazione teorica di §3.3: la bank non contiene patch con ombre, quindi qualsiasi ombra produce distanze elevate rispetto ai vicini nella bank — il meccanismo nearest-neighbour non riesce a distinguere l'anomalia reale dalla variazione fotometrica non coperta dall'augmentazione.
+
+#### Zona di overlap e analisi della threshold
+
+La zona critica è il range di score **3.54–4.51**, in cui le code delle due distribuzioni si sovrappongono (shadow_normal max = 4.507; obstructed min = 3.542). Una threshold globale fissa non può separare le due classi senza sacrificare recall:
+
+| Threshold | Shadow FPR | Obstr TPR |
+|---|---|---|
+| 3.75 | 13.1% | 99.4% |
+| **4.00** | **4.8%** | **97.3%** |
+| 4.25 | 1.4% | 87.3% |
+| 4.50 | 0.1% | 67.4% |
+
+A threshold 4.00 si ottiene un compromesso accettabile (4.8% shadow FPR, 97.3% TPR), ma questo richiede alzare il valore assoluto della soglia in modo fisso — non è compatibile con il sistema di calibrazione adattiva per-camera già in uso, che determina la threshold a partire dalla distribuzione dei campioni normali di ciascuna bank.
+
+La soluzione non può essere solo una ricalibrazione di `k`: il problema è strutturale e risiede nel **mancato allineamento tra la distribuzione di calibrazione (shadow-free) e la distribuzione di test (con ombre)**.
+
+---
+
+### 3.7 Proposta di miglioramento: shadow augmentation in fase di build
+
+#### Motivazione
+
+La diagnosi del §3.6 indica che la calibrazione e la bank vengono costruite su una distribuzione diversa da quella che si incontra al test. Questo è un caso di **distribution mismatch** tra training e deployment: le ombre sono variazioni fotometriche attese nella scena reale, ma completamente assenti dalla fase di build.
+
+Il rimedio naturale all'interno del framework PatchCore è estendere `augment_reference` con ombre sintetiche. In questo modo:
+
+1. **Memory bank con ombre**: le patch d'ombra nel campione di test trovano corrispondenti nella bank → distanza ridotta → score basso → nessun FP
+2. **Calibrazione con ombre**: la distribuzione dei 10 score di calibrazione include già varianti con ombra → `μ_cal` si sposta verso l'alto, `σ_cal` aumenta → la threshold `μ + k·σ` si adatta naturalmente → le ombre non la superano
+
+L'effetto è ottenuto senza modificare `k`, senza aggiungere soglie separate e senza nessun componente esterno: il framework PatchCore si ricalibra autonomamente.
+
+Questa revisione modifica la scelta di design enunciata in §3.3. La preoccupazione originale — che la bank apprenda a ignorare solo le ombre specifiche dell'augmentation — è fondata in linea di principio, ma i dati mostrano che il costo dell'approccio shadow-free è un FPR del 90%, inaccettabile in un sistema safety-critical. La generalizzazione alle ombre reali è una questione empirica che può essere valutata estendendo il test set con varianti non viste.
+
+#### Implementazione proposta
+
+```python
+# In augment_reference, aggiungere con probabilità shadow_prob:
+from generate_shadow_images import (
+    add_elliptical_shadow, add_directional_shadow, add_stripe_shadow
+)
+_SHADOW_POOL = [add_elliptical_shadow, add_directional_shadow, add_stripe_shadow]
+
+# Per ogni variante augmentata:
+if rng.random() < shadow_prob:   # default: 0.4
+    shadow_fn = rng.choice(_SHADOW_POOL)
+    img_aug = shadow_fn(img_aug, rng)
+```
+
+Il parametro `shadow_prob` (default consigliato: 0.4) controlla la frazione di varianti che ricevono un'ombra, bilanciando copertura dello spazio shadow e preservazione della variabilità shadow-free nella bank.
+
+---
+
+### 3.8 Contesto letterario
+
+#### Precisazione sul tipo di problema
+
+Il problema osservato non è un caso di domain shift tra training e test nel senso classico. Nel nostro sistema ogni bank è costruita dalla stessa telecamera che poi viene testata: non esiste un dataset di training globale con condizioni di illuminazione diverse da quelle di deploy. Il failure mode è invece un **mismatch di copertura dell'augmentazione**: la procedura `augment_reference` non genera ombre, quindi le ombre sono fuori dalla distribuzione coperta dalla bank pur provenendo dalla stessa camera.
+
+Questa distinzione è rilevante per la scelta delle citazioni: lavori come PIAD (Yang et al., CVPR 2025) affrontano un problema strutturalmente diverso (training set multi-oggetto sotto illuminazione controllata vs. test sotto illuminazione diversa) e non si mappano direttamente al nostro scenario.
+
+#### Letteratura pertinente
+
+**M²AD: Visual Anomaly Detection under Complex View-Illumination Interplay** (Cheng et al., arxiv 2505.10996, maggio 2025) rimane rilevante: valuta metodi VAD esistenti — inclusi approcci memory-based analoghi a PatchCore — sotto variazioni di illuminazione sistematiche, e mostra crolli significativi di performance. Il risultato è coerente con il 90.1% di shadow FPR osservato, anche se il loro setup (12 viste × 10 illuminazioni su dataset industriale) è più ampio del nostro. Utile per motivare il gap nella letteratura.
+
+**Shadow Augmentation for Handwashing Action Recognition** (arxiv 2410.03984, 2024) fornisce il precedente più diretto alla proposta del §3.7: ombre sintetiche aggiunte durante la fase di costruzione del modello riducono i falsi positivi a test time. Il dominio (sorveglianza indoor clinica, telecamere fisse, illuminazione artificiale variabile) è analogo al nostro.
+
+**Pose-Agnostic Anomaly Detection with Retinex-based Illumination Alignment (R3-PAD)** (Wang et al., 2025) propone una strategia alternativa che agisce sul lato test anziché sul lato training: una Retinex-UNet normalizza l'illuminazione dell'immagine di test prima dell'estrazione delle feature, rimuovendo l'effetto dell'ombra prima ancora che raggiunga il backbone. Il vantaggio principale rispetto all'approccio di §3.7 è che la bank rimane invariata e la generalizzazione a tipi di ombra non visti durante il build non dipende dalla copertura dell'augmentazione. Tuttavia, questo approccio introduce un passo di preprocessing aggiuntivo seriale che aumenta il tempo di inferenza — un costo rilevante nel contesto di deploy su device edge. Va inoltre verificato empiricamente che la normalizzazione Retinex non attenui anche le feature degli ostacoli, riducendo il recall. Per questi motivi viene considerato come direzione alternativa da esplorare piuttosto che come soluzione primaria.
+
+**Enhancing Anomaly Detection Generalization through Knowledge Exposure: Dual Effects of Augmentation** analizza teoricamente il rapporto tra copertura dell'augmentazione e generalizzazione nel contesto dell'anomaly detection. Supporta la scelta di una `shadow_prob` controllata: un'augmentazione troppo aggressiva può ridurre la sensibilità alle anomalie vere, mentre una copertura parziale (40–50%) amplia la distribuzione normale senza degradare il recall.
+
+Per il contesto classico del rilevamento di ombre in sorveglianza, il riferimento primario è **Sanin et al. (2012)** *"Shadow Detection: A Survey and Comparative Evaluation of Recent Methods"* (Pattern Recognition), che classifica i metodi in quattro categorie: cromaticità, fisici, geometrici e tessiturali. Per ambienti indoor, il metodo basato su cromaticità HSV (Cucchiara et al., 2003) rimane il riferimento storico più citato nel contesto di sistemi di videosorveglianza.
