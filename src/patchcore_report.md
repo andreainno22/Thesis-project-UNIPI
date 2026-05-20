@@ -337,3 +337,41 @@ Questa distinzione è rilevante per la scelta delle citazioni: lavori come PIAD 
 **Enhancing Anomaly Detection Generalization through Knowledge Exposure: Dual Effects of Augmentation** analizza teoricamente il rapporto tra copertura dell'augmentazione e generalizzazione nel contesto dell'anomaly detection. Supporta la scelta di una `shadow_prob` controllata: un'augmentazione troppo aggressiva può ridurre la sensibilità alle anomalie vere, mentre una copertura parziale (40–50%) amplia la distribuzione normale senza degradare il recall.
 
 Per il contesto classico del rilevamento di ombre in sorveglianza, il riferimento primario è **Sanin et al. (2012)** *"Shadow Detection: A Survey and Comparative Evaluation of Recent Methods"* (Pattern Recognition), che classifica i metodi in quattro categorie: cromaticità, fisici, geometrici e tessiturali. Per ambienti indoor, il metodo basato su cromaticità HSV (Cucchiara et al., 2003) rimane il riferimento storico più citato nel contesto di sistemi di videosorveglianza.
+
+---
+
+### 3.9 Risultati con shadow augmentation (shadow_prob=0.4, k=3.0)
+
+#### Configurazione del run
+
+La valutazione è eseguita con `--shadow-prob 0.4` e `k=3.0` (default). Il 40% delle varianti di augmentation — sia per la bank (seed=42, n=15) che per la calibrazione (seed=1000, n=10) — riceve k ∈ [1,3] ombre sintetiche in sequenza dopo le trasformazioni fotometriche standard.
+
+#### Risultati
+
+| Metrica | Baseline (shadow_prob=0.0) | Con shadow aug (shadow_prob=0.4) |
+|---|---|---|
+| Normal FPR | 0.5% | 0.0% |
+| **Shadow FPR** | **90.1%** | **0.4%** |
+| Obstr TPR (recall) | 100% | 70.6% |
+| Obstr FNR | 0% | 29.4% |
+| AUROC (Normal vs Obstr) | ~1.000 | ~1.000 |
+
+#### Interpretazione
+
+**Il fix ha funzionato sul problema shadow.** La shadow FPR è scesa dal 90.1% allo 0.4% — una riduzione di due ordini di grandezza. Il meccanismo è esattamente quello previsto in §3.7: le varianti con ombra nella calibrazione alzano μ_cal e σ_cal, portando la threshold adattiva da ~2.6 a ~4.3. Le patch d'ombra nella bank trovano corrispondenti → distanza ridotta → score nella zona normale.
+
+**L'AUROC rimane ~1.000**, confermando che la capacità discriminativa del backbone non è degradata. La separazione tra distribuzioni normale e ostruita è invariata — il problema era e resta esclusivamente nella posizione della threshold.
+
+**Il FNR 29.4% segnala un over-correction della threshold.** Analizzando i falsi negativi, il pattern è chiaro: le ostruzioni mancate hanno score 3.66–3.93, ma le threshold delle rispettive reference arrivano fino a 5.19. Il fenomeno è causato dalla variabilità stocastica della shadow augmentation durante la calibrazione: alcune reference hanno ricevuto per caso molte varianti con ombre pesanti, producendo score di calibrazione elevati e quindi threshold alte. Con k=3.0 l'effetto viene amplificato (il termine k·σ_cal cresce quando σ_cal include la variabilità degli score shadow).
+
+Il trade-off risultante è sbilanciato rispetto al punto ottimale identificato nell'analisi sul CSV baseline (§3.6): a threshold globale 4.00 si otteneva shadow FPR=4.8%, TPR=97.3%. Il run con shadow_prob=0.4, k=3.0 supera quell'obiettivo sulle ombre (0.4% vs 4.8%) ma sacrifica troppo recall (70.6% vs 97.3%).
+
+#### Leve di tuning
+
+Due parametri permettono di recuperare recall senza rinunciare al guadagno sulle ombre:
+
+**1. Abbassare k** (da 3.0 a ~1.5–2.0): la threshold scende proporzionalmente, recuperando le ostruzioni deboli. Con k=1.5 e la distribuzione di calibrazione attuale (che include shadow), la threshold attesa è nell'intorno di 3.5–3.8 — sopra la shadow mean (3.19) ma accessibile per le ostruzioni.
+
+**2. Abbassare shadow_prob** (da 0.4 a ~0.2–0.3): meno varianti con ombra in calibrazione → μ_cal si alza meno → threshold più conservativa. La riduzione riduce però anche la copertura della bank, potenzialmente aumentando il shadow FPR.
+
+Le due leve hanno effetti opposti e complementari: k controlla la posizione assoluta della threshold dato un certo livello di calibrazione; shadow_prob controlla quanto la calibrazione incorpora la variabilità shadow. Il punto di operazione target (shadow FPR < 5%, TPR > 95%) è raggiungibile con una combinazione nell'intorno di `shadow_prob ∈ [0.2, 0.3]`, `k ∈ [1.5, 2.0]`, da validare empiricamente sul test set.

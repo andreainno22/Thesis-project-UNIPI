@@ -1106,7 +1106,8 @@ def insert_results(
 ) -> None:
     conn.execute(
         "INSERT INTO results (exp_id, fold, venue_type, precision, recall, F1, auroc, "
-        "anomaly_threshold, false_alarm_rate, false_negative_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "anomaly_threshold, false_alarm_rate, false_negative_rate, shadow_false_alarm_rate) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             exp_id,
             fold,
@@ -1118,6 +1119,7 @@ def insert_results(
             metrics.get("anomaly_threshold"),
             metrics.get("false_alarm_rate"),
             metrics.get("false_negative_rate"),
+            metrics.get("shadow_false_alarm_rate"),
         ),
     )
 
@@ -1444,17 +1446,25 @@ def evaluate_from_db(
             ob_scores = stats["ob_scores"]
             normal_scores_norm = stats["normal_scores_norm"]
             ob_scores_norm = stats["ob_scores_norm"]
+            shadow_normal_scores = stats.get("shadow_normal_scores", [])
             fp = stats["fp"]
             tp = stats["tp"]
             fn = stats["fn"]
+            shadow_fp = stats.get("shadow_fp", 0)
 
             normal_total = len(normal_scores)
             ob_total = len(ob_scores)
+            shadow_total = len(shadow_normal_scores)
 
+            # false_alarm_rate: FPR su sole immagini clean (comparabile tra run con/senza shadow aug)
             false_alarm_rate = fp / normal_total if normal_total else None
+            # shadow_false_alarm_rate: FPR su shadow_normal (None se non testato)
+            shadow_false_alarm_rate = shadow_fp / shadow_total if shadow_total else None
             false_negative_rate = fn / ob_total if ob_total else None
             recall = tp / ob_total if ob_total else None
-            precision = tp / (tp + fp) if (tp + fp) else None
+            # precision include tutti i FP (clean + shadow): coerente con il notebook
+            total_fp = fp + shadow_fp
+            precision = tp / (tp + total_fp) if (tp + total_fp) > 0 else None
             f1 = None
             if precision is not None and recall is not None and (precision + recall) > 0:
                 f1 = 2 * precision * recall / (precision + recall)
@@ -1482,6 +1492,7 @@ def evaluate_from_db(
                     "anomaly_threshold": threshold_mean,
                     "false_alarm_rate": false_alarm_rate,
                     "false_negative_rate": false_negative_rate,
+                    "shadow_false_alarm_rate": shadow_false_alarm_rate,
                 },
             )
 
