@@ -296,7 +296,25 @@ if rng.random() < shadow_prob:   # default: 0.4
     img_aug = shadow_fn(img_aug, rng)
 ```
 
-Il parametro `shadow_prob` (default consigliato: 0.4) controlla la frazione di varianti che ricevono un'ombra, bilanciando copertura dello spazio shadow e preservazione della variabilità shadow-free nella bank.
+Il parametro `shadow_prob` (default consigliato: 0.4) controlla la frazione di varianti che ricevono un'ombra, bilanciando copertura dello spazio shadow e preservazione della variabilità shadow-free nella bank. Per ciascuna variante che riceve ombra, vengono applicate k ∈ [1, 3] ombre in sequenza (stessa logica di `generate_shadow_images.py` in modalità `random`), coprendo scenari di complessità diversa.
+
+#### Separazione formale tra ombre di bank e ombre di test
+
+Le ombre di test nel DB sono generate da `generate_shadow_images.py` con `seed=42` applicato sull'immagine originale pulita. Per garantire disgiunzione formale rispetto alle ombre generate in `augment_reference`, le shadow augmentation della bank usano un **RNG dedicato** con seed disgiunto:
+
+```python
+shadow_rng = np.random.default_rng(seed + 99999)
+```
+
+I tre spazi di seed risultano formalmente disgiunti:
+
+| Insieme | Seed effettivo per le ombre |
+|---|---|
+| Bank variants (seed=42) | `default_rng(100041)` |
+| Cal variants (seed=1000) | `default_rng(100999)` |
+| Test shadows nel DB | `default_rng(42)` su immagine originale |
+
+Anche senza questa separazione esplicita, la disgiunzione sarebbe di fatto garantita: l'RNG principale in `augment_reference` consuma circa 8 chiamate random (brightness, contrast, saturation, shift R/B, noise, blur check, blur radius) prima di raggiungere il punto ombra, rendendo il suo stato completamente diverso da un `default_rng(42)` fresco. Il seed dedicato aggiunge una garanzia formale documentabile indipendentemente dall'implementazione interna dell'RNG.
 
 ---
 
