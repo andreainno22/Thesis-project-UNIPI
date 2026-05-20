@@ -149,11 +149,14 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
 
         # Ombra sintetica opzionale — applicata dopo le aug fotometriche.
         # k ∈ [1, 3] ombre in sequenza, allineato a generate_shadow_images.py random mode.
+        # RNG dedicato con seed = seed + 99999 per garantire disgiunzione formale
+        # dalle ombre di test (generate_shadow_images.py usa seed=42 sull'originale).
         if shadow_prob > 0.0 and rng.random() < shadow_prob:
-            n_shadows = int(rng.integers(1, 4))
+            shadow_rng = np.random.default_rng(seed + 99999)
+            n_shadows = int(shadow_rng.integers(1, 4))
             for _ in range(n_shadows):
-                shadow_fn = _SHADOW_POOL[int(rng.integers(len(_SHADOW_POOL)))]
-                img = shadow_fn(img, rng)
+                shadow_fn = _SHADOW_POOL[int(shadow_rng.integers(len(_SHADOW_POOL)))]
+                img = shadow_fn(img, shadow_rng)
 
         variants.append(img)
 
