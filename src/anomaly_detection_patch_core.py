@@ -1,16 +1,46 @@
 """
 PatchCore — Anomaly Detection
 ====================================================================
-Uso:
-  1. BUILD memory bank da una singola immagine di riferimento:
-       python anomaly_detection_patch_core.py build --ref porta.jpg --bank memory_bank.pt
 
-  2. TEST su un'immagine (con o senza occlusione):
-       python anomaly_detection_patch_core.py test --bank memory_bank.pt --img test.jpg
+COMANDI DISPONIBILI
+--------------------------------------------------------------------
 
-  3. TEST con ROI (opzionale): usando --roi "x,y,w,h" in pixel
-       python anomaly_detection_patch_core.py test --bank memory_bank.pt --img test.jpg --roi "100,50,300,400"
+BUILD — costruisce la memory bank da una singola immagine normale:
+  python anomaly_detection_patch_core.py build \
+      --ref path/to/reference.jpg \
+      --bank memory_bank.pt \
+      --aug 15 \          # varianti augmentation per la bank  (default: 15)
+      --cal 10 \          # varianti calibrazione soglia unseen (default: 10)
+      --coreset-p 0.01    # frazione coreset                   (default: 0.01)
 
+TEST — score su una singola immagine:
+  python anomaly_detection_patch_core.py test \
+      --bank memory_bank.pt \
+      --img  test.jpg \
+      --roi  "x,y,w,h"   # ROI in pixel, opzionale
+      --k    3.0          # moltiplicatore soglia mu+k*sigma   (default: 3.0)
+      --threshold 0.5     # soglia manuale, sovrascrive k      (default: auto)
+
+EVALUATE — valutazione sistematica su directory:
+  python anomaly_detection_patch_core.py evaluate \
+      --bg-dir    Dataset/non_ostruite/porte \
+      --obstr-dir Dataset/ostruzioni_reali/images \
+      --out-csv   eval_results.csv \
+      --k 3.0 --aug 15 --cal 10 --coreset-p 0.01
+
+EVALUATE-DB — valutazione con coppie reference/ostruita da SQLite:
+  python anomaly_detection_patch_core.py evaluate-db \
+      --db           Aggregated_dataset_db/occlusion.db \
+      --dataset-root Dataset \
+      --out-csv      results.csv \
+      --split        test \         # filtro split: train/val/test (opzionale)
+      --venue        porta \        # filtro venue: porta/corridoio/scala (opzionale)
+      --ref-source   custom \       # filtro source per reference (opzionale)
+      --ob-source    synthetic \    # filtro source per ostruite  (opzionale)
+      --k 3.0 --aug 15 --cal 10 --coreset-p 0.01 \
+      --model-variant wide_resnet50_2
+
+--------------------------------------------------------------------
 Dipendenze: torch torchvision pillow numpy scikit-learn opencv-python
 """
 
@@ -20,8 +50,10 @@ Dipendenze: torch torchvision pillow numpy scikit-learn opencv-python
 import argparse
 import csv
 import json
+import multiprocessing
 import sqlite3
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -305,6 +337,36 @@ def query_reference_frames(
     ]
 
 
+def query_shadow_normal_frames(
+    conn: sqlite3.Connection,
+    ref_ids: list[str],
+) -> dict[str, list[DBFrame]]:
+    """
+    Ritorna i frame shadow normali (is_normal=1, source='shadow') raggruppati
+    per reference_frame_id. Usati per testare la robustezza FP alle ombre.
+    """
+    if not ref_ids:
+        return {}
+    mapping: dict[str, list[DBFrame]] = {}
+    for chunk in chunked(ref_ids, 900):
+        placeholders = ",".join("?" for _ in chunk)
+        sql = (
+            "SELECT frame_id, file_path, venue_type, split, source, is_normal, "
+            "reference_frame_id FROM frames "
+            "WHERE is_normal = 1 AND source = 'shadow' "
+            "AND reference_frame_id IN (" + placeholders + ")"
+        )
+        for row in conn.execute(sql, list(chunk)).fetchall():
+            frame = DBFrame(
+                frame_id=row[0], file_path=row[1], venue_type=row[2],
+                split=row[3], source=row[4], is_normal=row[5],
+                reference_frame_id=row[6],
+            )
+            if frame.reference_frame_id:
+                mapping.setdefault(frame.reference_frame_id, []).append(frame)
+    return mapping
+
+
 def query_obstructed_frames(
     conn: sqlite3.Connection,
     ref_ids: list[str],
@@ -438,6 +500,191 @@ def greedy_coreset(features: np.ndarray, target_size: int,
         selected.append(int(np.argmax(min_dists)))
 
     return features[np.array(selected)]
+
+
+# ── Parallel worker helpers ──────────────────────────────────────────────────
+
+_worker_model = None
+
+
+def _init_worker(n_workers: int = 1) -> None:
+    global _worker_model
+    torch.set_num_threads(max(1, multiprocessing.cpu_count() // n_workers))
+    _worker_model = FeatureExtractor().to(DEVICE).eval()
+
+
+def _ensure_worker_model() -> None:
+    global _worker_model
+    if _worker_model is None:
+        _worker_model = FeatureExtractor().to(DEVICE).eval()
+
+
+def _process_ref_worker(args: tuple) -> dict:
+    (ref, ob_frames, shadow_normal_frames, dataset_root_path, n_augments, n_cal,
+     coreset_p, k_sigma, roi_tuple, test_normal) = args
+
+    _ensure_worker_model()
+    model = _worker_model
+
+    ref_path = resolve_dataset_path(dataset_root_path, ref.file_path)
+    if not ref_path.exists():
+        return {"rows": [], "stats": None, "missing": [str(ref_path)]}
+
+    ref_img = Image.open(ref_path).convert("RGB")
+    bank_variants = augment_reference(ref_img, n=n_augments, seed=42, include_original=False)
+    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, include_original=False)
+
+    all_features = []
+    for img in bank_variants:
+        feats, _, _ = extract_patch_features(model, load_image_tensor(img))
+        all_features.append(feats)
+
+    memory_bank_raw = torch.cat(all_features, dim=0)
+    target_size = max(50, int(len(memory_bank_raw) * coreset_p))
+    bank = torch.from_numpy(greedy_coreset(memory_bank_raw.numpy(), target_size, verbose=False))
+
+    cal_scores = [compute_image_score_from_pil(model, img, bank, roi_tuple) for img in cal_variants]
+    mu        = float(np.mean(cal_scores))
+    sigma     = float(np.std(cal_scores))
+    threshold = mu + k_sigma * sigma
+
+    rows: list[dict] = []
+    stats: dict = {
+        "venue_type": ref.venue_type,
+        "normal_scores": [], "ob_scores": [],
+        "normal_scores_norm": [], "ob_scores_norm": [],
+        "ob_candidates": [], "thresholds": [threshold],
+        "fp": 0, "tp": 0, "fn": 0,
+        "shadow_normal_scores": [], "shadow_normal_scores_norm": [],
+        "shadow_fp": 0,
+    }
+    missing_files: list[str] = []
+
+    if test_normal:
+        ref_score = compute_image_score_from_pil(model, ref_img, bank, roi_tuple)
+        is_fp     = ref_score > threshold
+        norm_ref  = (ref_score - mu) / (sigma + 1e-8)
+        stats["normal_scores"].append(ref_score)
+        stats["normal_scores_norm"].append(norm_ref)
+        if is_fp:
+            stats["fp"] += 1
+        rows.append({
+            "reference_id": ref.frame_id, "test_id": ref.frame_id,
+            "test_type": "normal", "venue_type": ref.venue_type,
+            "file_path": ref.file_path, "score": round(ref_score, 6),
+            "normalized_score": round(norm_ref, 6),
+            "threshold": round(threshold, 6), "is_anomaly": int(is_fp),
+        })
+
+    # Shadow normal: testa FP robustezza — la scena è normale, l'ombra non deve triggerare
+    for sn in shadow_normal_frames:
+        sn_path = resolve_dataset_path(dataset_root_path, sn.file_path)
+        if not sn_path.exists():
+            missing_files.append(str(sn_path))
+            continue
+        sn_img   = Image.open(sn_path).convert("RGB")
+        sn_score = compute_image_score_from_pil(model, sn_img, bank, roi_tuple)
+        is_fp_sh = sn_score > threshold
+        norm_sn  = (sn_score - mu) / (sigma + 1e-8)
+        stats["shadow_normal_scores"].append(sn_score)
+        stats["shadow_normal_scores_norm"].append(norm_sn)
+        if is_fp_sh:
+            stats["shadow_fp"] += 1
+        rows.append({
+            "reference_id": ref.frame_id, "test_id": sn.frame_id,
+            "test_type": "shadow_normal", "venue_type": sn.venue_type,
+            "file_path": sn.file_path, "score": round(sn_score, 6),
+            "normalized_score": round(norm_sn, 6),
+            "threshold": round(threshold, 6), "is_anomaly": int(is_fp_sh),
+        })
+
+    for ob in ob_frames:
+        ob_path = resolve_dataset_path(dataset_root_path, ob.file_path)
+        if not ob_path.exists():
+            missing_files.append(str(ob_path))
+            continue
+        ob_img   = Image.open(ob_path).convert("RGB")
+        ob_score = compute_image_score_from_pil(model, ob_img, bank, roi_tuple)
+        is_tp    = ob_score > threshold
+        norm_ob  = (ob_score - mu) / (sigma + 1e-8)
+        stats["ob_scores"].append(ob_score)
+        stats["ob_scores_norm"].append(norm_ob)
+        stats["ob_candidates"].append((ob_score, str(ref_path), str(ob_path)))
+        if is_tp:
+            stats["tp"] += 1
+        else:
+            stats["fn"] += 1
+        rows.append({
+            "reference_id": ref.frame_id, "test_id": ob.frame_id,
+            "test_type": "obstructed", "venue_type": ob.venue_type,
+            "file_path": ob.file_path, "score": round(ob_score, 6),
+            "normalized_score": round(norm_ob, 6),
+            "threshold": round(threshold, 6), "is_anomaly": int(is_tp),
+        })
+
+    return {"rows": rows, "stats": stats, "missing": missing_files}
+
+
+def _process_bg_worker(args: tuple) -> dict:
+    (bg_path_str, obstr_dir, roi_tuple, k_sigma, n_augments, n_cal,
+     coreset_p, test_aug_seeds) = args
+
+    _ensure_worker_model()
+    model = _worker_model
+
+    bg_path = Path(bg_path_str)
+    name    = bg_path.stem
+    ref_img = Image.open(bg_path).convert("RGB")
+
+    bank_variants = augment_reference(ref_img, n=n_augments, seed=42)
+    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000)
+
+    all_features = []
+    for img in bank_variants:
+        feats, _, _ = extract_patch_features(model, load_image_tensor(img))
+        all_features.append(feats)
+
+    memory_bank_raw = torch.cat(all_features, dim=0)
+    target_size = max(50, int(len(memory_bank_raw) * coreset_p))
+    bank = torch.from_numpy(greedy_coreset(memory_bank_raw.numpy(), target_size, verbose=False))
+
+    cal_scores_img = [compute_image_score_from_pil(model, img, bank, roi_tuple) for img in cal_variants]
+    mu        = float(np.mean(cal_scores_img))
+    sigma     = float(np.std(cal_scores_img))
+    threshold = mu + k_sigma * sigma
+
+    free_scores = []
+    for seed in test_aug_seeds:
+        test_variants = augment_reference(ref_img, n=2, seed=seed)
+        score = compute_image_score_from_pil(model, test_variants[1], bank, roi_tuple)
+        free_scores.append(score)
+
+    obstr_score = None
+    is_tp       = None
+    if obstr_dir:
+        obstr_candidates = (
+            list(Path(obstr_dir).glob(f"{name}.jpg")) +
+            list(Path(obstr_dir).glob(f"{name}.png")) +
+            list(Path(obstr_dir).glob(f"{name}_*.jpg")) +
+            list(Path(obstr_dir).glob(f"{name}_*.png"))
+        )
+        if obstr_candidates:
+            obstr_img   = Image.open(obstr_candidates[0]).convert("RGB")
+            obstr_score = compute_image_score_from_pil(model, obstr_img, bank, roi_tuple)
+            is_tp       = obstr_score > threshold
+        else:
+            print(f"           nessuna immagine ostruita per {name}")
+
+    fp_count = sum(s > threshold for s in free_scores)
+    return {
+        "name": name,
+        "mu": round(mu, 5), "sigma": round(sigma, 6),
+        "threshold": round(threshold, 5),
+        "free_scores": [round(s, 5) for s in free_scores],
+        "fp_count": fp_count,
+        "obstr_score": round(obstr_score, 5) if obstr_score is not None else None,
+        "is_tp": is_tp,
+    }
 
 
 # ── BUILD: costruzione memory bank ──────────────────────────────────────────
@@ -670,7 +917,7 @@ def test_image(bank_path: str, img_path: str, roi: str = None,
 def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
              k_sigma: float = 3.0, n_augments: int = 15, n_cal: int = 10,
              coreset_p: float = CORESET_P, test_aug_seeds: list = None,
-             out_csv: str = "eval_results.csv"):
+             out_csv: str = "eval_results.csv", n_workers: int = 1):
     """
     Valutazione sistematica di PatchCore su un dataset di immagini background.
 
@@ -715,99 +962,42 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
     print(f"  Aug bank/cal    : {n_augments} / {n_cal}")
     print(f"  Coreset         : {coreset_p*100:.1f}%")
     print(f"  Test aug seeds  : {test_aug_seeds}")
+    print(f"  Workers         : {n_workers}")
     print(f"{'='*60}\n")
-
-    model = FeatureExtractor().to(DEVICE).eval()
-    print("Backbone caricato.\n")
-
-    # ── Strutture dati risultati ──────────────────────────────────────────────
-    results = []          # una riga per immagine
-    all_scores_free  = [] # per AUROC / distribuzione globale
-    all_scores_obstr = []
 
     roi_tuple = parse_roi(roi)
 
-    for idx, bg_path in enumerate(bg_paths):
-        name = bg_path.stem
-        print(f"[{idx+1:04d}/{len(bg_paths)}] {name}")
+    worker_args_list = [
+        (str(bg_path), obstr_dir, roi_tuple, k_sigma, n_augments, n_cal,
+         coreset_p, test_aug_seeds)
+        for bg_path in bg_paths
+    ]
 
-        ref_img = Image.open(bg_path).convert("RGB")
+    if n_workers > 1:
+        print(f"Avvio elaborazione parallela con {n_workers} processi...")
+        ctx = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(
+            max_workers=n_workers, mp_context=ctx,
+            initializer=_init_worker, initargs=(n_workers,)
+        ) as executor:
+            results = list(executor.map(_process_bg_worker, worker_args_list))
+    else:
+        results = []
+        for i, wargs in enumerate(worker_args_list):
+            name = Path(wargs[0]).stem
+            print(f"[{i+1:04d}/{len(bg_paths)}] {name}")
+            r = _process_bg_worker(wargs)
+            status    = "FP!" if r["fp_count"] > 0 else "ok"
+            tp_str    = ("TP" if r["is_tp"] else "FN") if r["is_tp"] is not None else "n/a"
+            obstr_str = f"{r['obstr_score']:.3f}" if r["obstr_score"] is not None else "n/a"
+            print(f"         mu={r['mu']:.3f} sigma={r['sigma']:.4f} "
+                  f"thr={r['threshold']:.3f} | "
+                  f"free={[f'{s:.3f}' for s in r['free_scores']]} [{status}] | "
+                  f"obstr={obstr_str} [{tp_str}]")
+            results.append(r)
 
-        # ── Build memory bank per questa immagine ─────────────────────────
-        bank_variants = augment_reference(ref_img, n=n_augments, seed=42)
-        cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000)
-
-        all_features = []
-        for img in bank_variants:
-            tensor = load_image_tensor(img)
-            feats, _, _ = extract_patch_features(model, tensor)
-            all_features.append(feats)
-
-        memory_bank_raw = torch.cat(all_features, dim=0)
-        target_size = max(50, int(len(memory_bank_raw) * coreset_p))
-        bank_np = memory_bank_raw.numpy()
-        bank = torch.from_numpy(greedy_coreset(bank_np, target_size, verbose=False))
-
-        # ── Calibrazione soglia su cal_variants (unseen) ──────────────────
-        cal_scores_img = [
-            compute_image_score_from_pil(model, img, bank, roi_tuple)
-            for img in cal_variants
-        ]
-
-        mu    = float(np.mean(cal_scores_img))
-        sigma = float(np.std(cal_scores_img))
-        threshold = mu + k_sigma * sigma
-
-        # ── Test su augmented free images (FP check) ─────────────────────
-        free_scores = []
-        for seed in test_aug_seeds:
-            test_variants = augment_reference(ref_img, n=2, seed=seed)
-            # Prendi la prima variante (esclude l'originale che è index 0)
-            img_test = test_variants[1]
-            score = compute_image_score_from_pil(model, img_test, bank, roi_tuple)
-            free_scores.append(score)
-            all_scores_free.append(score)
-
-        fp_count = sum(s > threshold for s in free_scores)
-
-        # ── Test su immagine ostruita (TP check) ──────────────────────────
-        obstr_score = None
-        is_tp = None
-        if obstr_dir:
-            # Cerca file con stesso stem nel obstr_dir
-            obstr_candidates = (
-                list(Path(obstr_dir).glob(f"{name}.jpg")) +
-                list(Path(obstr_dir).glob(f"{name}.png")) +
-                list(Path(obstr_dir).glob(f"{name}_*.jpg")) +
-                list(Path(obstr_dir).glob(f"{name}_*.png"))
-            )
-            if obstr_candidates:
-                obstr_path = obstr_candidates[0]
-                obstr_img = Image.open(obstr_path).convert("RGB")
-                obstr_score = compute_image_score_from_pil(model, obstr_img, bank, roi_tuple)
-                is_tp = obstr_score > threshold
-                all_scores_obstr.append(obstr_score)
-            else:
-                print(f"           nessuna immagine ostruita per {name}")
-
-        # ── Log riga ──────────────────────────────────────────────────────
-        status = "FP!" if fp_count > 0 else "ok"
-        tp_str = ("TP" if is_tp else "FN") if is_tp is not None else "n/a"
-        obstr_str = f"{obstr_score:.3f}" if obstr_score is not None else "n/a"
-        print(f"         mu={mu:.3f} sigma={sigma:.4f} thr={threshold:.3f} | "
-              f"free={[f'{s:.3f}' for s in free_scores]} [{status}] | "
-              f"obstr={obstr_str} [{tp_str}]")
-
-        results.append({
-            "name": name,
-            "mu": round(mu, 5),
-            "sigma": round(sigma, 6),
-            "threshold": round(threshold, 5),
-            "free_scores": [round(s, 5) for s in free_scores],
-            "fp_count": fp_count,
-            "obstr_score": round(obstr_score, 5) if obstr_score is not None else None,
-            "is_tp": is_tp,
-        })
+    all_scores_free  = [s for r in results for s in r["free_scores"]]
+    all_scores_obstr = [r["obstr_score"] for r in results if r["obstr_score"] is not None]
 
     # ── Report finale ─────────────────────────────────────────────────────────
     total_free_tests = len(all_scores_free)
@@ -908,6 +1098,75 @@ def insert_results(
     )
 
 
+def _load_existing_csv_stats(
+    csv_path: str,
+    dataset_root: Path,
+    conn: sqlite3.Connection,
+) -> tuple[set[str], dict[str, dict]]:
+    """
+    Legge un CSV parziale e ricostruisce venue_stats + l'insieme dei reference_id
+    già processati. Usato da --resume per saltare il ricalcolo.
+    """
+    processed: set[str] = set()
+    venue_stats: dict[str, dict] = {}
+    seen_thresholds: dict[str, float] = {}
+
+    with open(csv_path, "r", newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            ref_id     = row["reference_id"]
+            vtype      = row["venue_type"]
+            score      = float(row["score"])
+            norm_score = float(row["normalized_score"])
+            threshold  = float(row["threshold"])
+            is_anomaly = int(row["is_anomaly"])
+            test_type  = row["test_type"]
+
+            processed.add(ref_id)
+            stats = venue_stats.setdefault(
+                vtype,
+                {
+                    "normal_scores": [], "ob_scores": [],
+                    "normal_scores_norm": [], "ob_scores_norm": [],
+                    "ob_candidates": [], "thresholds": [],
+                    "fp": 0, "tp": 0, "fn": 0,
+                    "shadow_normal_scores": [], "shadow_normal_scores_norm": [],
+                    "shadow_fp": 0,
+                },
+            )
+
+            # Un solo threshold per reference (la prima riga che lo riporta)
+            if ref_id not in seen_thresholds:
+                stats["thresholds"].append(threshold)
+                seen_thresholds[ref_id] = threshold
+
+            if test_type == "normal":
+                stats["normal_scores"].append(score)
+                stats["normal_scores_norm"].append(norm_score)
+                if is_anomaly:
+                    stats["fp"] += 1
+            elif test_type == "obstructed":
+                stats["ob_scores"].append(score)
+                stats["ob_scores_norm"].append(norm_score)
+                if is_anomaly:
+                    stats["tp"] += 1
+                else:
+                    stats["fn"] += 1
+                ob_path = str(dataset_root / row["file_path"])
+                ref_row = conn.execute(
+                    "SELECT file_path FROM frames WHERE frame_id = ?", (ref_id,)
+                ).fetchone()
+                if ref_row:
+                    ref_path = str(dataset_root / ref_row[0])
+                    stats["ob_candidates"].append((score, ref_path, ob_path))
+            elif test_type == "shadow_normal":
+                stats["shadow_normal_scores"].append(score)
+                stats["shadow_normal_scores_norm"].append(norm_score)
+                if is_anomaly:
+                    stats["shadow_fp"] += 1
+
+    return processed, venue_stats
+
+
 def evaluate_from_db(
     db_path: str,
     dataset_root: str,
@@ -923,6 +1182,8 @@ def evaluate_from_db(
     out_csv: str | None,
     model_variant: str,
     test_normal: bool = True,
+    n_workers: int = 1,
+    resume: bool = False,
 ) -> None:
     dataset_root_path = Path(dataset_root)
     if not dataset_root_path.exists():
@@ -971,27 +1232,36 @@ def evaluate_from_db(
             status="running",
         )
 
-        model = FeatureExtractor().to(DEVICE).eval()
-
         _csv_fieldnames = [
             "reference_id", "test_id", "test_type", "venue_type",
             "file_path", "score", "normalized_score", "threshold", "is_anomaly",
         ]
+
+        # ── Resume: carica risultati esistenti e filtra i ref già processati ──
+        venue_stats: dict[str, dict] = {}
+        resume_skipped = 0
+        if resume and out_csv and Path(out_csv).exists():
+            processed_ids, venue_stats = _load_existing_csv_stats(
+                out_csv, dataset_root_path, conn
+            )
+            resume_skipped = len(processed_ids)
+            refs = [r for r in refs if r.frame_id not in processed_ids]
+            print(f"  Resume: {resume_skipped} reference già nel CSV, rimangono {len(refs)}.")
+
         csv_writer = None
         if out_csv:
-            csv_file = open(out_csv, "w", newline="", encoding="utf-8")
+            mode = "a" if (resume and Path(out_csv).exists()) else "w"
+            csv_file = open(out_csv, mode, newline="", encoding="utf-8")
             csv_writer = csv.DictWriter(csv_file, fieldnames=_csv_fieldnames)
-            csv_writer.writeheader()
+            if mode == "w":
+                csv_writer.writeheader()
             csv_file.flush()
-
-        missing_files: list[str] = []
-        venue_stats: dict[str, dict] = {}
 
         print(f"\n{'='*60}")
         print("EVALUATE-DB — PatchCore con SQLite")
         print(f"  DB           : {db_path}")
         print(f"  Dataset root : {dataset_root_path}")
-        print(f"  References   : {len(refs)}")
+        print(f"  References   : {len(refs) + resume_skipped} totali, {len(refs)} da processare")
         print(f"  Split filter : {split or 'none'}")
         print(f"  Venue filter : {venue or 'none'}")
         print(f"  Ref source   : {ref_source or 'none'}")
@@ -1000,116 +1270,81 @@ def evaluate_from_db(
         print(f"  Soglia       : mu + {k_sigma}*sigma")
         print(f"  Aug bank/cal : {n_augments} / {n_cal}")
         print(f"  Coreset      : {coreset_p*100:.1f}%")
+        print(f"  Workers      : {n_workers}")
         print(f"{'='*60}\n")
 
-        for idx, ref in enumerate(refs, start=1):
-            ref_path = resolve_dataset_path(dataset_root_path, ref.file_path)
-            if not ref_path.exists():
-                missing_files.append(str(ref_path))
+        # ── Elaborazione parallela per reference ──────────────────────────────
+        shadow_normal_map = query_shadow_normal_frames(conn, [r.frame_id for r in refs])
+
+        worker_args_list = [
+            (ref, ob_map.get(ref.frame_id, []),
+             shadow_normal_map.get(ref.frame_id, []),
+             dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, test_normal)
+            for ref in refs
+        ]
+
+        if n_workers > 1:
+            print(f"Avvio elaborazione parallela con {n_workers} processi...")
+            ctx = multiprocessing.get_context("spawn")
+            with ProcessPoolExecutor(
+                max_workers=n_workers, mp_context=ctx,
+                initializer=_init_worker, initargs=(n_workers,)
+            ) as executor:
+                all_worker_results = []
+                for i, result in enumerate(
+                    executor.map(_process_ref_worker, worker_args_list), 1
+                ):
+                    all_worker_results.append(result)
+                    if i % 10 == 0 or i == len(refs):
+                        print(f"  Processati {i}/{len(refs)} riferimenti...")
+        else:
+            all_worker_results = []
+            for i, wargs in enumerate(worker_args_list, 1):
+                result = _process_ref_worker(wargs)
+                all_worker_results.append(result)
+                if i % 10 == 0 or i == len(refs):
+                    print(f"  Processati {i}/{len(refs)} riferimenti...")
+
+        # ── Aggregazione risultati ─────────────────────────────────────────────
+        missing_files: list[str] = []
+        csv_rows: list[dict] = []
+
+        for result in all_worker_results:
+            missing_files.extend(result["missing"])
+            stats_w = result.get("stats")
+            if stats_w is None:
                 continue
-
-            ref_img = Image.open(ref_path).convert("RGB")
-
-            bank_variants = augment_reference(ref_img, n=n_augments, seed=42, include_original=False)
-            cal_variants = augment_reference(ref_img, n=n_cal, seed=1000, include_original=False)
-
-            all_features = []
-            for img in bank_variants:
-                tensor = load_image_tensor(img)
-                feats, _, _ = extract_patch_features(model, tensor)
-                all_features.append(feats)
-
-            memory_bank_raw = torch.cat(all_features, dim=0)
-            target_size = max(50, int(len(memory_bank_raw) * coreset_p))
-            bank_np = memory_bank_raw.numpy()
-            bank = torch.from_numpy(greedy_coreset(bank_np, target_size, verbose=False))
-
-            cal_scores = [
-                compute_image_score_from_pil(model, img, bank, roi_tuple)
-                for img in cal_variants
-            ]
-            mu = float(np.mean(cal_scores))
-            sigma = float(np.std(cal_scores))
-            threshold = mu + k_sigma * sigma
-
+            csv_rows.extend(result["rows"])
+            vtype = stats_w["venue_type"]
             stats = venue_stats.setdefault(
-                ref.venue_type,
+                vtype,
                 {
-                    "normal_scores": [],
-                    "ob_scores": [],
-                    "normal_scores_norm": [],
-                    "ob_scores_norm": [],
-                    "ob_candidates": [],  # (score, ref_path_str, ob_path_str)
-                    "thresholds": [],
-                    "fp": 0,
-                    "tp": 0,
-                    "fn": 0,
+                    "normal_scores": [], "ob_scores": [],
+                    "normal_scores_norm": [], "ob_scores_norm": [],
+                    "ob_candidates": [], "thresholds": [],
+                    "fp": 0, "tp": 0, "fn": 0,
+                    "shadow_normal_scores": [], "shadow_normal_scores_norm": [],
+                    "shadow_fp": 0,
                 },
             )
-            stats["thresholds"].append(threshold)
+            for key in ("normal_scores", "ob_scores", "normal_scores_norm",
+                        "ob_scores_norm", "ob_candidates", "thresholds",
+                        "shadow_normal_scores", "shadow_normal_scores_norm"):
+                stats[key].extend(stats_w.get(key, []))
+            for key in ("fp", "tp", "fn", "shadow_fp"):
+                stats[key] += stats_w.get(key, 0)
 
-            if test_normal:
-                ref_score = compute_image_score_from_pil(model, ref_img, bank, roi_tuple)
-                is_fp = ref_score > threshold
-                norm_ref_score = (ref_score - mu) / (sigma + 1e-8)
-                stats["normal_scores"].append(ref_score)
-                stats["normal_scores_norm"].append(norm_ref_score)
-                if is_fp:
-                    stats["fp"] += 1
-
-                if csv_writer:
-                    csv_writer.writerow({
-                        "reference_id": ref.frame_id,
-                        "test_id": ref.frame_id,
-                        "test_type": "normal",
-                        "venue_type": ref.venue_type,
-                        "file_path": ref.file_path,
-                        "score": round(ref_score, 6),
-                        "normalized_score": round(norm_ref_score, 6),
-                        "threshold": round(threshold, 6),
-                        "is_anomaly": int(is_fp),
-                    })
-                    csv_file.flush()
-
-            for ob in ob_map.get(ref.frame_id, []):
-                ob_path = resolve_dataset_path(dataset_root_path, ob.file_path)
-                if not ob_path.exists():
-                    missing_files.append(str(ob_path))
-                    continue
-
-                ob_img = Image.open(ob_path).convert("RGB")
-                ob_score = compute_image_score_from_pil(model, ob_img, bank, roi_tuple)
-                is_tp = ob_score > threshold
-                norm_ob_score = (ob_score - mu) / (sigma + 1e-8)
-                stats["ob_scores"].append(ob_score)
-                stats["ob_scores_norm"].append(norm_ob_score)
-                stats["ob_candidates"].append((ob_score, str(ref_path), str(ob_path)))
-                if is_tp:
-                    stats["tp"] += 1
-                else:
-                    stats["fn"] += 1
-
-                if csv_writer:
-                    csv_writer.writerow({
-                        "reference_id": ref.frame_id,
-                        "test_id": ob.frame_id,
-                        "test_type": "obstructed",
-                        "venue_type": ob.venue_type,
-                        "file_path": ob.file_path,
-                        "score": round(ob_score, 6),
-                        "normalized_score": round(norm_ob_score, 6),
-                        "threshold": round(threshold, 6),
-                        "is_anomaly": int(is_tp),
-                    })
-                    csv_file.flush()
-
-            if idx % 10 == 0:
-                print(f"  Processati {idx}/{len(refs)} riferimenti...")
+        if csv_writer:
+            for row in csv_rows:
+                csv_writer.writerow(row)
+            csv_file.flush()
 
         if out_csv:
             heatmap_dir = Path(out_csv).parent / (Path(out_csv).stem + "_heatmaps")
             heatmap_dir.mkdir(exist_ok=True)
             print(f"\nGenerazione heatmap best/median/worst per venue → {heatmap_dir}/")
+            _ensure_worker_model()
+            model = _worker_model
 
             for venue_type, stats in venue_stats.items():
                 candidates = sorted(stats["ob_candidates"], key=lambda x: x[0])
@@ -1200,10 +1435,14 @@ def evaluate_from_db(
         print("\nValutazione completata.")
         print(f"  Exp ID: {exp_id}")
         for venue_type, stats in venue_stats.items():
-            print(
-                f"  {venue_type}: normals={len(stats['normal_scores'])} "
-                f"obstr={len(stats['ob_scores'])}"
-            )
+            n_norm = len(stats["normal_scores"])
+            n_ob   = len(stats["ob_scores"])
+            n_shn  = len(stats["shadow_normal_scores"])
+            line   = f"  {venue_type}: normals={n_norm} obstr={n_ob}"
+            if n_shn:
+                fpr_sh = stats["shadow_fp"] / n_shn
+                line  += f" | shadow_normals={n_shn} shadow_FPR={fpr_sh:.2%}"
+            print(line)
         if missing_files:
             print(f"  File mancanti: {len(missing_files)}")
         if artifact_path:
@@ -1269,6 +1508,8 @@ def main():
                         help="Seed CSV per test augmentations (default: 2000,2001,2002)")
     p_eval.add_argument("--out-csv",    default="eval_results.csv",
                         help="Percorso output CSV risultati (default: eval_results.csv)")
+    p_eval.add_argument("--workers",    type=int, default=1,
+                        help="Numero processi paralleli (default: 1)")
 
     # ── Comando EVALUATE-DB ───────────────────────────────────────────────────
     p_eval_db = sub.add_parser("evaluate-db",
@@ -1305,6 +1546,10 @@ def main():
                            help="Percorso CSV output (opzionale)")
     p_eval_db.add_argument("--model-variant", default="wide_resnet50_2",
                            help="Etichetta modello per tabella experiments")
+    p_eval_db.add_argument("--workers", type=int, default=1,
+                           help="Numero processi paralleli (default: 1)")
+    p_eval_db.add_argument("--resume", action="store_true", default=False,
+                           help="Riprende da un CSV parziale esistente, salta i reference già processati")
 
     args = parser.parse_args()
 
@@ -1330,6 +1575,7 @@ def main():
             coreset_p=args.coreset_p,
             test_aug_seeds=seeds,
             out_csv=args.out_csv,
+            n_workers=args.workers,
         )
     elif args.command == "evaluate-db":
         evaluate_from_db(
@@ -1346,6 +1592,8 @@ def main():
             coreset_p=args.coreset_p,
             out_csv=args.out_csv,
             model_variant=args.model_variant,
+            n_workers=args.workers,
+            resume=args.resume,
         )
 
 

@@ -162,3 +162,73 @@ Così l'AUROC misura la separabilità delle distribuzioni normale/anomala in uni
 Il test è **conservativo** (difficile per il modello) per il seguente motivo strutturale: le immagini ostruite sono generate per copy-paste sullo stesso sfondo del reference, quindi il background è già perfettamente rappresentato nella memory bank. Solo le patch dell'ostacolo contribuiscono all'anomaly score.
 
 Questo è il caso più difficile di anomaly detection: il contesto è normale, solo l'oggetto è anomalo. Un sistema che supera questa valutazione con recall alto e false_alarm_rate basso ha dimostrato di essere sensibile alle feature degli ostacoli anche in presenza di un background familiare, che è esattamente la capacità richiesta nel caso di deploy reale.
+
+---
+
+## 3. Test di robustezza con ombre sintetiche
+
+### 3.1 Motivazione
+
+Il sistema di anomaly detection è basato sulla distanza tra feature di test e memory bank. Una preoccupazione legittima è che variazioni di illuminazione — in particolare **ombre proiettate** da persone o oggetti che transitano fuori inquadratura — possano deformare le feature in misura sufficiente a superare la soglia di anomalia, generando **falsi positivi**.
+
+Il failure mode di interesse è quindi:
+
+> scena normale + ombra → score > θ → falso allarme
+
+### 3.2 Perché le ombre su scene ostruite non sono utili
+
+Si potrebbe pensare di testare anche immagini ostruite con ombra, per verificare che il modello mantenga il recall. Questo test è **non informativo** per il seguente motivo strutturale: l'occlusione (un carrello, un bidone, una barella) introduce nella patch map un set di feature completamente assenti dalla memory bank — il segnale è già molto sopra la soglia. Aggiungere un'ombra su un'immagine ostruita può solo aumentare il segnale anomalo, non abbassarlo.
+
+Il caso di failure realistico — immagine classificata come normale quando non lo è — non può essere causato da un'ombra aggiuntiva su un ostacolo già presente. Lo scenario che merita attenzione è esclusivamente l'FP sulla scena normale.
+
+**Conseguenza di design**: le ombre sintetiche vengono generate e valutate **solo sulle scene normali**.
+
+### 3.3 Perché le ombre non entrano nella memory bank
+
+Un'alternativa sarebbe includere varianti con ombra nell'augmentazione della bank, rendendola esplicitamente invariante alle ombre. Questa scelta ha un difetto fondamentale: la bank apprenderebbe a ignorare ombre di **forma e posizione specifiche** (quelle generate dalla augmentation), ma non generalizzerebbe a ombre di forma diversa in inferenza.
+
+Includere ombre nella bank renderebbe il modello cieco a ombre del tipo addestrato, senza fornire alcuna garanzia sulle ombre reali. La robustezza documentabile è quella che il modello mostra **senza** aver visto ombre durante il build — e questa è la metrica che ha senso riportare.
+
+**Conseguenza di design**: la memory bank rimane costruita solo da varianti fotometriche shadow-free (luminosità, contrasto, saturazione, temperatura colore, rumore). Le ombre sono esclusivamente nel test set.
+
+### 3.4 Tipi di ombre sintetiche
+
+Sono implementati tre tipi atomici, combinabili in sequenza tramite la modalità `random`:
+
+| Tipo | Descrizione | Scenario simulato |
+|---|---|---|
+| **Ellittica** | Ellisse scura con bordi sfumati (Gaussian blur), posizione/dimensione/rotazione casuali | Ombra proiettata sul pavimento o sulla parete da un oggetto fuori inquadratura |
+| **Direzionale** | Gradiente scuro progressivo da un lato dell'immagine, direzione e copertura casuali | Luce parzialmente bloccata: finestra laterale, lampada a parete, porta socchiusa |
+| **Striscia** | Banda orizzontale o verticale con bordi sfumati, larghezza 5–20% dell'immagine | Ombra di trave del soffitto, scaffale a muro, traverso architettonico |
+
+Le ombre direzionali sono le più comuni negli ambienti reali di corridoi e uscite di emergenza: una luce che cambia posizione nel corso della giornata o una porta aperta che proietta un cono d'ombra creano esattamente questo tipo di variazione. Le ombre ellittiche simulano la proiezione di oggetti che transitano (es. trolley spinto da una persona nel corridoio adiacente). Le strisce sono particolarmente frequenti in ambienti industriali con illuminazione a soffitto parzialmente ostruita da elementi strutturali.
+
+Tutti i bordi sono **sfumati** (Gaussian blur sulla maschera): i bordi duri sarebbero irrealistici per un'ombra di scena chiusa e creerebbero segnali di alta frequenza che il backbone ResNet non vede in condizioni normali.
+
+#### Composizione delle ombre per variante
+
+Ogni variante shadow è generata in modalità `random`: vengono estratte casualmente k ombre dal pool dei tre tipi, con k ∈ [1, 3], e applicate in sequenza sulla stessa immagine. Per ogni reference viene prodotta **una sola variante** ombreggiata.
+
+La scelta di k casuale serve a coprire scenari di complessità diversa: k=1 simula una singola fonte di disturbo, k=2–3 simula la sovrapposizione di più elementi (es. luce laterale + ombra di trave). La selezione casuale del tipo ad ogni estrazione garantisce che le varianti non siano sistematicamente dominate da un solo pattern, aumentando la diversità del test set con un numero minimo di immagini per reference.
+
+### 3.5 Integrazione nel DB e nella pipeline di valutazione
+
+Le immagini shadow vengono inserite nel DB con:
+
+| Campo | Valore |
+|---|---|
+| `is_normal` | 1 |
+| `source` | `'shadow'` |
+| `occlusion_type` | `'none'` (la scena rimane non ostruita) |
+| `reference_frame_id` | frame_id dell'immagine originale |
+| `split` | ereditato dall'originale |
+
+Il campo `reference_frame_id` — normalmente usato per collegare immagini ostruite al loro background di riferimento — viene qui riutilizzato per collegare ogni variante shadow alla scena originale da cui deriva. Questo permette a `evaluate_from_db` di recuperarle via `query_shadow_normal_frames` e costruire la memory bank dall'originale shadow-free, garantendo un test genuinamente indipendente dalla bank.
+
+La metrica prodotta è la **shadow FPR**: frazione di varianti shadow normali classificate erroneamente come anomalie. Viene riportata separatamente dalla FPR standard (calcolata sul frame originale) perché misura una diversa fonte di errore.
+
+```
+shadow_FPR = shadow_fp / n_shadow_normal_tested
+```
+
+Un sistema robusto deve avere shadow_FPR comparabile alla FPR standard: se i due valori sono simili, l'ombra non costituisce una fonte di FP aggiuntiva rispetto alla variabilità fotometrica già coperta dall'augmentazione della bank.

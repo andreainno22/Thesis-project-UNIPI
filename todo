@@ -1,8 +1,11 @@
 #TODO: 
-* FARE DATABASE UNIFICATO
+* PER P3: capire come gestire i fali positivi (persone davanti alla porta). Per oggetti piccoli basta il calcolo della percentuale di occupazione rispetto alla roi
+* PER P3: capire come le ombre incidono
+* Costruire il modulo di ROI + percentuale di occupazione
+* testare fps
+* testare se dietro le porte a vetri si vedono ostacoli a grande distanza
 * Testare a modo Patch Core
 * scaricare le scale (da pianerottolo in giù)
 * aggiungere ostacoli fittizi con copy paste/ostacoli fake per pipeline 2
 * fare bounding box sia a immagine baseline che a immagine con ostacolo (per pipeline 2)
-* generare occlusioni anche su dataset di p3 (usabile anche per p1 e p2)
 * Per P1: testare yolo 26, yolo 11 e rcnn
