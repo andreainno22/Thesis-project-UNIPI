@@ -597,6 +597,7 @@ def _process_ref_worker(args: tuple) -> dict:
             "file_path": ref.file_path, "score": round(ref_score, 6),
             "normalized_score": round(norm_ref, 6),
             "threshold": round(threshold, 6), "is_anomaly": int(is_fp),
+            "mu": round(mu, 6), "sigma": round(sigma, 6),
         })
 
     # Shadow normal: testa FP robustezza — la scena è normale, l'ombra non deve triggerare
@@ -620,6 +621,7 @@ def _process_ref_worker(args: tuple) -> dict:
             "file_path": sn.file_path, "score": round(sn_score, 6),
             "normalized_score": round(norm_sn, 6),
             "threshold": round(threshold, 6), "is_anomaly": int(is_fp_sh),
+            "mu": round(mu, 6), "sigma": round(sigma, 6),
         })
 
     for ob in ob_frames:
@@ -645,6 +647,7 @@ def _process_ref_worker(args: tuple) -> dict:
             "file_path": ob.file_path, "score": round(ob_score, 6),
             "normalized_score": round(norm_ob, 6),
             "threshold": round(threshold, 6), "is_anomaly": int(is_tp),
+            "mu": round(mu, 6), "sigma": round(sigma, 6),
         })
 
     return {"rows": rows, "stats": stats, "missing": missing_files}
@@ -1144,88 +1147,157 @@ def insert_results(
     )
 
 
+def _empty_venue_stats_entry() -> dict:
+    return {
+        "normal_scores": [], "ob_scores": [],
+        "normal_scores_norm": [], "ob_scores_norm": [],
+        "ob_candidates": [], "thresholds": [],
+        "fp": 0, "tp": 0, "fn": 0,
+        "shadow_normal_scores": [], "shadow_normal_scores_norm": [],
+        "shadow_fp": 0,
+        "fn_candidates": [],
+        "shadow_fp_candidates": [],
+    }
+
+
+def _resolve_ref_path(conn: sqlite3.Connection, ref_id: str,
+                       dataset_root: Path) -> str | None:
+    row = conn.execute(
+        "SELECT file_path FROM frames WHERE frame_id = ?", (ref_id,)
+    ).fetchone()
+    return str(dataset_root / row[0]) if row else None
+
+
+def _recalibrate_pooled(rows: list[dict], k_sigma: float) -> float:
+    """
+    sigma_mode='pooled': sostituisce per ogni row threshold, normalized_score
+    e is_anomaly utilizzando sigma_pop = median(sigma_i) calcolato sulla
+    popolazione di reference. Mantiene mu_i per-camera.
+
+    Mutazione in-place dei row. Restituisce sigma_pop.
+    """
+    ref_sigma: dict[str, float] = {}
+    for row in rows:
+        rid = row["reference_id"]
+        if rid in ref_sigma:
+            continue
+        if row.get("sigma") in (None, ""):
+            raise RuntimeError(
+                "sigma_mode='pooled' richiede la colonna 'sigma' nei dati "
+                "(disponibile solo per run prodotti da questa versione del codice)."
+            )
+        ref_sigma[rid] = float(row["sigma"])
+
+    if not ref_sigma:
+        raise RuntimeError("sigma_mode='pooled' richiesto ma nessun sigma per-camera disponibile.")
+
+    sigma_pop = float(np.median(list(ref_sigma.values())))
+
+    for row in rows:
+        mu_i = float(row["mu"])
+        score = float(row["score"])
+        threshold = mu_i + k_sigma * sigma_pop
+        normalized = (score - mu_i) / (sigma_pop + 1e-8)
+        row["threshold"] = round(threshold, 6)
+        row["normalized_score"] = round(normalized, 6)
+        row["is_anomaly"] = int(score > threshold)
+
+    return sigma_pop
+
+
+def _rebuild_venue_stats_from_rows(
+    rows: list[dict],
+    dataset_root: Path,
+    conn: sqlite3.Connection,
+) -> dict[str, dict]:
+    """
+    Ricostruisce venue_stats da una lista di row dict (es. dopo
+    recalibrazione pooled). Usa is_anomaly e threshold dai row come autorevoli.
+    """
+    venue_stats: dict[str, dict] = {}
+    seen_thresholds: set[str] = set()
+
+    for row in rows:
+        ref_id     = row["reference_id"]
+        vtype      = row["venue_type"]
+        score      = float(row["score"])
+        norm_score = float(row["normalized_score"])
+        threshold  = float(row["threshold"])
+        is_anomaly = int(row["is_anomaly"])
+        test_type  = row["test_type"]
+
+        stats = venue_stats.setdefault(vtype, _empty_venue_stats_entry())
+
+        if ref_id not in seen_thresholds:
+            stats["thresholds"].append(threshold)
+            seen_thresholds.add(ref_id)
+
+        if test_type == "normal":
+            stats["normal_scores"].append(score)
+            stats["normal_scores_norm"].append(norm_score)
+            if is_anomaly:
+                stats["fp"] += 1
+        elif test_type == "obstructed":
+            stats["ob_scores"].append(score)
+            stats["ob_scores_norm"].append(norm_score)
+            ob_path = str(dataset_root / row["file_path"])
+            ref_path_str = _resolve_ref_path(conn, ref_id, dataset_root)
+            if ref_path_str:
+                stats["ob_candidates"].append((score, ref_path_str, ob_path))
+            if is_anomaly:
+                stats["tp"] += 1
+            else:
+                stats["fn"] += 1
+                if ref_path_str:
+                    stats["fn_candidates"].append((score, ref_path_str, ob_path))
+        elif test_type == "shadow_normal":
+            stats["shadow_normal_scores"].append(score)
+            stats["shadow_normal_scores_norm"].append(norm_score)
+            if is_anomaly:
+                stats["shadow_fp"] += 1
+                ref_path_str = _resolve_ref_path(conn, ref_id, dataset_root)
+                if ref_path_str:
+                    sn_path = str(dataset_root / row["file_path"])
+                    stats["shadow_fp_candidates"].append((score, ref_path_str, sn_path))
+
+    return venue_stats
+
+
 def _load_existing_csv_stats(
     csv_path: str,
     dataset_root: Path,
     conn: sqlite3.Connection,
-) -> tuple[set[str], dict[str, dict], set[str]]:
+) -> tuple[set[str], dict[str, dict], set[str], list[dict]]:
     """
     Legge un CSV parziale e ricostruisce venue_stats + l'insieme dei reference_id
     già processati. Ritorna anche refs_with_shadow: reference che hanno già almeno
     una riga shadow_normal nel CSV, così da non rivalutarle nella passata shadow-only.
     """
     processed: set[str] = set()
-    venue_stats: dict[str, dict] = {}
-    seen_thresholds: dict[str, float] = {}
     refs_with_shadow: set[str] = set()
+    loaded_rows: list[dict] = []
 
     with open(csv_path, "r", newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            ref_id     = row["reference_id"]
-            vtype      = row["venue_type"]
-            score      = float(row["score"])
-            norm_score = float(row["normalized_score"])
-            threshold  = float(row["threshold"])
-            is_anomaly = int(row["is_anomaly"])
-            test_type  = row["test_type"]
+        for raw in csv.DictReader(f):
+            row = dict(raw)
+            # Normalizza i tipi (csv.DictReader produce solo stringhe)
+            row["score"]            = float(row["score"])
+            row["normalized_score"] = float(row["normalized_score"])
+            row["threshold"]        = float(row["threshold"])
+            row["is_anomaly"]       = int(row["is_anomaly"])
+            # mu/sigma sono opzionali per backward compat con CSV vecchi
+            if row.get("mu") not in (None, ""):
+                row["mu"] = float(row["mu"])
+            if row.get("sigma") not in (None, ""):
+                row["sigma"] = float(row["sigma"])
+            loaded_rows.append(row)
 
-            processed.add(ref_id)
-            stats = venue_stats.setdefault(
-                vtype,
-                {
-                    "normal_scores": [], "ob_scores": [],
-                    "normal_scores_norm": [], "ob_scores_norm": [],
-                    "ob_candidates": [], "thresholds": [],
-                    "fp": 0, "tp": 0, "fn": 0,
-                    "shadow_normal_scores": [], "shadow_normal_scores_norm": [],
-                    "shadow_fp": 0,
-                    "fn_candidates": [],
-                    "shadow_fp_candidates": [],
-                },
-            )
+            processed.add(row["reference_id"])
+            if row["test_type"] == "shadow_normal":
+                refs_with_shadow.add(row["reference_id"])
 
-            # Un solo threshold per reference (la prima riga che lo riporta)
-            if ref_id not in seen_thresholds:
-                stats["thresholds"].append(threshold)
-                seen_thresholds[ref_id] = threshold
-
-            if test_type == "normal":
-                stats["normal_scores"].append(score)
-                stats["normal_scores_norm"].append(norm_score)
-                if is_anomaly:
-                    stats["fp"] += 1
-            elif test_type == "obstructed":
-                stats["ob_scores"].append(score)
-                stats["ob_scores_norm"].append(norm_score)
-                ob_path = str(dataset_root / row["file_path"])
-                ref_row = conn.execute(
-                    "SELECT file_path FROM frames WHERE frame_id = ?", (ref_id,)
-                ).fetchone()
-                ref_path_str = str(dataset_root / ref_row[0]) if ref_row else None
-                if ref_path_str:
-                    stats["ob_candidates"].append((score, ref_path_str, ob_path))
-                if is_anomaly:
-                    stats["tp"] += 1
-                else:
-                    stats["fn"] += 1
-                    if ref_path_str:
-                        stats["fn_candidates"].append((score, ref_path_str, ob_path))
-            elif test_type == "shadow_normal":
-                refs_with_shadow.add(ref_id)
-                stats["shadow_normal_scores"].append(score)
-                stats["shadow_normal_scores_norm"].append(norm_score)
-                sn_path = str(dataset_root / row["file_path"])
-                ref_row = conn.execute(
-                    "SELECT file_path FROM frames WHERE frame_id = ?", (ref_id,)
-                ).fetchone()
-                if is_anomaly:
-                    stats["shadow_fp"] += 1
-                    if ref_row:
-                        stats["shadow_fp_candidates"].append(
-                            (score, str(dataset_root / ref_row[0]), sn_path)
-                        )
-
-    return processed, venue_stats, refs_with_shadow
+    venue_stats = _rebuild_venue_stats_from_rows(loaded_rows, dataset_root, conn)
+    return processed, venue_stats, refs_with_shadow, loaded_rows
 
 
 def evaluate_from_db(
@@ -1247,9 +1319,12 @@ def evaluate_from_db(
     resume: bool = False,
     shadow_prob: float = 0.0,
     shadow_prob_cal: float | None = None,
+    sigma_mode: str = "per_camera",
 ) -> None:
     if shadow_prob_cal is None:
         shadow_prob_cal = shadow_prob
+    if sigma_mode not in ("per_camera", "pooled"):
+        raise ValueError(f"sigma_mode deve essere 'per_camera' o 'pooled', non '{sigma_mode}'")
 
     dataset_root_path = Path(dataset_root)
     if not dataset_root_path.exists():
@@ -1290,6 +1365,7 @@ def evaluate_from_db(
             "test_normal": test_normal,
             "shadow_prob": shadow_prob,
             "shadow_prob_cal": shadow_prob_cal,
+            "sigma_mode": sigma_mode,
         }
         exp_id = insert_experiment(
             conn,
@@ -1303,15 +1379,17 @@ def evaluate_from_db(
         _csv_fieldnames = [
             "reference_id", "test_id", "test_type", "venue_type",
             "file_path", "score", "normalized_score", "threshold", "is_anomaly",
+            "mu", "sigma",
         ]
 
         # ── Resume: carica risultati esistenti e filtra i ref già processati ──
         venue_stats: dict[str, dict] = {}
         resume_skipped = 0
         refs_shadow_only: list[DBFrame] = []   # processati senza shadow → solo shadow
+        loaded_rows: list[dict] = []
         if resume and out_csv and Path(out_csv).exists():
-            processed_ids, venue_stats, refs_with_shadow = _load_existing_csv_stats(
-                out_csv, dataset_root_path, conn
+            processed_ids, venue_stats, refs_with_shadow, loaded_rows = (
+                _load_existing_csv_stats(out_csv, dataset_root_path, conn)
             )
             resume_skipped = len(processed_ids)
             # Ref già processati ma senza righe shadow → passata shadow-only
@@ -1323,8 +1401,9 @@ def evaluate_from_db(
                   f"({len(refs_shadow_only)} necessitano shadow-only), "
                   f"{len(refs)} da processare completamente.")
 
+        # In pooled mode rinvio la scrittura CSV alla fine (post-recalibrazione)
         csv_writer = None
-        if out_csv:
+        if out_csv and sigma_mode == "per_camera":
             mode = "a" if (resume and Path(out_csv).exists()) else "w"
             csv_file = open(out_csv, mode, newline="", encoding="utf-8")
             csv_writer = csv.DictWriter(csv_file, fieldnames=_csv_fieldnames)
@@ -1348,6 +1427,7 @@ def evaluate_from_db(
         print(f"  Coreset      : {coreset_p*100:.1f}%")
         print(f"  Shadow prob bld: {shadow_prob:.2f}")
         print(f"  Shadow prob cal: {shadow_prob_cal:.2f}")
+        print(f"  Sigma mode   : {sigma_mode}")
         print(f"  Workers      : {n_workers}")
         print(f"{'='*60}\n")
 
@@ -1414,19 +1494,7 @@ def evaluate_from_db(
                 continue
             csv_rows.extend(result["rows"])
             vtype = stats_w["venue_type"]
-            stats = venue_stats.setdefault(
-                vtype,
-                {
-                    "normal_scores": [], "ob_scores": [],
-                    "normal_scores_norm": [], "ob_scores_norm": [],
-                    "ob_candidates": [], "thresholds": [],
-                    "fp": 0, "tp": 0, "fn": 0,
-                    "shadow_normal_scores": [], "shadow_normal_scores_norm": [],
-                    "shadow_fp": 0,
-                    "fn_candidates": [],
-                    "shadow_fp_candidates": [],
-                },
-            )
+            stats = venue_stats.setdefault(vtype, _empty_venue_stats_entry())
             for key in ("normal_scores", "ob_scores", "normal_scores_norm",
                         "ob_scores_norm", "ob_candidates", "thresholds",
                         "shadow_normal_scores", "shadow_normal_scores_norm",
@@ -1435,10 +1503,41 @@ def evaluate_from_db(
             for key in ("fp", "tp", "fn", "shadow_fp"):
                 stats[key] += stats_w.get(key, 0)
 
+        # ── Pooled sigma recalibration (post-processing in-memory) ────────────
+        sigma_pop_value: float | None = None
+        if sigma_mode == "pooled":
+            all_rows = loaded_rows + csv_rows
+            if not all_rows:
+                print("  [pooled] Nessuna row disponibile per la ricalibrazione — skip.")
+            else:
+                sigma_pop_value = _recalibrate_pooled(all_rows, k_sigma)
+                venue_stats = _rebuild_venue_stats_from_rows(
+                    all_rows, dataset_root_path, conn
+                )
+                # csv_rows ora rappresenta TUTTI i row (sarà riscritto in 'w' mode)
+                csv_rows = all_rows
+                print(f"\n[pooled] sigma_pop = median({len({r['reference_id'] for r in all_rows})} reference sigma) "
+                      f"= {sigma_pop_value:.6f}")
+                print(f"[pooled] Threshold ricalcolati: theta_i = mu_i + {k_sigma} * sigma_pop")
+                hyperparams["sigma_pop"] = sigma_pop_value
+                conn.execute(
+                    "UPDATE experiments SET hyperparams = ? WHERE exp_id = ?",
+                    (json.dumps(hyperparams), exp_id),
+                )
+
+        # ── Scrittura CSV ──────────────────────────────────────────────────────
         if csv_writer:
+            # per_camera mode: scrittura incrementale già aperta (append in resume)
             for row in csv_rows:
                 csv_writer.writerow(row)
             csv_file.flush()
+        elif sigma_mode == "pooled" and out_csv:
+            # pooled mode: riscrivi il file da zero con i threshold corretti
+            with open(out_csv, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=_csv_fieldnames)
+                writer.writeheader()
+                for row in csv_rows:
+                    writer.writerow(row)
 
         if out_csv:
             heatmap_dir = Path(out_csv).parent / (Path(out_csv).stem + "_heatmaps")
@@ -1689,6 +1788,13 @@ def main():
     p_eval_db.add_argument("--shadow-prob-cal", type=float, default=None,
                            help="Probabilità ombra sulle varianti di calibrazione. "
                                 "Se non specificato eredita da --shadow-prob.")
+    p_eval_db.add_argument("--sigma-mode", choices=["per_camera", "pooled"],
+                           default="per_camera",
+                           help="Stima della sigma per la soglia. "
+                                "'per_camera' (default): theta_i = mu_i + k*sigma_i (comportamento storico). "
+                                "'pooled': theta_i = mu_i + k*sigma_pop, dove sigma_pop = median(sigma_i) "
+                                "sulla popolazione di reference. Riduce la varianza stocastica della soglia "
+                                "(vedi report §3.12).")
 
     args = parser.parse_args()
 
@@ -1739,6 +1845,7 @@ def main():
             resume=args.resume,
             shadow_prob=args.shadow_prob,
             shadow_prob_cal=args.shadow_prob_cal,
+            sigma_mode=args.sigma_mode,
         )
 
 

@@ -445,3 +445,164 @@ Inoltre, aumentando `--cal` da 10 a 30 si riduce la varianza stocastica di σ_ca
 | `k` | 3.0 | 3.0 | mantenuto per ora; eventuale aggiustamento dopo aver stabilizzato la distribuzione di θ_i |
 
 L'aspettativa è che la σ delle threshold per-camera scenda da 0.54 a un valore comparabile al baseline shadow-free (~0.2), mantenendo la mediana spostata abbastanza da preservare il guadagno sulla shadow FPR. Una volta stabilizzata la distribuzione di θ_i, eventuali aggiustamenti residui di k diventano un puro spostamento sul ROC, prevedibile e simmetrico per tutte le camere.
+
+---
+
+### 3.11 Risultati del decoupling e ricalibrazione di k
+
+#### Run 1 — decoupling con k=3.0
+
+Configurazione: `shadow_prob=0.4`, `shadow_prob_cal=0.1`, `--cal 30`, `k=3.0`.
+
+| Metrica | Coupled (sp=spc=0.4, k=3.0) | Decoupled (spc=0.1, cal=30, k=3.0) | Δ |
+|---|---|---|---|
+| Clean FPR | 0.0% | 0.0% | invariato |
+| **Shadow FPR** | 2.1% | **28.4%** | +26.3 pp |
+| Obstr TPR | 70.6% | **99.4%** | +28.8 pp |
+| Obstr FNR | 29.4% | **0.6%** | −28.8 pp |
+| Precision | 97.1% | 77.8% | −19.3 pp |
+| **F1** | 0.818 | **0.873** | +0.055 |
+| AUROC | 0.998 | 0.998 | invariato |
+| **σ delle θ** | **0.539** | **0.388** | **−28%** |
+| Range θ | [2.44, 6.19] | [2.24, 5.23] | restretto |
+
+Il decoupling ha avuto due effetti distinti:
+
+1. **Stabilizzazione strutturale**: σ_θ è scesa del 28% e la coda destra patologica è scomparsa (max θ da 6.19 a 5.23). Le camere "rotte" del run precedente sono recuperate.
+2. **Trade-off operativo capovolto**: la media di θ è scesa da 4.35 a 3.45, portando shadow FPR da 2% a 28% e TPR da 71% a 99%. Si è passati da over-correction a under-correction.
+
+L'F1 è salito di +5.5 punti percentuali, ma il punto operativo è ora troppo permissivo: 281 falsi allarmi su scene normali ombreggiate.
+
+#### Run 2 — decoupling con k=4.0
+
+Configurazione: identica al run 1 ma `k=4.0`, per spostare la media di θ verso lo sweet spot teorico ~4.0 visto nel threshold-sweep globale.
+
+| Metrica | Decoupled k=3.0 | Decoupled k=4.0 | Δ |
+|---|---|---|---|
+| Clean FPR | 0.0% | 0.0% | invariato |
+| Shadow FPR | 28.4% | **13.5%** | −14.9 pp |
+| Obstr TPR | 99.4% | **93.4%** | −6.0 pp |
+| Obstr FNR | 0.6% | 6.6% | +6.0 pp |
+| Precision | 77.8% | 87.3% | +9.5 pp |
+| **F1** | 0.873 | **0.903** | +0.030 |
+| σ delle θ | **0.388** | **0.497** | **+28%** |
+| Range θ | [2.24, 5.23] | [2.28, 6.09] | riallargato |
+
+Il run k=4.0 migliora F1 di altri 3 pp, ma rivela un effetto collaterale: **σ_θ è salita del 28%**. Il problema è strutturale: la formula `θ_i = μ_i + k·σ_cal,i` ha k come moltiplicatore di una stima rumorosa di σ_cal. Aumentando k amplifichiamo proporzionalmente le differenze stocastiche tra camere — la coda lunga torna.
+
+#### Distribuzione del contributo agli errori — k=4.0
+
+| Bucket θ | n camere | shadow FPR | TPR ostr | % FN | % shadow FP |
+|---|---|---|---|---|---|
+| ≤ 3.0 | 52 (5%) | **67%** | 100% | 0% | 26% |
+| 3.0–3.5 | 250 (25%) | 24% | 100% | 0% | 46% |
+| 3.5–4.0 | 384 (39%) | 9% | 99% | 6% | 25% |
+| 4.0–4.5 | 243 (25%) | 2% | 90% | 35% | 4% |
+| **4.5–5.0** | **52 (5%)** | 0% | **40%** | **48%** | 0% |
+| > 5.0 | 9 (1%) | 0% | 22% | 11% | 0% |
+
+Sono ricomparse **due code patologiche simmetriche**:
+- 52 camere con θ ≤ 3.0 (5% del totale) generano il 26% di tutti gli shadow FP (shadow FPR=67%)
+- 61 camere con θ > 4.5 (6% del totale) generano il 59% di tutti gli FN (TPR scende al 22–40%)
+
+Sono gli stessi pattern del run coupled originale, solo a scala ridotta. La diagnosi è la stessa: σ_cal stimato su 30 sample non è abbastanza preciso, e moltiplicarlo per k>3 ne amplifica l'errore stocastico in modo strutturale.
+
+#### Confronto con threshold globale ideale
+
+Il threshold-sweep su scores normalizzati mostra che, se ogni camera operasse alla **stessa** soglia 4.0, otterremmo:
+
+| Operating point | Clean FPR | Shadow FPR | TPR | F1 stimato |
+|---|---|---|---|---|
+| Per-camera (k=4) | 0.0% | 13.5% | 93.4% | 0.903 |
+| **Globale uniforme @ 4.0** | **0.0%** | **2.9%** | **97.7%** | **~0.94** |
+
+Esiste un gap di **~4 punti percentuali di F1** che non è raggiungibile con la calibrazione per-camera attuale. Il limite è intrinseco alla formula `μ_i + k·σ_cal,i`: l'incertezza in σ_cal,i si propaga sul threshold e produce camere fortunate/sfortunate indipendentemente dalla qualità della scena.
+
+#### Limite della leva k
+
+Confronto del tasso di shift:
+- k=3.0 → 4.0: μ_θ +0.30, σ_θ +0.11 (+28%)
+- estrapolazione k→5.0: μ_θ atteso ~+0.30, σ_θ atteso ~+30% ulteriore
+
+I rendimenti di k sono decrescenti: spostiamo la media lentamente ma allarghiamo la distribuzione velocemente. Continuare a salire con k peggiora la stabilità senza guadagni operativi significativi.
+
+---
+
+### 3.12 Proposta finale: pooled σ con median
+
+#### Motivazione
+
+L'analisi dei due run decoupled identifica con precisione la causa dei rendimenti decrescenti: **σ_cal,i è una stima rumorosa**, perché basata su n=30 sample con `shadow_prob_cal=0.1` (≈3 variants con ombra su 30, numero piccolo e ad alta varianza di Bernoulli). L'incertezza relativa su σ_cal,i con n=30 è dell'ordine del 18%, e si riflette uno-a-uno su `k·σ_cal,i` nel calcolo della soglia.
+
+D'altro canto, **μ_cal,i è una stima affidabile**: 30 sample sono sufficienti per fissarne il valore con precisione (la SE su μ è dell'ordine di σ_cal,i / √30 ≈ 6% di σ_cal,i). Inoltre μ_cal,i incorpora informazione genuina sulla scena specifica (livello assoluto degli score nella distribuzione normale di quella camera), che vogliamo preservare per la calibrazione adattiva.
+
+La proposta è quindi:
+
+```
+θ_i = μ_i + k · σ_pop
+```
+
+dove `σ_pop` è uno stimatore globale di σ_cal, calcolato dopo che tutti i worker hanno terminato la prima passata.
+
+#### Scelta dello stimatore
+
+| Stimatore | Formula | Pro | Contro |
+|---|---|---|---|
+| Pooled std (RMS) | √mean(σ_i²) | Massima verosimiglianza se σ è omogeneo | Sensibile alle code di σ_i |
+| Mean | mean(σ_i) | Semplice | Influenzato da calibrazioni sfortunate alte |
+| **Median** | median(σ_i) | **Robusto agli outlier** | Scarta informazione dalle code |
+
+La scelta ricade sul **median** per coerenza con la motivazione dell'intervento: il problema sono proprio le calibrazioni "fortunate" (σ_cal molto basso → soglia troppo bassa → shadow FP) o "sfortunate" (σ_cal alto → soglia troppo alta → FN). Il median ignora entrambi gli estremi e produce un valore di tolleranza rappresentativo della popolazione.
+
+#### Effetto atteso sulla distribuzione di θ
+
+Sotto l'attuale formula `θ_i = μ_i + k·σ_cal,i`:
+
+```
+Var(θ_i) = Var(μ_i) + k² · Var(σ_cal,i) + 2k · Cov(μ_i, σ_cal,i)
+```
+
+Il termine `k² · Var(σ_cal,i)` è dominante: con k=4 e Var(σ_cal,i) ≈ 0.05² (stima grezza), questo contributo è ~0.16, comparabile alla σ_θ osservata 0.50² = 0.25.
+
+Sotto la nuova formula `θ_i = μ_i + k·σ_pop` (con σ_pop costante):
+
+```
+Var(θ_i) = Var(μ_i)
+```
+
+La σ delle threshold collassa alla **variabilità intrinseca delle scene**, eliminando completamente la componente stocastica della calibrazione. Stima conservativa: σ_θ scende da 0.50 a ~0.15 (stessa scala di Var(μ_i) osservata nel baseline shadow-free).
+
+#### Conseguenze operative attese
+
+1. **Coda lunga eliminata**: le 61 camere con θ > 4.5 in k=4 erano outlier per via di σ_cal,i alto, non per μ_i alto. Con σ_pop costante, queste camere tornano nel cluster centrale.
+2. **Camere a θ basso meno permissive**: le 52 camere con θ ≤ 3.0 erano outlier per σ_cal,i basso. Con σ_pop costante (mediana ≈ 0.25 atteso), le loro soglie salgono verso μ_i + k·σ_pop ≈ μ_i + 1.0.
+3. **Operating point avvicinato allo sweet spot teorico ~4.0**: dato che la perdita di F1 (4 pp) è dovuta alla dispersione di θ rispetto a un threshold globale ideale, comprimere la distribuzione attorno alla media dovrebbe recuperare gran parte del gap.
+
+#### Implementazione (sketch)
+
+Algoritmo two-pass nel runner:
+
+**Pass 1** (worker, in parallelo per camera):
+- Costruisce bank e calibrazione come ora
+- Calcola μ_i, σ_i, scores per tutti i test (normal, shadow, obstructed)
+- **Non** classifica ancora gli esiti (no `is_anomaly`)
+- Restituisce i raw scores + (μ_i, σ_i)
+
+**Pass 2** (main thread, sequenziale dopo aggregazione):
+- Raccoglie tutti i σ_i dalle camere processate (+ eventuali da CSV in resume mode)
+- Calcola `σ_pop = median(σ_i)`
+- Per ogni row: ricalcola `threshold = μ_i + k·σ_pop`, `normalized_score = (score − μ_i) / σ_pop`, `is_anomaly = score > threshold`
+- Ricostruisce `venue_stats` (fp/tp/fn/shadow_fp e relative liste di candidati per le heatmap) dalle nuove classificazioni
+- Scrive CSV con threshold ricalcolato + colonne diagnostiche `mu`, `sigma` (l'σ_cal,i originale per camera, ai fini di analisi)
+
+CLI: introdurre `--sigma-mode {per_camera, pooled}` con default `per_camera` per backward compatibility. La metadata dell'esperimento (tabella `experiments`) registra il modo scelto e il valore di `σ_pop` calcolato, per riproducibilità.
+
+#### Aspettativa quantitativa
+
+Sulla base del threshold-sweep eseguito sui dati k=4, la configurazione `sigma_mode=pooled, k=4.0` dovrebbe operare con threshold per-camera nell'intorno di `μ_i + 4·σ_pop ≈ μ_i + 1.0`. Con μ_i mediamente ~3.0, le soglie si concentrerebbero intorno a 4.0, dove il punto operativo globale dà:
+
+- shadow FPR ~3%
+- TPR ~98%
+- F1 ~0.94
+
+Il guadagno atteso rispetto a k=4 standard è di **~4 pp di F1** (da 0.903 a ~0.94), e questo guadagno proviene esclusivamente dalla riduzione di varianza nelle soglie — non da nessun cambio della capacità discriminativa del modello (AUROC resta 0.998).
