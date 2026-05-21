@@ -375,3 +375,73 @@ Due parametri permettono di recuperare recall senza rinunciare al guadagno sulle
 **2. Abbassare shadow_prob** (da 0.4 a ~0.2–0.3): meno varianti con ombra in calibrazione → μ_cal si alza meno → threshold più conservativa. La riduzione riduce però anche la copertura della bank, potenzialmente aumentando il shadow FPR.
 
 Le due leve hanno effetti opposti e complementari: k controlla la posizione assoluta della threshold dato un certo livello di calibrazione; shadow_prob controlla quanto la calibrazione incorpora la variabilità shadow. Il punto di operazione target (shadow FPR < 5%, TPR > 95%) è raggiungibile con una combinazione nell'intorno di `shadow_prob ∈ [0.2, 0.3]`, `k ∈ [1.5, 2.0]`, da validare empiricamente sul test set.
+
+---
+
+### 3.10 Analisi della varianza della soglia per camera
+
+#### Motivazione
+
+L'interpretazione del §3.9 attribuiva il FNR 29.4% a una "over-correction globale" della threshold, suggerendo come rimedi un abbassamento di `k` o di `shadow_prob`. Un'analisi più fine della distribuzione delle threshold per-camera mostra che la diagnosi è incompleta: il problema non è uno spostamento uniforme della soglia, ma una **coda lunga patologica** nella distribuzione di θ_i, generata da instabilità stocastica della calibrazione.
+
+#### Distribuzione delle threshold
+
+| Esperimento | μ_θ | σ_θ | CV | min | max | range |
+|---|---|---|---|---|---|---|
+| Baseline (no shadow) | 2.470 | 0.158 | 6.4% | 1.97 | 3.00 | 1.03 |
+| `shadow_prob=0.4` | 4.348 | **0.539** | **12.4%** | 2.44 | **6.19** | **3.74** |
+
+Con la shadow augmentation la **σ della distribuzione delle threshold è 3.4× più ampia** rispetto al baseline shadow-free, e il range si estende da [1.97, 3.00] a [2.44, 6.19]. Non è uno spostamento uniforme — è la comparsa di una coda destra che non esisteva.
+
+#### Distribuzione del contributo agli FN per bucket di threshold
+
+I 291 falsi negativi (29.4% di 990 ostruite) non sono distribuiti uniformemente, ma si concentrano nelle camere con threshold elevata:
+
+| Bucket θ | n camere | % camere | FNR del bucket | % FN totali |
+|---|---|---|---|---|
+| ≤ 4.0 | 261 | 26% | 0% | 0% |
+| 4.0 – 4.5 | 348 | 35% | 12% | 14% |
+| 4.5 – 5.0 | 264 | 27% | **53%** | **48%** |
+| 5.0 – 5.5 | 103 | 10% | **92%** | **33%** |
+| > 5.5 | 14 | 1.4% | **100%** | 5% |
+
+**117 camere (12% del totale) con threshold > 4.5 generano il 86% degli FN.** Le 14 camere con θ > 5.5 sono completamente cieche alle ostruzioni: missano il 100% degli obstructed test per quelle reference.
+
+#### Diagnosi: instabilità stocastica della calibrazione
+
+Le camere con threshold patologicamente alta non condividono caratteristiche di scena particolari — sono distribuite indifferentemente tra porte e corridoi. Il loro tratto comune è statistico: con `--cal 10` sample e `shadow_prob=0.4`, alcune camere campionano per caso 6–8 variants pesantemente ombreggiate su 10. Questo gonfia sia μ_cal che soprattutto σ_cal, e con k=3.0 il termine k·σ_cal amplifica l'effetto fino a portare θ_i a 6.19.
+
+Sono **outlier di calibrazione, non outlier di scena**. La stessa camera, ricalibrata con un seed diverso, avrebbe una threshold completamente diversa. La σ_cal stimata su n=10 sample con varianza alta tra le sorgenti (variants shadow-free vs shadow-heavy) non è statisticamente affidabile.
+
+#### Implicazione sulle leve di tuning
+
+Le due leve identificate in §3.9 (abbassare k o abbassare shadow_prob) **non risolvono la coda lunga**:
+
+- **Abbassare k** comprime uniformemente tutte le threshold. Le 14 camere a 6.19 scenderebbero a ~4.1 con k=2.0, ma resterebbero outlier rispetto alla mediana (~2.9). Inoltre l'abbassamento di k riduce il margine di sicurezza anche per le camere già ben calibrate.
+- **Abbassare shadow_prob globalmente** riduce la varianza di σ_cal ma allo stesso tempo riduce la copertura shadow della bank, peggiorando potenzialmente il shadow FPR.
+
+#### Rimedio strutturale: decoupling build/calibration + più sample di calibrazione
+
+Le due fasi che attualmente condividono `shadow_prob` hanno requisiti opposti:
+
+| Fase | Obiettivo | shadow_prob ottimale |
+|---|---|---|
+| **Build** (n=15 variants → coreset 1%) | Bank diversificata sulle ombre per ridurre la distanza al kNN su patch ombreggiate | **Alto (0.4)** |
+| **Calibration** (n=10 variants → μ, σ) | Distribuzione degli score normali stabile e riproducibile | **Basso (0.1)** o zero |
+
+Inoltre, aumentando `--cal` da 10 a 30 si riduce la varianza stocastica di σ_cal di un fattore √3 ≈ 1.7. Questo è il modo più diretto per eliminare gli outlier nella distribuzione di θ_i senza compromettere la qualità della bank.
+
+**La modifica non incide su tempo di inferenza né su dimensione della memory bank:** le variants di calibrazione sono utilizzate solo per stimare μ e σ a build time; non entrano nel coreset. Il costo aggiuntivo è esclusivamente computazionale e una tantum, sostenuto durante la costruzione della bank.
+
+#### Configurazione proposta per il prossimo run
+
+| Parametro | Attuale | Proposto | Motivazione |
+|---|---|---|---|
+| `shadow_prob` (build) | 0.4 | 0.4 | bank diversificata sulle ombre, invariata |
+| `shadow_prob` (calibration) | 0.4 | **0.1** | σ_cal stabile, threshold senza coda destra |
+| `--cal` | 10 | **30** | riduce varianza stocastica di σ_cal (√3 ≈ 1.7×) |
+| `--aug` | 15 | 15 | bank di dimensione invariata |
+| `CORESET_P` | 0.01 | 0.01 | bank di dimensione invariata → inferenza invariata |
+| `k` | 3.0 | 3.0 | mantenuto per ora; eventuale aggiustamento dopo aver stabilizzato la distribuzione di θ_i |
+
+L'aspettativa è che la σ delle threshold per-camera scenda da 0.54 a un valore comparabile al baseline shadow-free (~0.2), mantenendo la mediana spostata abbastanza da preservare il guadagno sulla shadow FPR. Una volta stabilizzata la distribuzione di θ_i, eventuali aggiustamenti residui di k diventano un puro spostamento sul ROC, prevedibile e simmetrico per tutte le camere.

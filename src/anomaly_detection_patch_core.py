@@ -9,10 +9,11 @@ BUILD — costruisce la memory bank da una singola immagine normale:
   python anomaly_detection_patch_core.py build \
       --ref path/to/reference.jpg \
       --bank memory_bank.pt \
-      --aug 15 \           # varianti augmentation per la bank  (default: 15)
-      --cal 10 \           # varianti calibrazione soglia unseen (default: 10)
-      --coreset-p 0.01 \   # frazione coreset                   (default: 0.01)
-      --shadow-prob 0.4    # prob. ombra sintetica per variante  (default: 0.0)
+      --aug 15 \                # varianti augmentation per la bank  (default: 15)
+      --cal 10 \                # varianti calibrazione soglia unseen (default: 10)
+      --coreset-p 0.01 \        # frazione coreset                   (default: 0.01)
+      --shadow-prob 0.4 \       # prob. ombra sulle varianti di build (default: 0.0)
+      --shadow-prob-cal 0.1     # prob. ombra in calibrazione (default: eredita)
 
 TEST — score su una singola immagine:
   python anomaly_detection_patch_core.py test \
@@ -46,7 +47,6 @@ Dipendenze: torch torchvision pillow numpy scikit-learn opencv-python
 """
 
 # TODO: capire se adattare il re- weighting come nel paper o lasciare così com'è
-# TODO: rimandare test su vm, salvare csv e rivedere la tabella results del db
 # TODO: capire come attuare la visualizzazione di heatmap su i vari test (media di heatmap (?) o heatmap di un test specifico (es. quello con occlusione più evidente)
 import argparse
 import csv
@@ -541,7 +541,8 @@ def _ensure_worker_model() -> None:
 
 def _process_ref_worker(args: tuple) -> dict:
     (ref, ob_frames, shadow_normal_frames, dataset_root_path, n_augments, n_cal,
-     coreset_p, k_sigma, roi_tuple, test_normal, shadow_prob) = args
+     coreset_p, k_sigma, roi_tuple, test_normal,
+     shadow_prob, shadow_prob_cal) = args
 
     _ensure_worker_model()
     model = _worker_model
@@ -552,7 +553,7 @@ def _process_ref_worker(args: tuple) -> dict:
 
     ref_img = Image.open(ref_path).convert("RGB")
     bank_variants = augment_reference(ref_img, n=n_augments, seed=42, include_original=False, shadow_prob=shadow_prob)
-    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, include_original=False, shadow_prob=shadow_prob)
+    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, include_original=False, shadow_prob=shadow_prob_cal)
 
     all_features = []
     for img in bank_variants:
@@ -577,6 +578,8 @@ def _process_ref_worker(args: tuple) -> dict:
         "fp": 0, "tp": 0, "fn": 0,
         "shadow_normal_scores": [], "shadow_normal_scores_norm": [],
         "shadow_fp": 0,
+        "fn_candidates": [],          # (score, ref_path, ob_path) solo per FN
+        "shadow_fp_candidates": [],   # (score, ref_path, sn_path) solo per shadow FP
     }
     missing_files: list[str] = []
 
@@ -610,6 +613,7 @@ def _process_ref_worker(args: tuple) -> dict:
         stats["shadow_normal_scores_norm"].append(norm_sn)
         if is_fp_sh:
             stats["shadow_fp"] += 1
+            stats["shadow_fp_candidates"].append((sn_score, str(ref_path), str(sn_path)))
         rows.append({
             "reference_id": ref.frame_id, "test_id": sn.frame_id,
             "test_type": "shadow_normal", "venue_type": sn.venue_type,
@@ -634,6 +638,7 @@ def _process_ref_worker(args: tuple) -> dict:
             stats["tp"] += 1
         else:
             stats["fn"] += 1
+            stats["fn_candidates"].append((ob_score, str(ref_path), str(ob_path)))
         rows.append({
             "reference_id": ref.frame_id, "test_id": ob.frame_id,
             "test_type": "obstructed", "venue_type": ob.venue_type,
@@ -647,7 +652,7 @@ def _process_ref_worker(args: tuple) -> dict:
 
 def _process_bg_worker(args: tuple) -> dict:
     (bg_path_str, obstr_dir, roi_tuple, k_sigma, n_augments, n_cal,
-     coreset_p, test_aug_seeds, shadow_prob) = args
+     coreset_p, test_aug_seeds, shadow_prob, shadow_prob_cal) = args
 
     _ensure_worker_model()
     model = _worker_model
@@ -657,7 +662,7 @@ def _process_bg_worker(args: tuple) -> dict:
     ref_img = Image.open(bg_path).convert("RGB")
 
     bank_variants = augment_reference(ref_img, n=n_augments, seed=42, shadow_prob=shadow_prob)
-    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, shadow_prob=shadow_prob)
+    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, shadow_prob=shadow_prob_cal)
 
     all_features = []
     for img in bank_variants:
@@ -711,7 +716,8 @@ def _process_bg_worker(args: tuple) -> dict:
 
 def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
                       n_cal: int = 10, coreset_p: float = CORESET_P,
-                      shadow_prob: float = 0.0):
+                      shadow_prob: float = 0.0,
+                      shadow_prob_cal: float | None = None):
     """
     Costruisce la memory bank da una singola immagine di riferimento.
 
@@ -721,17 +727,27 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
     su campioni davvero unseen, simulando il comportamento in produzione.
 
     Args:
-        n_augments : varianti usate per costruire la bank  (seed=42)
-        n_cal      : varianti per calibrare mu/sigma       (seed=1000)
-        coreset_p  : frazione del bank da mantenere dopo coreset
+        n_augments      : varianti usate per costruire la bank  (seed=42)
+        n_cal           : varianti per calibrare mu/sigma       (seed=1000)
+        coreset_p       : frazione del bank da mantenere dopo coreset
+        shadow_prob     : probabilità ombra sulle varianti di build
+        shadow_prob_cal : probabilità ombra sulle varianti di calibrazione.
+                          Se None eredita da shadow_prob. Mantenerla bassa
+                          rispetto a shadow_prob riduce la varianza di
+                          sigma_cal e stabilizza la soglia per-camera
+                          (vedi patchcore_report §3.10).
     """
+    if shadow_prob_cal is None:
+        shadow_prob_cal = shadow_prob
+
     print(f"\n{'='*60}")
     print(f"BUILD memory bank")
     print(f"  Immagine di riferimento : {ref_path}")
     print(f"  Augmentazioni bank      : {n_augments}  (seed=42)")
     print(f"  Augmentazioni cal.      : {n_cal}  (seed=1000, unseen dalla bank)")
     print(f"  Coreset fraction        : {coreset_p*100:.1f}%")
-    print(f"  Shadow prob             : {shadow_prob:.2f}")
+    print(f"  Shadow prob (build)     : {shadow_prob:.2f}")
+    print(f"  Shadow prob (cal)       : {shadow_prob_cal:.2f}")
     print(f"  Salvataggio in          : {bank_path}")
     print(f"  Device                  : {DEVICE}")
     print(f"{'='*60}\n")
@@ -744,7 +760,7 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
 
     # 1b. Varianti per calibrazione soglia (seed=1000 → statisticamente indipendenti)
     #     NON entrano nella bank: simulano immagini normali future mai viste.
-    cal_variants = augment_reference(ref_img, n=n_cal, seed=1000, shadow_prob=shadow_prob)
+    cal_variants = augment_reference(ref_img, n=n_cal, seed=1000, shadow_prob=shadow_prob_cal)
     print(f"      Augmentation cal.  : {len(cal_variants)} immagini (seed=1000)")
 
     # Salva preview
@@ -940,7 +956,7 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
              k_sigma: float = 3.0, n_augments: int = 15, n_cal: int = 10,
              coreset_p: float = CORESET_P, test_aug_seeds: list = None,
              out_csv: str = "eval_results.csv", n_workers: int = 1,
-             shadow_prob: float = 0.0):
+             shadow_prob: float = 0.0, shadow_prob_cal: float | None = None):
     """
     Valutazione sistematica di PatchCore su un dataset di immagini background.
 
@@ -971,6 +987,9 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
     if test_aug_seeds is None:
         test_aug_seeds = [2000, 2001, 2002]
 
+    if shadow_prob_cal is None:
+        shadow_prob_cal = shadow_prob
+
     bg_paths = sorted(Path(bg_dir).glob("*.jpg")) + sorted(Path(bg_dir).glob("*.png"))
     if not bg_paths:
         print(f"ERRORE: nessuna immagine trovata in {bg_dir}")
@@ -985,7 +1004,8 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
     print(f"  Aug bank/cal    : {n_augments} / {n_cal}")
     print(f"  Coreset         : {coreset_p*100:.1f}%")
     print(f"  Test aug seeds  : {test_aug_seeds}")
-    print(f"  Shadow prob     : {shadow_prob:.2f}")
+    print(f"  Shadow prob bld : {shadow_prob:.2f}")
+    print(f"  Shadow prob cal : {shadow_prob_cal:.2f}")
     print(f"  Workers         : {n_workers}")
     print(f"{'='*60}\n")
 
@@ -993,7 +1013,7 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
 
     worker_args_list = [
         (str(bg_path), obstr_dir, roi_tuple, k_sigma, n_augments, n_cal,
-         coreset_p, test_aug_seeds, shadow_prob)
+         coreset_p, test_aug_seeds, shadow_prob, shadow_prob_cal)
         for bg_path in bg_paths
     ]
 
@@ -1159,6 +1179,8 @@ def _load_existing_csv_stats(
                     "fp": 0, "tp": 0, "fn": 0,
                     "shadow_normal_scores": [], "shadow_normal_scores_norm": [],
                     "shadow_fp": 0,
+                    "fn_candidates": [],
+                    "shadow_fp_candidates": [],
                 },
             )
 
@@ -1175,23 +1197,33 @@ def _load_existing_csv_stats(
             elif test_type == "obstructed":
                 stats["ob_scores"].append(score)
                 stats["ob_scores_norm"].append(norm_score)
-                if is_anomaly:
-                    stats["tp"] += 1
-                else:
-                    stats["fn"] += 1
                 ob_path = str(dataset_root / row["file_path"])
                 ref_row = conn.execute(
                     "SELECT file_path FROM frames WHERE frame_id = ?", (ref_id,)
                 ).fetchone()
-                if ref_row:
-                    ref_path = str(dataset_root / ref_row[0])
-                    stats["ob_candidates"].append((score, ref_path, ob_path))
+                ref_path_str = str(dataset_root / ref_row[0]) if ref_row else None
+                if ref_path_str:
+                    stats["ob_candidates"].append((score, ref_path_str, ob_path))
+                if is_anomaly:
+                    stats["tp"] += 1
+                else:
+                    stats["fn"] += 1
+                    if ref_path_str:
+                        stats["fn_candidates"].append((score, ref_path_str, ob_path))
             elif test_type == "shadow_normal":
                 refs_with_shadow.add(ref_id)
                 stats["shadow_normal_scores"].append(score)
                 stats["shadow_normal_scores_norm"].append(norm_score)
+                sn_path = str(dataset_root / row["file_path"])
+                ref_row = conn.execute(
+                    "SELECT file_path FROM frames WHERE frame_id = ?", (ref_id,)
+                ).fetchone()
                 if is_anomaly:
                     stats["shadow_fp"] += 1
+                    if ref_row:
+                        stats["shadow_fp_candidates"].append(
+                            (score, str(dataset_root / ref_row[0]), sn_path)
+                        )
 
     return processed, venue_stats, refs_with_shadow
 
@@ -1214,7 +1246,11 @@ def evaluate_from_db(
     n_workers: int = 1,
     resume: bool = False,
     shadow_prob: float = 0.0,
+    shadow_prob_cal: float | None = None,
 ) -> None:
+    if shadow_prob_cal is None:
+        shadow_prob_cal = shadow_prob
+
     dataset_root_path = Path(dataset_root)
     if not dataset_root_path.exists():
         raise FileNotFoundError(f"Dataset root not found: {dataset_root_path}")
@@ -1253,6 +1289,7 @@ def evaluate_from_db(
             "roi": roi,
             "test_normal": test_normal,
             "shadow_prob": shadow_prob,
+            "shadow_prob_cal": shadow_prob_cal,
         }
         exp_id = insert_experiment(
             conn,
@@ -1309,7 +1346,8 @@ def evaluate_from_db(
         print(f"  Soglia       : mu + {k_sigma}*sigma")
         print(f"  Aug bank/cal : {n_augments} / {n_cal}")
         print(f"  Coreset      : {coreset_p*100:.1f}%")
-        print(f"  Shadow prob  : {shadow_prob:.2f}")
+        print(f"  Shadow prob bld: {shadow_prob:.2f}")
+        print(f"  Shadow prob cal: {shadow_prob_cal:.2f}")
         print(f"  Workers      : {n_workers}")
         print(f"{'='*60}\n")
 
@@ -1328,14 +1366,16 @@ def evaluate_from_db(
         worker_args_list = [
             (ref, ob_map.get(ref.frame_id, []),
              shadow_normal_map.get(ref.frame_id, []),
-             dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, test_normal, shadow_prob)
+             dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, test_normal,
+             shadow_prob, shadow_prob_cal)
             for ref in refs
         ]
         # Ref già processati senza shadow: solo shadow (ob_frames vuoto, test_normal=False)
         worker_args_list += [
             (ref, [],
              shadow_normal_map.get(ref.frame_id, []),
-             dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, False, shadow_prob)
+             dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, False,
+             shadow_prob, shadow_prob_cal)
             for ref in refs_shadow_only
         ]
         if refs_shadow_only:
@@ -1383,11 +1423,14 @@ def evaluate_from_db(
                     "fp": 0, "tp": 0, "fn": 0,
                     "shadow_normal_scores": [], "shadow_normal_scores_norm": [],
                     "shadow_fp": 0,
+                    "fn_candidates": [],
+                    "shadow_fp_candidates": [],
                 },
             )
             for key in ("normal_scores", "ob_scores", "normal_scores_norm",
                         "ob_scores_norm", "ob_candidates", "thresholds",
-                        "shadow_normal_scores", "shadow_normal_scores_norm"):
+                        "shadow_normal_scores", "shadow_normal_scores_norm",
+                        "fn_candidates", "shadow_fp_candidates"):
                 stats[key].extend(stats_w.get(key, []))
             for key in ("fp", "tp", "fn", "shadow_fp"):
                 stats[key] += stats_w.get(key, 0)
@@ -1400,46 +1443,57 @@ def evaluate_from_db(
         if out_csv:
             heatmap_dir = Path(out_csv).parent / (Path(out_csv).stem + "_heatmaps")
             heatmap_dir.mkdir(exist_ok=True)
-            print(f"\nGenerazione heatmap best/median/worst per venue → {heatmap_dir}/")
+            print(f"\nGenerazione heatmap failure cases per venue → {heatmap_dir}/")
             _ensure_worker_model()
             model = _worker_model
 
+            def _save_heatmap(ref_path_str: str, test_path_str: str,
+                               label: str, score: float, venue_type: str) -> None:
+                ref_img_v = Image.open(ref_path_str).convert("RGB")
+                bv = augment_reference(ref_img_v, n=n_augments, seed=42,
+                                       include_original=False, shadow_prob=shadow_prob)
+                feats_list = []
+                for img_v in bv:
+                    f, _, _ = extract_patch_features(model, load_image_tensor(img_v))
+                    feats_list.append(f)
+                bank_raw = torch.cat(feats_list, dim=0)
+                tsize = max(50, int(len(bank_raw) * coreset_p))
+                bank_v = torch.from_numpy(greedy_coreset(bank_raw.numpy(), tsize, verbose=False))
+
+                test_img_v = Image.open(test_path_str).convert("RGB")
+                _, amap = compute_image_score_from_pil(
+                    model, test_img_v, bank_v, roi_tuple, return_map=True
+                )
+                norm_map = (amap - amap.min()) / (amap.max() - amap.min() + 1e-8) * 255
+                heatmap_color = cv2.applyColorMap(norm_map.astype(np.uint8), cv2.COLORMAP_JET)
+                orig_cv = cv2.cvtColor(np.array(test_img_v), cv2.COLOR_RGB2BGR)
+                overlay = cv2.addWeighted(orig_cv, 0.5, heatmap_color, 0.5, 0)
+                out_name = f"{venue_type}_{label}_score{score:.3f}_{Path(test_path_str).stem}.jpg"
+                Image.fromarray(cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)).save(
+                    heatmap_dir / out_name
+                )
+                print(f"  [{venue_type}] {label:20s} score={score:.4f} → {out_name}")
+
             for venue_type, stats in venue_stats.items():
-                candidates = sorted(stats["ob_candidates"], key=lambda x: x[0])
-                if not candidates:
-                    continue
-                to_visualize = {
-                    "worst":  candidates[0],
-                    "median": candidates[len(candidates) // 2],
-                    "best":   candidates[-1],
-                }
-                for label, (score, ref_path_str, ob_path_str) in to_visualize.items():
-                    ref_img_v = Image.open(ref_path_str).convert("RGB")
-                    bv = augment_reference(ref_img_v, n=n_augments, seed=42, include_original=False, shadow_prob=shadow_prob)
-                    feats_list = []
-                    for img_v in bv:
-                        t = load_image_tensor(img_v)
-                        f, _, _ = extract_patch_features(model, t)
-                        feats_list.append(f)
-                    bank_raw = torch.cat(feats_list, dim=0)
-                    tsize = max(50, int(len(bank_raw) * coreset_p))
-                    bank_v = torch.from_numpy(greedy_coreset(bank_raw.numpy(), tsize, verbose=False))
+                fn_cands = stats.get("fn_candidates", [])
+                sh_cands = stats.get("shadow_fp_candidates", [])
 
-                    ob_img_v = Image.open(ob_path_str).convert("RGB")
-                    _, amap = compute_image_score_from_pil(
-                        model, ob_img_v, bank_v, roi_tuple, return_map=True
-                    )
+                # FN più convinto (score minimo — modello più lontano dalla soglia)
+                if fn_cands:
+                    worst = min(fn_cands, key=lambda x: x[0])
+                    _save_heatmap(*worst[1:], label="fn_worst", score=worst[0], venue_type=venue_type)
 
-                    norm_map = (amap - amap.min()) / (amap.max() - amap.min() + 1e-8) * 255
-                    heatmap_color = cv2.applyColorMap(norm_map.astype(np.uint8), cv2.COLORMAP_JET)
-                    orig_cv = cv2.cvtColor(np.array(ob_img_v), cv2.COLOR_RGB2BGR)
-                    overlay = cv2.addWeighted(orig_cv, 0.5, heatmap_color, 0.5, 0)
+                # FN più vicino alla soglia (score massimo tra i FN)
+                if fn_cands:
+                    closest = max(fn_cands, key=lambda x: x[0])
+                    # evita duplicato se c'è un solo FN
+                    if closest[1:] != worst[1:]:
+                        _save_heatmap(*closest[1:], label="fn_closest", score=closest[0], venue_type=venue_type)
 
-                    out_name = f"{venue_type}_{label}_score{score:.3f}_{Path(ob_path_str).stem}.jpg"
-                    Image.fromarray(cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)).save(
-                        heatmap_dir / out_name
-                    )
-                    print(f"  [{venue_type}] {label:6s} score={score:.4f} → {out_name}")
+                # Shadow FP più convinto (score massimo — modello più sicuro dell'anomalia)
+                if sh_cands:
+                    worst_sh = max(sh_cands, key=lambda x: x[0])
+                    _save_heatmap(*worst_sh[1:], label="shadow_fp_worst", score=worst_sh[0], venue_type=venue_type)
 
         for venue_type, stats in venue_stats.items():
             normal_scores = stats["normal_scores"]
@@ -1541,8 +1595,13 @@ def main():
                          help=f"Frazione coreset (default: {CORESET_P}). "
                               f"Aumentare a 0.05-0.10 per bank da singola immagine.")
     p_build.add_argument("--shadow-prob", type=float, default=0.0,
-                         help="Probabilità ombra sintetica per variante augmentata (default: 0.0). "
+                         help="Probabilità ombra sulle varianti di build (default: 0.0). "
                               "Usare ~0.4 per robustezza alle ombre.")
+    p_build.add_argument("--shadow-prob-cal", type=float, default=None,
+                         help="Probabilità ombra sulle varianti di calibrazione. "
+                              "Se non specificato eredita da --shadow-prob. "
+                              "Tenerla bassa (~0.1) riduce la varianza di sigma_cal "
+                              "e stabilizza la soglia per-camera (vedi report §3.10).")
 
     # ── Comando TEST ──────────────────────────────────────────────────────────
     p_test = sub.add_parser("test", help="Testa un'immagine per anomalie")
@@ -1579,7 +1638,10 @@ def main():
     p_eval.add_argument("--out-csv",    default="eval_results.csv",
                         help="Percorso output CSV risultati (default: eval_results.csv)")
     p_eval.add_argument("--shadow-prob", type=float, default=0.0,
-                        help="Probabilità ombra sintetica per variante augmentata (default: 0.0)")
+                        help="Probabilità ombra sulle varianti di build (default: 0.0)")
+    p_eval.add_argument("--shadow-prob-cal", type=float, default=None,
+                        help="Probabilità ombra sulle varianti di calibrazione. "
+                             "Se non specificato eredita da --shadow-prob.")
     p_eval.add_argument("--workers",    type=int, default=1,
                         help="Numero processi paralleli (default: 1)")
 
@@ -1623,7 +1685,10 @@ def main():
     p_eval_db.add_argument("--resume", action="store_true", default=False,
                            help="Riprende da un CSV parziale esistente, salta i reference già processati")
     p_eval_db.add_argument("--shadow-prob", type=float, default=0.0,
-                           help="Probabilità ombra sintetica per variante augmentata (default: 0.0)")
+                           help="Probabilità ombra sulle varianti di build (default: 0.0)")
+    p_eval_db.add_argument("--shadow-prob-cal", type=float, default=None,
+                           help="Probabilità ombra sulle varianti di calibrazione. "
+                                "Se non specificato eredita da --shadow-prob.")
 
     args = parser.parse_args()
 
@@ -1634,6 +1699,7 @@ def main():
             n_cal=args.cal,
             coreset_p=args.coreset_p,
             shadow_prob=args.shadow_prob,
+            shadow_prob_cal=args.shadow_prob_cal,
         )
     elif args.command == "test":
         test_image(args.bank, args.img,
@@ -1652,6 +1718,7 @@ def main():
             out_csv=args.out_csv,
             n_workers=args.workers,
             shadow_prob=args.shadow_prob,
+            shadow_prob_cal=args.shadow_prob_cal,
         )
     elif args.command == "evaluate-db":
         evaluate_from_db(
@@ -1671,6 +1738,7 @@ def main():
             n_workers=args.workers,
             resume=args.resume,
             shadow_prob=args.shadow_prob,
+            shadow_prob_cal=args.shadow_prob_cal,
         )
 
 
