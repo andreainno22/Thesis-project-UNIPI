@@ -1,4 +1,4 @@
-"""
+﻿"""
 Genera varianti con ombre fittizie per testare la robustezza di PatchCore.
 
 Tipi di ombra disponibili:
@@ -8,7 +8,7 @@ Tipi di ombra disponibili:
                   parzialmente bloccata (finestra laterale, lampada a parete).
   - striscia    : banda scura orizzontale/verticale con bordi sfumati, simula
                   l'ombra di una trave del soffitto, uno scaffale a muro, un
-                  traverso architettonico — comune in corridoi industriali.
+                  traverso architettonico - comune in corridoi industriali.
   - random      : applica k ombre casuali dal pool {ellittica, direzionale,
                   striscia}, con k ∈ [--shadows-min, --shadows-max] (default).
   - combined    : direzionale + ellittica in sequenza (backward compat).
@@ -123,7 +123,7 @@ def add_stripe_shadow(
     """
     Aggiunge una striscia scura orizzontale o verticale con bordi sfumati.
     Simula l'ombra proiettata da una trave del soffitto, uno scaffale a muro
-    o un traverso architettonico — pattern molto comune in corridoi industriali.
+    o un traverso architettonico - pattern molto comune in corridoi industriali.
     """
     arr       = np.array(img_pil).astype(np.float32)
     h, w      = arr.shape[:2]
@@ -233,7 +233,7 @@ def load_shadow_frames_to_db(
                 (
                     shadow_rel, shadow_rel,
                     venue_type, is_normal,
-                    None,        # obstacle_class — non rilevante per shadow
+                    None,        # obstacle_class - non rilevante per shadow
                     occlusion_type, occlusion_level,
                     split, "shadow",
                     source_group, ref_id,

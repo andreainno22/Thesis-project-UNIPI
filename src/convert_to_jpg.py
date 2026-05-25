@@ -1,4 +1,4 @@
-"""
+﻿"""
 convert_to_jpg.py
 -----------------
 Converte tutte le immagini in una cartella (e sottocartelle) in formato JPG.

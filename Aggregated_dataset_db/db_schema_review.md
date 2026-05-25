@@ -1,8 +1,8 @@
-# DB Operativo SQLite — Schema Finale
+# DB Operativo SQLite - Schema Finale
 
 ## DDL Completo
 
-### `frames` — indice dei frame fisici
+### `frames` - indice dei frame fisici
 
 ```sql
 CREATE TABLE frames (
@@ -28,14 +28,14 @@ CREATE INDEX idx_frames_source_grp  ON frames(source_group);
 ```
 
 > [!NOTE]
-> **`source_group`** — valorizzato solo quando i frame hanno correlazione visiva
+> **`source_group`** - valorizzato solo quando i frame hanno correlazione visiva
 > (es. stessa sequenza CDNet, stessa sessione foto custom). Frame da Open Images o
 > Pinterest → NULL. Regola di split: frame con lo stesso `source_group` finiscono
 > tutti nello stesso split.
 
 ---
 
-### `annotations_bbox` — per P1 e P2
+### `annotations_bbox` - per P1 e P2
 
 ```sql
 CREATE TABLE annotations_bbox (
@@ -54,7 +54,7 @@ CREATE INDEX idx_bbox_frame ON annotations_bbox(frame_id);
 
 ---
 
-### `annotations_masks` — per P4
+### `annotations_masks` - per P4
 
 ```sql
 CREATE TABLE annotations_masks (
@@ -69,7 +69,7 @@ CREATE INDEX idx_mask_frame ON annotations_masks(frame_id);
 
 ---
 
-### `experiments` — tracking delle run
+### `experiments` - tracking delle run
 
 ```sql
 CREATE TABLE experiments (
@@ -79,7 +79,7 @@ CREATE TABLE experiments (
     dataset_filter  JSON,                 -- query usata per selezionare i frame
     hyperparams     JSON,                 -- include aug config on-the-fly per P3
     run_date        DATETIME NOT NULL DEFAULT (datetime('now')),
-    artifact_path   TEXT,                 -- P1/P2/P4: best.pt — P3: memory_bank.pt
+    artifact_path   TEXT,                 -- P1/P2/P4: best.pt - P3: memory_bank.pt
     status          TEXT NOT NULL CHECK(status IN ('running','done','failed'))
                         DEFAULT 'running'
 );
@@ -91,7 +91,7 @@ CREATE TABLE experiments (
 
 ---
 
-### `results` — metriche per esperimento
+### `results` - metriche per esperimento
 
 ```sql
 CREATE TABLE results (
@@ -134,7 +134,7 @@ CREATE INDEX idx_results_exp ON results(exp_id);
 | Campo rimosso | Tabella | Motivo |
 |---|---|---|
 | `camera_id` | `frames` | Non pertinente: dataset di immagini singole, non stream video |
-| `sequence_id` | `frames` | Sostituito da `source_group` — più leggero, copre il caso CDNet |
+| `sequence_id` | `frames` | Sostituito da `source_group` - più leggero, copre il caso CDNet |
 | `split` | `results` | Ridondante: P3 è unsupervised (nessun split), P1 usa CV (fold dinamici). Il contesto dati è in `experiments.dataset_filter` |
 
 ## Campi aggiunti vs schema originale
@@ -151,7 +151,7 @@ CREATE INDEX idx_results_exp ON results(exp_id);
 
 ---
 
-## Augmentation P3 — riepilogo strategia
+## Augmentation P3 - riepilogo strategia
 
 P3 (PatchCore) è **unsupervised**: non ha fase di training nel senso classico.
 L'augmentazione serve a costruire la memory bank e a calibrare la soglia
@@ -182,7 +182,7 @@ ref_img  (singola immagine normale per camera)
 
 ---
 
-## Utilizzo frame per pipeline — query rapide
+## Utilizzo frame per pipeline - query rapide
 
 ```sql
 -- P1: frame con bbox per obstacle detection (CV: filtrare per fold esternamente)

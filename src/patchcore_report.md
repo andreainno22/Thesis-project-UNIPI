@@ -1,4 +1,4 @@
-# PatchCore per il Rilevamento di Occlusioni — Report Metodologico
+﻿# PatchCore per il Rilevamento di Occlusioni - Report Metodologico
 
 ## 1. Pipeline PatchCore: funzionamento dettagliato
 
@@ -6,11 +6,11 @@
 
 PatchCore è un sistema di **anomaly detection non supervisionato** basato su memoria. Non richiede immagini anomale durante la fase di costruzione: apprende esclusivamente dalla scena normale di riferimento. Il principio fondamentale è che un'immagine è anomala se le sue feature locali si trovano lontane da quelle memorizzate durante la fase di build.
 
-Nel contesto applicativo, ogni via di fuga è monitorata da una telecamera dedicata. Per ciascuna telecamera viene costruita una **memory bank indipendente** a partire da un singolo frame di riferimento della scena normale. Questa scelta riflette esattamente il caso reale di deploy: la camera non cambia inquadratura, e la scena normale ha caratteristiche fotometriche stabili.
+Nel contesto applicativo, ogni via di fuga è monitorata da una telecamera dedicata. Per ciascuna telecamera viene costruita una **memory bank indipendente** a partire da un singolo frame di riferimento della scena normale. Questa scelta riflette esattamente il caso reale di deploy: la camera non cambia inquadratura e la scena normale ha caratteristiche fotometriche stabili.
 
 ---
 
-### 1.2 Fase di Build — Costruzione della Memory Bank
+### 1.2 Fase di Build - Costruzione della Memory Bank
 
 #### Augmentazione fotometrica
 
@@ -28,7 +28,7 @@ A partire dalla singola immagine di riferimento `ref_img`, vengono generate `n_a
 
 **Non** vengono applicate flip, rotazioni o crop: la telecamera è fissa e l'orientamento è un'informazione semantica rilevante.
 
-**Accortezza chiave**: la `ref_img` originale **non entra nella memory bank** — solo le varianti augmentate vengono usate. Questo garantisce che il frame di riferimento possa essere usato come campione normale indipendente nella fase di test.
+**Accortezza chiave**: la `ref_img` originale **non entra nella memory bank** - solo le varianti augmentate vengono usate. Questo garantisce che il frame di riferimento possa essere usato come campione normale indipendente nella fase di test.
 
 #### Estrazione delle feature
 
@@ -82,7 +82,7 @@ Per ciascuna variante di calibrazione si calcola il **max anomaly score** dell'i
 
 ---
 
-### 1.4 Fase di Test — Inferenza
+### 1.4 Fase di Test - Inferenza
 
 Data un'immagine di test, la pipeline calcola un **anomaly map** e un **scalar anomaly score**.
 
@@ -98,7 +98,7 @@ w = 1 - exp(||test - m*||) / Σ_{m ∈ Nb(m*)} exp(||test - m||)
 score_patch = w · s*
 ```
 
-Il re-weighting riduce lo score quando il nearest neighbour si trova in una regione densa della bank (alta confidenza che sia normale), e lo amplifica quando si trova in una zona isolata. Le distanze al denominatore sono tra il test patch e i vicini di m*, **non** tra m* e i suoi vicini — questo è un punto critico per la correttezza dell'equazione 7.
+Il re-weighting riduce lo score quando il nearest neighbour si trova in una regione densa della bank (alta confidenza che sia normale), e lo amplifica quando si trova in una zona isolata. Le distanze al denominatore sono tra il test patch e i vicini di m*, **non** tra m* e i suoi vicini - questo è un punto critico per la correttezza dell'equazione 7.
 
 #### Anomaly map e scalar score
 
@@ -124,7 +124,7 @@ La valutazione viene eseguita tramite `evaluate_from_db`. Per ciascuna immagine 
 
 1. Si costruisce la memory bank dalle sole varianti augmentate di `ref_i` (non da `ref_i` stessa)
 2. Si calibra la soglia `θ_i` sulle varianti di calibrazione (seed diverso, anch'esse senza l'originale)
-3. Si testa `ref_i` come campione normale — è l'unico campione genuinamente unseen rispetto alla bank
+3. Si testa `ref_i` come campione normale - è l'unico campione genuinamente unseen rispetto alla bank
 4. Si testa la corrispondente immagine ostruita come campione anomalo
 
 ### 2.2 Separazione bank / calibrazione / test (no data leakage)
@@ -133,8 +133,8 @@ La valutazione viene eseguita tramite `evaluate_from_db`. Per ciascuna immagine 
 |---|---|---|---|
 | Bank variants (n=15) | 42 | No | Costruisce lo spazio normale |
 | Cal variants (n=10) | 1000 | No | Calibra μ e σ della soglia |
-| Normal test | — | Sì (è ref_img) | Campione normale indipendente |
-| Anomaly test | — | — | Immagine ostruita sintetica |
+| Normal test | - | Sì (è ref_img) | Campione normale indipendente |
+| Anomaly test | - | - | Immagine ostruita sintetica |
 
 I tre insiemi sono **disgiunti**: nessun dato usato per costruire il bank o calibrare la soglia entra nella fase di test. La `ref_img` è riservata al test perché è il solo campione normale che il modello non ha mai visto, nemmeno indirettamente tramite augmentazione.
 
@@ -142,8 +142,8 @@ I tre insiemi sono **disgiunti**: nessun dato usato per costruire il bank o cali
 
 **Metriche threshold-based** (calcolate con `θ_i = μ_i + k·σ_i` locale per camera):
 
-- `recall` = TP / (TP + FN) — frazione di ostruzioni rilevate
-- `false_alarm_rate` = FP / (FP + TN) — frazione di scene normali erroneamente classificate come anomalie
+- `recall` = TP / (TP + FN) - frazione di ostruzioni rilevate
+- `false_alarm_rate` = FP / (FP + TN) - frazione di scene normali erroneamente classificate come anomalie
 
 Queste metriche aggregano decisioni binarie già thresholdate per camera, quindi sono **comparabili tra camere diverse** indipendentemente dalla scala assoluta degli score.
 
@@ -169,7 +169,7 @@ Questo è il caso più difficile di anomaly detection: il contesto è normale, s
 
 ### 3.1 Motivazione
 
-Il sistema di anomaly detection è basato sulla distanza tra feature di test e memory bank. Una preoccupazione legittima è che variazioni di illuminazione — in particolare **ombre proiettate** da persone o oggetti che transitano fuori inquadratura — possano deformare le feature in misura sufficiente a superare la soglia di anomalia, generando **falsi positivi**.
+Il sistema di anomaly detection è basato sulla distanza tra feature di test e memory bank. Una preoccupazione legittima è che variazioni di illuminazione - in particolare **ombre proiettate** da persone o oggetti che transitano fuori inquadratura - possano deformare le feature in misura sufficiente a superare la soglia di anomalia, generando **falsi positivi**.
 
 Il failure mode di interesse è quindi:
 
@@ -177,9 +177,9 @@ Il failure mode di interesse è quindi:
 
 ### 3.2 Perché le ombre su scene ostruite non sono utili
 
-Si potrebbe pensare di testare anche immagini ostruite con ombra, per verificare che il modello mantenga il recall. Questo test è **non informativo** per il seguente motivo strutturale: l'occlusione (un carrello, un bidone, una barella) introduce nella patch map un set di feature completamente assenti dalla memory bank — il segnale è già molto sopra la soglia. Aggiungere un'ombra su un'immagine ostruita può solo aumentare il segnale anomalo, non abbassarlo.
+Si potrebbe pensare di testare anche immagini ostruite con ombra, per verificare che il modello mantenga il recall. Questo test è **non informativo** per il seguente motivo strutturale: l'occlusione (un carrello, un bidone, una barella) introduce nella patch map un set di feature completamente assenti dalla memory bank - il segnale è già molto sopra la soglia. Aggiungere un'ombra su un'immagine ostruita può solo aumentare il segnale anomalo, non abbassarlo.
 
-Il caso di failure realistico — immagine classificata come normale quando non lo è — non può essere causato da un'ombra aggiuntiva su un ostacolo già presente. Lo scenario che merita attenzione è esclusivamente l'FP sulla scena normale.
+Il caso di failure realistico - immagine classificata come normale quando non lo è - non può essere causato da un'ombra aggiuntiva su un ostacolo già presente. Lo scenario che merita attenzione è esclusivamente l'FP sulla scena normale.
 
 **Conseguenza di design**: le ombre sintetiche vengono generate e valutate **solo sulle scene normali**.
 
@@ -187,7 +187,7 @@ Il caso di failure realistico — immagine classificata come normale quando non 
 
 Un'alternativa sarebbe includere varianti con ombra nell'augmentazione della bank, rendendola esplicitamente invariante alle ombre. Questa scelta ha un difetto fondamentale: la bank apprenderebbe a ignorare ombre di **forma e posizione specifiche** (quelle generate dalla augmentation), ma non generalizzerebbe a ombre di forma diversa in inferenza.
 
-Includere ombre nella bank renderebbe il modello cieco a ombre del tipo addestrato, senza fornire alcuna garanzia sulle ombre reali. La robustezza documentabile è quella che il modello mostra **senza** aver visto ombre durante il build — e questa è la metrica che ha senso riportare.
+Includere ombre nella bank renderebbe il modello cieco a ombre del tipo addestrato, senza fornire alcuna garanzia sulle ombre reali. La robustezza documentabile è quella che il modello mostra **senza** aver visto ombre durante il build - e questa è la metrica che ha senso riportare.
 
 **Conseguenza di design**: la memory bank rimane costruita solo da varianti fotometriche shadow-free (luminosità, contrasto, saturazione, temperatura colore, rumore). Le ombre sono esclusivamente nel test set.
 
@@ -223,7 +223,7 @@ Le immagini shadow vengono inserite nel DB con:
 | `reference_frame_id` | frame_id dell'immagine originale |
 | `split` | ereditato dall'originale |
 
-Il campo `reference_frame_id` — normalmente usato per collegare immagini ostruite al loro background di riferimento — viene qui riutilizzato per collegare ogni variante shadow alla scena originale da cui deriva. Questo permette a `evaluate_from_db` di recuperarle via `query_shadow_normal_frames` e costruire la memory bank dall'originale shadow-free, garantendo un test genuinamente indipendente dalla bank.
+Il campo `reference_frame_id` - normalmente usato per collegare immagini ostruite al loro background di riferimento - viene qui riutilizzato per collegare ogni variante shadow alla scena originale da cui deriva. Questo permette a `evaluate_from_db` di recuperarle via `query_shadow_normal_frames` e costruire la memory bank dall'originale shadow-free, garantendo un test genuinamente indipendente dalla bank.
 
 La metrica prodotta è la **shadow FPR**: frazione di varianti shadow normali classificate erroneamente come anomalie. Viene riportata separatamente dalla FPR standard (calcolata sul frame originale) perché misura una diversa fonte di errore.
 
@@ -247,7 +247,7 @@ La valutazione su 990 campioni per categoria (corridoi e porte, split test) prod
 
 Il modello si comporta correttamente sui campioni normali e ostruiti, ma **classifica come anomalia il 90.1% delle scene normali con ombra**. Questo è il failure mode esatto descritto in §3.1: le ombre, pur non essendo ostruzioni, generano feature distanti dalla bank e superano la soglia calibrata.
 
-Il risultato è coerente con la motivazione teorica di §3.3: la bank non contiene patch con ombre, quindi qualsiasi ombra produce distanze elevate rispetto ai vicini nella bank — il meccanismo nearest-neighbour non riesce a distinguere l'anomalia reale dalla variazione fotometrica non coperta dall'augmentazione.
+Il risultato è coerente con la motivazione teorica di §3.3: la bank non contiene patch con ombre, quindi qualsiasi ombra produce distanze elevate rispetto ai vicini nella bank - il meccanismo nearest-neighbour non riesce a distinguere l'anomalia reale dalla variazione fotometrica non coperta dall'augmentazione.
 
 #### Zona di overlap e analisi della threshold
 
@@ -260,7 +260,7 @@ La zona critica è il range di score **3.54–4.51**, in cui le code delle due d
 | 4.25 | 1.4% | 87.3% |
 | 4.50 | 0.1% | 67.4% |
 
-A threshold 4.00 si ottiene un compromesso accettabile (4.8% shadow FPR, 97.3% TPR), ma questo richiede alzare il valore assoluto della soglia in modo fisso — non è compatibile con il sistema di calibrazione adattiva per-camera già in uso, che determina la threshold a partire dalla distribuzione dei campioni normali di ciascuna bank.
+A threshold 4.00 si ottiene un compromesso accettabile (4.8% shadow FPR, 97.3% TPR), ma questo richiede alzare il valore assoluto della soglia in modo fisso - non è compatibile con il sistema di calibrazione adattiva per-camera già in uso, che determina la threshold a partire dalla distribuzione dei campioni normali di ciascuna bank.
 
 La soluzione non può essere solo una ricalibrazione di `k`: il problema è strutturale e risiede nel **mancato allineamento tra la distribuzione di calibrazione (shadow-free) e la distribuzione di test (con ombre)**.
 
@@ -279,7 +279,7 @@ Il rimedio naturale all'interno del framework PatchCore è estendere `augment_re
 
 L'effetto è ottenuto senza modificare `k`, senza aggiungere soglie separate e senza nessun componente esterno: il framework PatchCore si ricalibra autonomamente.
 
-Questa revisione modifica la scelta di design enunciata in §3.3. La preoccupazione originale — che la bank apprenda a ignorare solo le ombre specifiche dell'augmentation — è fondata in linea di principio, ma i dati mostrano che il costo dell'approccio shadow-free è un FPR del 90%, inaccettabile in un sistema safety-critical. La generalizzazione alle ombre reali è una questione empirica che può essere valutata estendendo il test set con varianti non viste.
+Questa revisione modifica la scelta di design enunciata in §3.3. La preoccupazione originale - che la bank apprenda a ignorare solo le ombre specifiche dell'augmentation - è fondata in linea di principio, ma i dati mostrano che il costo dell'approccio shadow-free è un FPR del 90%, inaccettabile in un sistema safety-critical. La generalizzazione alle ombre reali è una questione empirica che può essere valutata estendendo il test set con varianti non viste.
 
 #### Implementazione proposta
 
@@ -328,11 +328,11 @@ Questa distinzione è rilevante per la scelta delle citazioni: lavori come PIAD 
 
 #### Letteratura pertinente
 
-**M²AD: Visual Anomaly Detection under Complex View-Illumination Interplay** (Cheng et al., arxiv 2505.10996, maggio 2025) rimane rilevante: valuta metodi VAD esistenti — inclusi approcci memory-based analoghi a PatchCore — sotto variazioni di illuminazione sistematiche, e mostra crolli significativi di performance. Il risultato è coerente con il 90.1% di shadow FPR osservato, anche se il loro setup (12 viste × 10 illuminazioni su dataset industriale) è più ampio del nostro. Utile per motivare il gap nella letteratura.
+**M²AD: Visual Anomaly Detection under Complex View-Illumination Interplay** (Cheng et al., arxiv 2505.10996, maggio 2025) rimane rilevante: valuta metodi VAD esistenti - inclusi approcci memory-based analoghi a PatchCore - sotto variazioni di illuminazione sistematiche, e mostra crolli significativi di performance. Il risultato è coerente con il 90.1% di shadow FPR osservato, anche se il loro setup (12 viste × 10 illuminazioni su dataset industriale) è più ampio del nostro. Utile per motivare il gap nella letteratura.
 
 **Shadow Augmentation for Handwashing Action Recognition** (arxiv 2410.03984, 2024) fornisce il precedente più diretto alla proposta del §3.7: ombre sintetiche aggiunte durante la fase di costruzione del modello riducono i falsi positivi a test time. Il dominio (sorveglianza indoor clinica, telecamere fisse, illuminazione artificiale variabile) è analogo al nostro.
 
-**Pose-Agnostic Anomaly Detection with Retinex-based Illumination Alignment (R3-PAD)** (Wang et al., 2025) propone una strategia alternativa che agisce sul lato test anziché sul lato training: una Retinex-UNet normalizza l'illuminazione dell'immagine di test prima dell'estrazione delle feature, rimuovendo l'effetto dell'ombra prima ancora che raggiunga il backbone. Il vantaggio principale rispetto all'approccio di §3.7 è che la bank rimane invariata e la generalizzazione a tipi di ombra non visti durante il build non dipende dalla copertura dell'augmentazione. Tuttavia, questo approccio introduce un passo di preprocessing aggiuntivo seriale che aumenta il tempo di inferenza — un costo rilevante nel contesto di deploy su device edge. Va inoltre verificato empiricamente che la normalizzazione Retinex non attenui anche le feature degli ostacoli, riducendo il recall. Per questi motivi viene considerato come direzione alternativa da esplorare piuttosto che come soluzione primaria.
+**Pose-Agnostic Anomaly Detection with Retinex-based Illumination Alignment (R3-PAD)** (Wang et al., 2025) propone una strategia alternativa che agisce sul lato test anziché sul lato training: una Retinex-UNet normalizza l'illuminazione dell'immagine di test prima dell'estrazione delle feature, rimuovendo l'effetto dell'ombra prima ancora che raggiunga il backbone. Il vantaggio principale rispetto all'approccio di §3.7 è che la bank rimane invariata e la generalizzazione a tipi di ombra non visti durante il build non dipende dalla copertura dell'augmentazione. Tuttavia, questo approccio introduce un passo di preprocessing aggiuntivo seriale che aumenta il tempo di inferenza - un costo rilevante nel contesto di deploy su device edge. Va inoltre verificato empiricamente che la normalizzazione Retinex non attenui anche le feature degli ostacoli, riducendo il recall. Per questi motivi viene considerato come direzione alternativa da esplorare piuttosto che come soluzione primaria.
 
 **Enhancing Anomaly Detection Generalization through Knowledge Exposure: Dual Effects of Augmentation** analizza teoricamente il rapporto tra copertura dell'augmentazione e generalizzazione nel contesto dell'anomaly detection. Supporta la scelta di una `shadow_prob` controllata: un'augmentazione troppo aggressiva può ridurre la sensibilità alle anomalie vere, mentre una copertura parziale (40–50%) amplia la distribuzione normale senza degradare il recall.
 
@@ -344,7 +344,7 @@ Per il contesto classico del rilevamento di ombre in sorveglianza, il riferiment
 
 #### Configurazione del run
 
-La valutazione è eseguita con `--shadow-prob 0.4` e `k=3.0` (default). Il 40% delle varianti di augmentation — sia per la bank (seed=42, n=15) che per la calibrazione (seed=1000, n=10) — riceve k ∈ [1,3] ombre sintetiche in sequenza dopo le trasformazioni fotometriche standard.
+La valutazione è eseguita con `--shadow-prob 0.4` e `k=3.0` (default). Il 40% delle varianti di augmentation - sia per la bank (seed=42, n=15) che per la calibrazione (seed=1000, n=10) - riceve k ∈ [1,3] ombre sintetiche in sequenza dopo le trasformazioni fotometriche standard.
 
 #### Risultati
 
@@ -358,9 +358,9 @@ La valutazione è eseguita con `--shadow-prob 0.4` e `k=3.0` (default). Il 40% d
 
 #### Interpretazione
 
-**Il fix ha funzionato sul problema shadow.** La shadow FPR è scesa dal 90.1% allo 0.4% — una riduzione di due ordini di grandezza. Il meccanismo è esattamente quello previsto in §3.7: le varianti con ombra nella calibrazione alzano μ_cal e σ_cal, portando la threshold adattiva da ~2.6 a ~4.3. Le patch d'ombra nella bank trovano corrispondenti → distanza ridotta → score nella zona normale.
+**Il fix ha funzionato sul problema shadow.** La shadow FPR è scesa dal 90.1% allo 0.4% - una riduzione di due ordini di grandezza. Il meccanismo è esattamente quello previsto in §3.7: le varianti con ombra nella calibrazione alzano μ_cal e σ_cal, portando la threshold adattiva da ~2.6 a ~4.3. Le patch d'ombra nella bank trovano corrispondenti → distanza ridotta → score nella zona normale.
 
-**L'AUROC rimane ~1.000**, confermando che la capacità discriminativa del backbone non è degradata. La separazione tra distribuzioni normale e ostruita è invariata — il problema era e resta esclusivamente nella posizione della threshold.
+**L'AUROC rimane ~1.000**, confermando che la capacità discriminativa del backbone non è degradata. La separazione tra distribuzioni normale e ostruita è invariata - il problema era e resta esclusivamente nella posizione della threshold.
 
 **Il FNR 29.4% segnala un over-correction della threshold.** Analizzando i falsi negativi, il pattern è chiaro: le ostruzioni mancate hanno score 3.66–3.93, ma le threshold delle rispettive reference arrivano fino a 5.19. Il fenomeno è causato dalla variabilità stocastica della shadow augmentation durante la calibrazione: alcune reference hanno ricevuto per caso molte varianti con ombre pesanti, producendo score di calibrazione elevati e quindi threshold alte. Con k=3.0 l'effetto viene amplificato (il termine k·σ_cal cresce quando σ_cal include la variabilità degli score shadow).
 
@@ -370,7 +370,7 @@ Il trade-off risultante è sbilanciato rispetto al punto ottimale identificato n
 
 Due parametri permettono di recuperare recall senza rinunciare al guadagno sulle ombre:
 
-**1. Abbassare k** (da 3.0 a ~1.5–2.0): la threshold scende proporzionalmente, recuperando le ostruzioni deboli. Con k=1.5 e la distribuzione di calibrazione attuale (che include shadow), la threshold attesa è nell'intorno di 3.5–3.8 — sopra la shadow mean (3.19) ma accessibile per le ostruzioni.
+**1. Abbassare k** (da 3.0 a ~1.5–2.0): la threshold scende proporzionalmente, recuperando le ostruzioni deboli. Con k=1.5 e la distribuzione di calibrazione attuale (che include shadow), la threshold attesa è nell'intorno di 3.5–3.8 - sopra la shadow mean (3.19) ma accessibile per le ostruzioni.
 
 **2. Abbassare shadow_prob** (da 0.4 a ~0.2–0.3): meno varianti con ombra in calibrazione → μ_cal si alza meno → threshold più conservativa. La riduzione riduce però anche la copertura della bank, potenzialmente aumentando il shadow FPR.
 
@@ -391,7 +391,7 @@ L'interpretazione del §3.9 attribuiva il FNR 29.4% a una "over-correction globa
 | Baseline (no shadow) | 2.470 | 0.158 | 6.4% | 1.97 | 3.00 | 1.03 |
 | `shadow_prob=0.4` | 4.348 | **0.539** | **12.4%** | 2.44 | **6.19** | **3.74** |
 
-Con la shadow augmentation la **σ della distribuzione delle threshold è 3.4× più ampia** rispetto al baseline shadow-free, e il range si estende da [1.97, 3.00] a [2.44, 6.19]. Non è uno spostamento uniforme — è la comparsa di una coda destra che non esisteva.
+Con la shadow augmentation la **σ della distribuzione delle threshold è 3.4× più ampia** rispetto al baseline shadow-free, e il range si estende da [1.97, 3.00] a [2.44, 6.19]. Non è uno spostamento uniforme - è la comparsa di una coda destra che non esisteva.
 
 #### Distribuzione del contributo agli FN per bucket di threshold
 
@@ -409,7 +409,7 @@ I 291 falsi negativi (29.4% di 990 ostruite) non sono distribuiti uniformemente,
 
 #### Diagnosi: instabilità stocastica della calibrazione
 
-Le camere con threshold patologicamente alta non condividono caratteristiche di scena particolari — sono distribuite indifferentemente tra porte e corridoi. Il loro tratto comune è statistico: con `--cal 10` sample e `shadow_prob=0.4`, alcune camere campionano per caso 6–8 variants pesantemente ombreggiate su 10. Questo gonfia sia μ_cal che soprattutto σ_cal, e con k=3.0 il termine k·σ_cal amplifica l'effetto fino a portare θ_i a 6.19.
+Le camere con threshold patologicamente alta non condividono caratteristiche di scena particolari - sono distribuite indifferentemente tra porte e corridoi. Il loro tratto comune è statistico: con `--cal 10` sample e `shadow_prob=0.4`, alcune camere campionano per caso 6–8 variants pesantemente ombreggiate su 10. Questo gonfia sia μ_cal che soprattutto σ_cal, e con k=3.0 il termine k·σ_cal amplifica l'effetto fino a portare θ_i a 6.19.
 
 Sono **outlier di calibrazione, non outlier di scena**. La stessa camera, ricalibrata con un seed diverso, avrebbe una threshold completamente diversa. La σ_cal stimata su n=10 sample con varianza alta tra le sorgenti (variants shadow-free vs shadow-heavy) non è statisticamente affidabile.
 
@@ -450,7 +450,7 @@ L'aspettativa è che la σ delle threshold per-camera scenda da 0.54 a un valore
 
 ### 3.11 Risultati del decoupling e ricalibrazione di k
 
-#### Run 1 — decoupling con k=3.0
+#### Run 1 - decoupling con k=3.0
 
 Configurazione: `shadow_prob=0.4`, `shadow_prob_cal=0.1`, `--cal 30`, `k=3.0`.
 
@@ -473,7 +473,7 @@ Il decoupling ha avuto due effetti distinti:
 
 L'F1 è salito di +5.5 punti percentuali, ma il punto operativo è ora troppo permissivo: 281 falsi allarmi su scene normali ombreggiate.
 
-#### Run 2 — decoupling con k=4.0
+#### Run 2 - decoupling con k=4.0
 
 Configurazione: identica al run 1 ma `k=4.0`, per spostare la media di θ verso lo sweet spot teorico ~4.0 visto nel threshold-sweep globale.
 
@@ -488,9 +488,9 @@ Configurazione: identica al run 1 ma `k=4.0`, per spostare la media di θ verso 
 | σ delle θ | **0.388** | **0.497** | **+28%** |
 | Range θ | [2.24, 5.23] | [2.28, 6.09] | riallargato |
 
-Il run k=4.0 migliora F1 di altri 3 pp, ma rivela un effetto collaterale: **σ_θ è salita del 28%**. Il problema è strutturale: la formula `θ_i = μ_i + k·σ_cal,i` ha k come moltiplicatore di una stima rumorosa di σ_cal. Aumentando k amplifichiamo proporzionalmente le differenze stocastiche tra camere — la coda lunga torna.
+Il run k=4.0 migliora F1 di altri 3 pp, ma rivela un effetto collaterale: **σ_θ è salita del 28%**. Il problema è strutturale: la formula `θ_i = μ_i + k·σ_cal,i` ha k come moltiplicatore di una stima rumorosa di σ_cal. Aumentando k amplifichiamo proporzionalmente le differenze stocastiche tra camere - la coda lunga torna.
 
-#### Distribuzione del contributo agli errori — k=4.0
+#### Distribuzione del contributo agli errori - k=4.0
 
 | Bucket θ | n camere | shadow FPR | TPR ostr | % FN | % shadow FP |
 |---|---|---|---|---|---|
@@ -605,7 +605,7 @@ Sulla base del threshold-sweep eseguito sui dati k=4, la configurazione `sigma_m
 - TPR ~98%
 - F1 ~0.94
 
-Il guadagno atteso rispetto a k=4 standard è di **~4 pp di F1** (da 0.903 a ~0.94), e questo guadagno proviene esclusivamente dalla riduzione di varianza nelle soglie — non da nessun cambio della capacità discriminativa del modello (AUROC resta 0.998).
+Il guadagno atteso rispetto a k=4 standard è di **~4 pp di F1** (da 0.903 a ~0.94), e questo guadagno proviene esclusivamente dalla riduzione di varianza nelle soglie - non da nessun cambio della capacità discriminativa del modello (AUROC resta 0.998).
 
 ---
 
@@ -653,10 +653,10 @@ Sono interventi sulla **pipeline di calibrazione**, non sui dati:
 
 | Intervento | Generalizzazione attesa |
 |---|---|
-| Shadow augmentation in build (`shadow_prob` > 0) | Robusta: il fix copre il distribution mismatch tra build e test (§3.7) — qualsiasi dataset con ombre fuori-distribuzione beneficia |
-| Decoupling build/calibration shadow_prob | Robusta: separa due fasi con requisiti opposti (§3.10) — fix di pipeline |
-| `--cal 30` (vs 10) | Robusta: riduce SE(σ_cal) di √3 ≈ 1.7× — risultato statistico |
-| Pooled σ con median (§3.12) | Robusta: σ_pop ha SE ≈ SE(σ_cal,i)/√N con N=990 camere → quasi zero — risultato statistico |
+| Shadow augmentation in build (`shadow_prob` > 0) | Robusta: il fix copre il distribution mismatch tra build e test (§3.7) - qualsiasi dataset con ombre fuori-distribuzione beneficia |
+| Decoupling build/calibration shadow_prob | Robusta: separa due fasi con requisiti opposti (§3.10) - fix di pipeline |
+| `--cal 30` (vs 10) | Robusta: riduce SE(σ_cal) di √3 ≈ 1.7× - risultato statistico |
+| Pooled σ con median (§3.12) | Robusta: σ_pop ha SE ≈ SE(σ_cal,i)/√N con N=990 camere → quasi zero - risultato statistico |
 | AUROC ≈ 0.998 (Normal+Shadow vs Obstr) | Robusta: misura la separabilità del classificatore indipendentemente dalla soglia. Numero più "trasportabile" che abbiamo |
 
 ##### Risultati di punto operativo (specifici al test set)
@@ -680,7 +680,7 @@ In deploy reale i numeri specifici **cambieranno**:
 
 Continuare a spingere k=3 → 4 → 5 in cerca di F1 ottimo sul test set è una forma di **test-set tuning**, equivalente a optimismo metodologico. L'F1 ≈ 0.97 previsto per k≈5 sarebbe un upper bound *su questo dataset*, non una stima di performance in deploy.
 
-In particolare il punto operativo scelto in deploy non si determina sui dati di laboratorio: dipende dal **costo asimmetrico FN/FP** del contesto applicativo (per via di fuga: un FN — ostruzione mancata — vale infinitamente più di un FP — falso allarme).
+In particolare il punto operativo scelto in deploy non si determina sui dati di laboratorio: dipende dal **costo asimmetrico FN/FP** del contesto applicativo (per via di fuga: un FN - ostruzione mancata - vale infinitamente più di un FP - falso allarme).
 
 ##### Cosa va difeso nella tesi
 
@@ -711,4 +711,55 @@ Per il deployment reale, la scelta del punto operativo non dovrebbe essere fatta
 
 Pur con i caveat sopra, il risultato di questo capitolo è solido per quanto riguarda l'oggetto della tesi: la **pipeline di anomaly detection per occlusioni** funziona con AUROC ≈ 1.0 e separa robustamente normali, normali-con-ombra, e ostruzioni. Il fix del pooled σ riduce la variabilità per-camera in modo che il sistema sia **calibrabile in modo prevedibile** anche su insiemi di camere eterogenee. Quale sia il punto operativo migliore è una domanda di applicazione, non di architettura.
 
-Le metriche più "trasportabili" — AUROC = 0.998, riduzione di σ_θ del 73%, ottenimento di clean FPR = 0% senza degrado della TPR — sono affermazioni sostanziali sull'architettura, non artefatti di tuning.
+Le metriche più "trasportabili" - AUROC = 0.998, riduzione di σ_θ del 73%, ottenimento di clean FPR = 0% senza degrado della TPR - sono affermazioni sostanziali sull'architettura, non artefatti di tuning.
+
+---
+
+### 3.14 Problema delle porte a vetri: variabilità del fondo esterno
+
+#### Descrizione del problema
+
+Le porte a vetri introducono un failure mode distinto dalle ombre: il pannello traslucido rende visibile lo sfondo esterno (corridoio adiacente, area esterna, parcheggio), che varia nel tempo indipendentemente dallo stato della via di fuga. Persone che transitano, variazioni di luce naturale, o qualsiasi movimento oltre la porta producono cambiamenti di feature nella zona vetro che il sistema può classificare come anomalie, generando falsi positivi strutturali anche in assenza di qualsiasi ostacolo.
+
+Il failure mode specifico è:
+
+> porta a vetri normale + sfondo esterno diverso da reference → score > θ → falso allarme
+
+Questo è concettualmente diverso dal problema shadow: le ombre variano la scena in modo coerente con la posizione della porta (proiettano sulla stessa superficie), mentre il fondo esterno varia in una regione spazialmente distinta e **fisicamente disgiunta** dalla zona dove un ostacolo fisico si manifesterebbe.
+
+#### Soluzione proposta: ROI sulla soglia e il telaio
+
+La soluzione si basa su un'osservazione geometrica: un ostacolo fisico (carrello, sedia a rotelle, barella, ecc.) è **davanti** alla porta e occluda necessariamente la parte bassa del telaio e la soglia. Un cambio di sfondo esterno è **dietro** il vetro e modifica solo i pixel del pannello centrale, mai la soglia né il telaio.
+
+La ROI utile per il rilevamento è quindi la **fascia inferiore dell'inquadratura** (soglia + ~30–40% dal basso) più eventualmente i bordi laterali del telaio, escludendo il pannello vetro centrale. L'anomaly score viene calcolato come massimo dell'anomaly map nella sola ROI, ignorando le patch nella zona vetro.
+
+```
++---------------------+
+|                     |   <- vetro (escluso dalla ROI)
+|      VETRO          |
+|   (sfondo esterno)  |
+|                     |
++---------------------+   <- soglia / fascia inferiore
+|    SOGLIA + ROI     |   <- incluso nella ROI
++---------------------+
+```
+
+Questa scelta non richiede un modello di segmentazione: la ROI può essere definita manualmente per ciascuna telecamera come rettangolo o fascia di altezza relativa (parametro `--roi-bottom-frac`), oppure derivata dal bounding box dell'annotazione della porta se disponibile nel DB.
+
+Le categorie di ostacoli nel dataset (carrelli, barelle, sedie a rotelle, bidoni, scatole) hanno tutte altezza sufficiente da occupare la fascia inferiore; ostacoli molto sottili in alto (es. nastro segnaletico teso) potrebbero sfuggire, ma non rientrano nelle categorie target del sistema.
+
+#### Approccio alternativo: augmentation del fondo sul vetro
+
+In alternativa alla ROI, si potrebbe includere nella memory bank varianti dell'immagine di riferimento con il pannello vetro sostituito da texture diverse (blur, colore uniforme, campioni casuali di patch). Il meccanismo sarebbe analogo alla shadow augmentation di §3.7: la bank apprende che la zona vetro è "sempre variabile" e abbassa la distanza al kNN per qualsiasi contenuto in quella regione.
+
+Questa alternativa è meno precisa della ROI: la copertura dipende da quante e quali varianti di fondo si generano, mentre la ROI elimina strutturalmente il problema per costruzione.
+
+#### Piano di validazione
+
+La validazione di questo problema verrà condotta su un **test set manuale** di fotografie reali di porte a vetri, raccolte appositamente. Per ogni scena verranno catturate almeno le seguenti condizioni:
+
+- scena normale con sfondo esterno identico al reference
+- scena normale con sfondo esterno diverso (persona che transita, luce diversa, ecc.)
+- scena ostruita
+
+La ROI verrà configurata manualmente per ogni inquadratura, e si verificherà empiricamente se il falso positivo sul fondo esterno scompare con la ROI attiva senza degradare il TPR sull'ostruzione. Il confronto baseline/ROI su questo test set specifico fornirà la stima quantitativa del fenomeno.

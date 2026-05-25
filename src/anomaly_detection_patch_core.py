@@ -1,11 +1,11 @@
-"""
-PatchCore — Anomaly Detection
+﻿"""
+PatchCore - Anomaly Detection
 ====================================================================
 
 COMANDI DISPONIBILI
 --------------------------------------------------------------------
 
-BUILD — costruisce la memory bank da una singola immagine normale:
+BUILD - costruisce la memory bank da una singola immagine normale:
   python anomaly_detection_patch_core.py build \
       --ref path/to/reference.jpg \
       --bank memory_bank.pt \
@@ -15,7 +15,7 @@ BUILD — costruisce la memory bank da una singola immagine normale:
       --shadow-prob 0.4 \       # prob. ombra sulle varianti di build (default: 0.0)
       --shadow-prob-cal 0.1     # prob. ombra in calibrazione (default: eredita)
 
-TEST — score su una singola immagine:
+TEST - score su una singola immagine:
   python anomaly_detection_patch_core.py test \
       --bank memory_bank.pt \
       --img  test.jpg \
@@ -23,14 +23,14 @@ TEST — score su una singola immagine:
       --k    3.0          # moltiplicatore soglia mu+k*sigma   (default: 3.0)
       --threshold 0.5     # soglia manuale, sovrascrive k      (default: auto)
 
-EVALUATE — valutazione sistematica su directory:
+EVALUATE - valutazione sistematica su directory:
   python anomaly_detection_patch_core.py evaluate \
       --bg-dir    Dataset/non_ostruite/porte \
       --obstr-dir Dataset/ostruzioni_reali/images \
       --out-csv   eval_results.csv \
       --k 3.0 --aug 15 --cal 10 --coreset-p 0.01
 
-EVALUATE-DB — valutazione con coppie reference/ostruita da SQLite:
+EVALUATE-DB - valutazione con coppie reference/ostruita da SQLite:
   python anomaly_detection_patch_core.py evaluate-db \
       --db           Aggregated_dataset_db/occlusion.db \
       --dataset-root Dataset \
@@ -105,7 +105,7 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
         include_original: se True, l'originale è incluso come primo elemento
                           e vengono generate n-1 augmentazioni (totale n).
                           Se False, vengono generate n augmentazioni pure
-                          senza l'originale — usare in evaluate_from_db per
+                          senza l'originale - usare in evaluate_from_db per
                           riservare ref_img come campione di test indipendente.
         shadow_prob: probabilità (0–1) di applicare un'ombra sintetica casuale
                      a ciascuna variante, dopo le augmentazioni fotometriche.
@@ -147,7 +147,7 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
             radius = rng.uniform(0.5, 1.5)
             img = img.filter(ImageFilter.GaussianBlur(radius=radius))
 
-        # Ombra sintetica opzionale — applicata dopo le aug fotometriche.
+        # Ombra sintetica opzionale - applicata dopo le aug fotometriche.
         # k ∈ [1, 3] ombre in sequenza, allineato a generate_shadow_images.py random mode.
         # RNG dedicato con seed = seed + 99999 per garantire disgiunzione formale
         # dalle ombre di test (generate_shadow_images.py usa seed=42 sull'originale).
@@ -600,7 +600,7 @@ def _process_ref_worker(args: tuple) -> dict:
             "mu": round(mu, 6), "sigma": round(sigma, 6),
         })
 
-    # Shadow normal: testa FP robustezza — la scena è normale, l'ombra non deve triggerare
+    # Shadow normal: testa FP robustezza - la scena è normale, l'ombra non deve triggerare
     for sn in shadow_normal_frames:
         sn_path = resolve_dataset_path(dataset_root_path, sn.file_path)
         if not sn_path.exists():
@@ -999,7 +999,7 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
         sys.exit(1)
 
     print(f"\n{'='*60}")
-    print(f"EVALUATE — valutazione sistematica PatchCore")
+    print(f"EVALUATE - valutazione sistematica PatchCore")
     print(f"  Background dir  : {bg_dir}  ({len(bg_paths)} immagini)")
     print(f"  Ostruzioni dir  : {obstr_dir or 'non fornita'}")
     print(f"  ROI             : {roi or 'intera immagine'}")
@@ -1072,11 +1072,11 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
         except ImportError:
             print("  AUROC: sklearn non disponibile")
 
-    print(f"\n  Score free   — media={np.mean(all_scores_free):.4f}  "
+    print(f"\n  Score free   - media={np.mean(all_scores_free):.4f}  "
           f"std={np.std(all_scores_free):.4f}  "
           f"p95={np.percentile(all_scores_free, 95):.4f}")
     if all_scores_obstr:
-        print(f"  Score ostruiti— media={np.mean(all_scores_obstr):.4f}  "
+        print(f"  Score ostruiti- media={np.mean(all_scores_obstr):.4f}  "
               f"std={np.std(all_scores_obstr):.4f}  "
               f"p5={np.percentile(all_scores_obstr, 5):.4f}")
     print(f"{'='*60}")
@@ -1412,7 +1412,7 @@ def evaluate_from_db(
             csv_file.flush()
 
         print(f"\n{'='*60}")
-        print("EVALUATE-DB — PatchCore con SQLite")
+        print("EVALUATE-DB - PatchCore con SQLite")
         print(f"  DB           : {db_path}")
         print(f"  Dataset root : {dataset_root_path}")
         print(f"  References   : {len(refs) + resume_skipped} totali, "
@@ -1508,7 +1508,7 @@ def evaluate_from_db(
         if sigma_mode == "pooled":
             all_rows = loaded_rows + csv_rows
             if not all_rows:
-                print("  [pooled] Nessuna row disponibile per la ricalibrazione — skip.")
+                print("  [pooled] Nessuna row disponibile per la ricalibrazione - skip.")
             else:
                 sigma_pop_value = _recalibrate_pooled(all_rows, k_sigma)
                 venue_stats = _rebuild_venue_stats_from_rows(
@@ -1577,7 +1577,7 @@ def evaluate_from_db(
                 fn_cands = stats.get("fn_candidates", [])
                 sh_cands = stats.get("shadow_fp_candidates", [])
 
-                # FN più convinto (score minimo — modello più lontano dalla soglia)
+                # FN più convinto (score minimo - modello più lontano dalla soglia)
                 if fn_cands:
                     worst = min(fn_cands, key=lambda x: x[0])
                     _save_heatmap(*worst[1:], label="fn_worst", score=worst[0], venue_type=venue_type)
@@ -1589,7 +1589,7 @@ def evaluate_from_db(
                     if closest[1:] != worst[1:]:
                         _save_heatmap(*closest[1:], label="fn_closest", score=closest[0], venue_type=venue_type)
 
-                # Shadow FP più convinto (score massimo — modello più sicuro dell'anomalia)
+                # Shadow FP più convinto (score massimo - modello più sicuro dell'anomalia)
                 if sh_cands:
                     worst_sh = max(sh_cands, key=lambda x: x[0])
                     _save_heatmap(*worst_sh[1:], label="shadow_fp_worst", score=worst_sh[0], venue_type=venue_type)
@@ -1676,7 +1676,7 @@ def evaluate_from_db(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="PatchCore — Rilevamento Occlusioni Vie di Fuga"
+        description="PatchCore - Rilevamento Occlusioni Vie di Fuga"
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

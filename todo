@@ -1,6 +1,5 @@
 #TODO: 
-* PER P3: capire come gestire i falsi positivi (persone davanti alla porta). Per oggetti piccoli basta il calcolo della percentuale di occupazione rispetto alla roi
-* PER P3: trovare trade off resilienza alle ombre/falsi negativi ostacoli (pensare all'impl di CHEA)
+* PER P3: Prendere un minidataset reale , capire come gestire i falsi positivi (persone davanti alla porta). Per oggetti piccoli basta il calcolo della percentuale di occupazione rispetto alla roi
 * Costruire il modulo di ROI + percentuale di occupazione
 * testare fps
 * testare se dietro le porte a vetri si vedono ostacoli a grande distanza

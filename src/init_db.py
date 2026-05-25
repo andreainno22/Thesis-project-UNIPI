@@ -1,4 +1,4 @@
-"""
+﻿"""
 Initialize the SQLite database using the project schema.
 
 Usage:
