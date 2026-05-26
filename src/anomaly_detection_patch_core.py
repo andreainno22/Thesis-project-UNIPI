@@ -63,6 +63,9 @@ import cv2
 from generate_shadow_images import (
     add_elliptical_shadow, add_directional_shadow, add_stripe_shadow,
 )
+from roi_utils import (
+    gated_anomaly_score, load_roi_from_db, rasterize_frame_mask,
+)
 _SHADOW_POOL = [add_elliptical_shadow, add_directional_shadow, add_stripe_shadow]
 import numpy as np
 import torch
@@ -250,6 +253,16 @@ def load_image_tensor(path_or_pil) -> torch.Tensor:
     return preprocess(img).unsqueeze(0)  # [1, 3, H, W]
 
 
+def load_roi_from_rect_json(json_path: str | Path) -> str | None:
+    """Load the roi string 'x,y,w,h' from a JSON produced by annotate_rect_roi.py."""
+    p = Path(json_path)
+    if not p.exists():
+        return None
+    with p.open("r", encoding="utf-8") as f:
+        d = json.load(f)
+    return d.get("roi")
+
+
 def parse_roi(roi: str | None) -> tuple[int, int, int, int] | None:
     if not roi:
         return None
@@ -260,13 +273,52 @@ def parse_roi(roi: str | None) -> tuple[int, int, int, int] | None:
     return x, y, w, h
 
 
+def _roi_to_patch_mask(roi: str, orig_w: int, orig_h: int,
+                       patch_h: int = 28, patch_w: int = 28) -> np.ndarray:
+    """Boolean flat mask (patch_h*patch_w,) for the 28x28 patch grid.
+
+    A patch at grid position (pi, pj) is included if its center falls
+    within the ROI rectangle after scaling to IMG_SIZE x IMG_SIZE.
+    ROI is specified as 'x,y,w,h' in original image pixel coordinates.
+    """
+    x, y, w, h = map(int, roi.split(","))
+    sx = IMG_SIZE / orig_w
+    sy = IMG_SIZE / orig_h
+    x0 = x * sx;  y0 = y * sy
+    x1 = x0 + w * sx;  y1 = y0 + h * sy
+    cell_w = IMG_SIZE / patch_w
+    cell_h = IMG_SIZE / patch_h
+    mask = np.zeros(patch_h * patch_w, dtype=bool)
+    for pi in range(patch_h):
+        for pj in range(patch_w):
+            cx = (pj + 0.5) * cell_w
+            cy = (pi + 0.5) * cell_h
+            if x0 <= cx < x1 and y0 <= cy < y1:
+                mask[pi * patch_w + pj] = True
+    return mask
+
+
 def compute_image_score_from_pil(
     model: FeatureExtractor,
     img_pil: Image.Image,
     memory_bank: torch.Tensor,
     roi: tuple[int, int, int, int] | None,
     return_map: bool = False,
+    frame_mask: np.ndarray | None = None,
+    gating_threshold: float | None = None,
+    min_overlap_px: int = 10,
 ) -> "float | tuple[float, np.ndarray]":
+    """Compute anomaly score for a PIL image.
+
+    Two optional ROI mechanisms (independent and composable):
+    - `roi`: legacy rectangular ROI (x, y, w, h). Zeroes the anomaly map
+      outside the rectangle BEFORE scoring (max within the rectangle).
+    - `frame_mask` + `gating_threshold`: connected-component gating.
+      A component of pixels with score >= threshold is "valid" only if
+      it overlaps the frame_mask in at least `min_overlap_px` pixels.
+      The reported score is the max over surviving components, or 0.0
+      if none survive. Both arguments are required to activate gating.
+    """
     orig_w, orig_h = img_pil.size
     tensor = load_image_tensor(img_pil)
     test_feats, H_t, W_t = extract_patch_features(model, tensor)
@@ -288,7 +340,14 @@ def compute_image_score_from_pil(
             roi_mask[y0:y1, x0:x1] = 1
         anomaly_map_smooth = anomaly_map_smooth * roi_mask
 
-    score = float(anomaly_map_smooth.max())
+    if frame_mask is not None and gating_threshold is not None:
+        score, _ = gated_anomaly_score(
+            anomaly_map_smooth, gating_threshold, frame_mask,
+            min_overlap_px=min_overlap_px,
+        )
+    else:
+        score = float(anomaly_map_smooth.max())
+
     if return_map:
         return score, anomaly_map_smooth
     return score
@@ -542,7 +601,7 @@ def _ensure_worker_model() -> None:
 def _process_ref_worker(args: tuple) -> dict:
     (ref, ob_frames, shadow_normal_frames, dataset_root_path, n_augments, n_cal,
      coreset_p, k_sigma, roi_tuple, test_normal,
-     shadow_prob, shadow_prob_cal) = args
+     shadow_prob, shadow_prob_cal, db_path, min_overlap_px) = args
 
     _ensure_worker_model()
     model = _worker_model
@@ -552,6 +611,19 @@ def _process_ref_worker(args: tuple) -> dict:
         return {"rows": [], "stats": None, "missing": [str(ref_path)]}
 
     ref_img = Image.open(ref_path).convert("RGB")
+    orig_w, orig_h = ref_img.size
+
+    # Load ROI for this reference (if annotated in DB). Calibration stays
+    # ungated; gating is applied only to test scoring so that the calibration
+    # distribution reflects the natural score range on normal content.
+    frame_mask: np.ndarray | None = None
+    if db_path:
+        roi = load_roi_from_db(db_path, ref.frame_id)
+        if roi is not None and not roi.is_empty:
+            frame_mask = rasterize_frame_mask(
+                roi, target_h=orig_h, target_w=orig_w,
+            )
+
     bank_variants = augment_reference(ref_img, n=n_augments, seed=42, include_original=False, shadow_prob=shadow_prob)
     cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, include_original=False, shadow_prob=shadow_prob_cal)
 
@@ -569,6 +641,13 @@ def _process_ref_worker(args: tuple) -> dict:
     sigma     = float(np.std(cal_scores))
     threshold = mu + k_sigma * sigma
 
+    # Gating parameters used for test scoring (None if no ROI for this ref).
+    gate_kwargs = dict(
+        frame_mask=frame_mask,
+        gating_threshold=threshold if frame_mask is not None else None,
+        min_overlap_px=min_overlap_px,
+    )
+
     rows: list[dict] = []
     stats: dict = {
         "venue_type": ref.venue_type,
@@ -580,11 +659,14 @@ def _process_ref_worker(args: tuple) -> dict:
         "shadow_fp": 0,
         "fn_candidates": [],          # (score, ref_path, ob_path) solo per FN
         "shadow_fp_candidates": [],   # (score, ref_path, sn_path) solo per shadow FP
+        "has_roi": int(frame_mask is not None),
     }
     missing_files: list[str] = []
 
     if test_normal:
-        ref_score = compute_image_score_from_pil(model, ref_img, bank, roi_tuple)
+        ref_score = compute_image_score_from_pil(
+            model, ref_img, bank, roi_tuple, **gate_kwargs,
+        )
         is_fp     = ref_score > threshold
         norm_ref  = (ref_score - mu) / (sigma + 1e-8)
         stats["normal_scores"].append(ref_score)
@@ -598,6 +680,7 @@ def _process_ref_worker(args: tuple) -> dict:
             "normalized_score": round(norm_ref, 6),
             "threshold": round(threshold, 6), "is_anomaly": int(is_fp),
             "mu": round(mu, 6), "sigma": round(sigma, 6),
+            "gated": int(frame_mask is not None),
         })
 
     # Shadow normal: testa FP robustezza - la scena è normale, l'ombra non deve triggerare
@@ -607,7 +690,9 @@ def _process_ref_worker(args: tuple) -> dict:
             missing_files.append(str(sn_path))
             continue
         sn_img   = Image.open(sn_path).convert("RGB")
-        sn_score = compute_image_score_from_pil(model, sn_img, bank, roi_tuple)
+        sn_score = compute_image_score_from_pil(
+            model, sn_img, bank, roi_tuple, **gate_kwargs,
+        )
         is_fp_sh = sn_score > threshold
         norm_sn  = (sn_score - mu) / (sigma + 1e-8)
         stats["shadow_normal_scores"].append(sn_score)
@@ -622,6 +707,7 @@ def _process_ref_worker(args: tuple) -> dict:
             "normalized_score": round(norm_sn, 6),
             "threshold": round(threshold, 6), "is_anomaly": int(is_fp_sh),
             "mu": round(mu, 6), "sigma": round(sigma, 6),
+            "gated": int(frame_mask is not None),
         })
 
     for ob in ob_frames:
@@ -630,7 +716,9 @@ def _process_ref_worker(args: tuple) -> dict:
             missing_files.append(str(ob_path))
             continue
         ob_img   = Image.open(ob_path).convert("RGB")
-        ob_score = compute_image_score_from_pil(model, ob_img, bank, roi_tuple)
+        ob_score = compute_image_score_from_pil(
+            model, ob_img, bank, roi_tuple, **gate_kwargs,
+        )
         is_tp    = ob_score > threshold
         norm_ob  = (ob_score - mu) / (sigma + 1e-8)
         stats["ob_scores"].append(ob_score)
@@ -648,6 +736,7 @@ def _process_ref_worker(args: tuple) -> dict:
             "normalized_score": round(norm_ob, 6),
             "threshold": round(threshold, 6), "is_anomaly": int(is_tp),
             "mu": round(mu, 6), "sigma": round(sigma, 6),
+            "gated": int(frame_mask is not None),
         })
 
     return {"rows": rows, "stats": stats, "missing": missing_files}
@@ -720,7 +809,8 @@ def _process_bg_worker(args: tuple) -> dict:
 def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
                       n_cal: int = 10, coreset_p: float = CORESET_P,
                       shadow_prob: float = 0.0,
-                      shadow_prob_cal: float | None = None):
+                      shadow_prob_cal: float | None = None,
+                      roi: str | None = None):
     """
     Costruisce la memory bank da una singola immagine di riferimento.
 
@@ -751,6 +841,7 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
     print(f"  Coreset fraction        : {coreset_p*100:.1f}%")
     print(f"  Shadow prob (build)     : {shadow_prob:.2f}")
     print(f"  Shadow prob (cal)       : {shadow_prob_cal:.2f}")
+    print(f"  ROI rettangolare        : {roi or 'intera immagine'}")
     print(f"  Salvataggio in          : {bank_path}")
     print(f"  Device                  : {DEVICE}")
     print(f"{'='*60}\n")
@@ -779,10 +870,18 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
     print(f"\n[2/5] Estrazione feature con WideResNet50...")
     model = FeatureExtractor().to(DEVICE).eval()
 
+    orig_w, orig_h = ref_img.size
+    patch_mask: np.ndarray | None = None
+    if roi:
+        patch_mask = _roi_to_patch_mask(roi, orig_w, orig_h)
+        print(f"      ROI patch mask: {int(patch_mask.sum())}/784 patch selezionate")
+
     all_features = []
     for i, img in enumerate(bank_variants):
         tensor = load_image_tensor(img)
         feats, H, W = extract_patch_features(model, tensor)
+        if patch_mask is not None:
+            feats = feats[patch_mask]
         all_features.append(feats)
         print(f"      Variante {i+1:02d}/{len(bank_variants)}: "
               f"{feats.shape[0]} patch × {feats.shape[1]}d")
@@ -804,7 +903,10 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
     for i, img in enumerate(cal_variants):
         tensor = load_image_tensor(img)
         feats, _, _ = extract_patch_features(model, tensor)
-        patch_scores = compute_patch_scores(feats, bank_coreset)
+        if patch_mask is not None:
+            patch_scores = compute_patch_scores(feats[patch_mask], bank_coreset)
+        else:
+            patch_scores = compute_patch_scores(feats, bank_coreset)
         max_score = float(patch_scores.max())
         cal_scores.append(max_score)
         print(f"      Cal. variante {i+1:02d}/{len(cal_variants)}: max score = {max_score:.4f}")
@@ -825,12 +927,14 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
         "patch_hw": (H, W),
         "img_size": IMG_SIZE,
         "ref_path": str(ref_path),
+        "ref_orig_wh": (orig_w, orig_h),
+        "build_roi": roi,
         "n_augments": n_augments,
         "n_cal": n_cal,
         "coreset_p": coreset_p,
         "cal_mean": cal_mean,
         "cal_std": cal_std,
-        "cal_scores": cal_scores.tolist(),   # utile per diagnosi
+        "cal_scores": cal_scores.tolist(),
     }, bank_path)
     print(f"      Salvato: {bank_path}")
     print(f"\n Memory bank pronta! Soglia calibrata: mu={cal_mean:.4f}, sigma={cal_std:.4f}")
@@ -839,12 +943,14 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
 # ── TEST: inferenza su immagine di test ─────────────────────────────────────
 
 def test_image(bank_path: str, img_path: str, roi: str = None,
-               threshold: float = None, k_sigma: float = 3.0):
+               threshold: float = None, k_sigma: float = 3.0,
+               roi_json: str | None = None, min_overlap_px: int = 10):
     print(f"\n{'='*60}")
     print(f"TEST anomaly detection")
     print(f"  Memory bank : {bank_path}")
     print(f"  Immagine    : {img_path}")
-    print(f"  ROI         : {roi or 'intera immagine'}")
+    print(f"  ROI rect    : {roi or 'intera immagine'}")
+    print(f"  ROI JSON    : {roi_json or 'none'}")
     print(f"{'='*60}\n")
 
     # 1. Carica memory bank
@@ -881,20 +987,32 @@ def test_image(bank_path: str, img_path: str, roi: str = None,
     # Gaussian smoothing (paper: sigma=4)
     anomaly_map_smooth = cv2.GaussianBlur(anomaly_map_full, (0, 0), sigmaX=4)
 
-    # ── Applica ROI se specificata ─────────────────────────────────────────
+    # ── Applica ROI rettangolare se specificata (legacy) ──────────────────
     roi_mask = np.ones((orig_h, orig_w), dtype=np.float32)
     if roi:
         x, y, w, h = map(int, roi.split(","))
         roi_mask[:] = 0
         roi_mask[y:y+h, x:x+w] = 1
-        print(f"      ROI applicata: x={x}, y={y}, w={w}, h={h}")
+        print(f"      ROI rect applicata: x={x}, y={y}, w={w}, h={h}")
 
     anomaly_map_roi = anomaly_map_smooth * roi_mask
 
-    # Score immagine = max score nella ROI
-    image_score = float(anomaly_map_roi.max())
+    # ── Carica frame mask dal JSON se specificato (gating) ────────────────
+    frame_mask: np.ndarray | None = None
+    if roi_json:
+        from roi_utils import load_roi_from_json
+        roi_obj = load_roi_from_json(roi_json)
+        if roi_obj.is_empty:
+            print(f"      [WARN] roi_json '{roi_json}' contiene 0 poligoni")
+        else:
+            frame_mask = rasterize_frame_mask(
+                roi_obj, target_h=orig_h, target_w=orig_w,
+            )
+            print(f"      Frame ROI: {len(roi_obj.polygons)} poligoni, "
+                  f"{int(frame_mask.sum())} px nel mask")
 
-    # Soglia calibrata: mu + k*sigma dalle immagini di riferimento
+    # Soglia calibrata: mu + k*sigma dalle immagini di riferimento.
+    # La calcoliamo PRIMA dello scoring perché serve per il gating.
     if threshold is None:
         cal_mean = checkpoint.get("cal_mean")
         cal_std = checkpoint.get("cal_std")
@@ -905,6 +1023,16 @@ def test_image(bank_path: str, img_path: str, roi: str = None,
             # Fallback per memory bank vecchie senza calibrazione
             threshold = float(np.percentile(anomaly_map_smooth[roi_mask > 0], 95))
             print(f"      Memory bank senza calibrazione, uso 95 percentile: {threshold:.4f}")
+
+    # Score finale: con gating se frame_mask presente, altrimenti max nella ROI rect.
+    if frame_mask is not None:
+        image_score, _ = gated_anomaly_score(
+            anomaly_map_roi, threshold, frame_mask,
+            min_overlap_px=min_overlap_px,
+        )
+        print(f"      Gating attivo (min_overlap_px={min_overlap_px})")
+    else:
+        image_score = float(anomaly_map_roi.max())
 
     is_anomaly = image_score > threshold
 
@@ -1285,11 +1413,13 @@ def _load_existing_csv_stats(
             row["normalized_score"] = float(row["normalized_score"])
             row["threshold"]        = float(row["threshold"])
             row["is_anomaly"]       = int(row["is_anomaly"])
-            # mu/sigma sono opzionali per backward compat con CSV vecchi
+            # mu/sigma/gated sono opzionali per backward compat con CSV vecchi
             if row.get("mu") not in (None, ""):
                 row["mu"] = float(row["mu"])
             if row.get("sigma") not in (None, ""):
                 row["sigma"] = float(row["sigma"])
+            if row.get("gated") not in (None, ""):
+                row["gated"] = int(row["gated"])
             loaded_rows.append(row)
 
             processed.add(row["reference_id"])
@@ -1320,6 +1450,7 @@ def evaluate_from_db(
     shadow_prob: float = 0.0,
     shadow_prob_cal: float | None = None,
     sigma_mode: str = "per_camera",
+    min_overlap_px: int = 10,
 ) -> None:
     if shadow_prob_cal is None:
         shadow_prob_cal = shadow_prob
@@ -1366,6 +1497,7 @@ def evaluate_from_db(
             "shadow_prob": shadow_prob,
             "shadow_prob_cal": shadow_prob_cal,
             "sigma_mode": sigma_mode,
+            "min_overlap_px": min_overlap_px,
         }
         exp_id = insert_experiment(
             conn,
@@ -1379,7 +1511,7 @@ def evaluate_from_db(
         _csv_fieldnames = [
             "reference_id", "test_id", "test_type", "venue_type",
             "file_path", "score", "normalized_score", "threshold", "is_anomaly",
-            "mu", "sigma",
+            "mu", "sigma", "gated",
         ]
 
         # ── Resume: carica risultati esistenti e filtra i ref già processati ──
@@ -1411,17 +1543,30 @@ def evaluate_from_db(
                 csv_writer.writeheader()
             csv_file.flush()
 
+        # Count references that have a ROI annotation in the DB.
+        all_ref_ids = [r.frame_id for r in (refs + refs_shadow_only)]
+        n_with_roi = 0
+        if all_ref_ids:
+            q_marks = ",".join("?" * len(all_ref_ids))
+            n_with_roi = conn.execute(
+                f"SELECT COUNT(DISTINCT frame_id) FROM roi_polygons "
+                f"WHERE frame_id IN ({q_marks})",
+                all_ref_ids,
+            ).fetchone()[0]
+
         print(f"\n{'='*60}")
         print("EVALUATE-DB - PatchCore con SQLite")
         print(f"  DB           : {db_path}")
         print(f"  Dataset root : {dataset_root_path}")
         print(f"  References   : {len(refs) + resume_skipped} totali, "
               f"{len(refs)} nuovi + {len(refs_shadow_only)} shadow-only")
+        print(f"  References con ROI: {n_with_roi} (frame-overlap gating attivo)")
+        print(f"  min_overlap_px    : {min_overlap_px}")
         print(f"  Split filter : {split or 'none'}")
         print(f"  Venue filter : {venue or 'none'}")
         print(f"  Ref source   : {ref_source or 'none'}")
         print(f"  Ob source    : {ob_source or 'none'}")
-        print(f"  ROI          : {roi or 'intera immagine'}")
+        print(f"  ROI rect     : {roi or 'intera immagine'}")
         print(f"  Soglia       : mu + {k_sigma}*sigma")
         print(f"  Aug bank/cal : {n_augments} / {n_cal}")
         print(f"  Coreset      : {coreset_p*100:.1f}%")
@@ -1447,7 +1592,7 @@ def evaluate_from_db(
             (ref, ob_map.get(ref.frame_id, []),
              shadow_normal_map.get(ref.frame_id, []),
              dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, test_normal,
-             shadow_prob, shadow_prob_cal)
+             shadow_prob, shadow_prob_cal, db_path, min_overlap_px)
             for ref in refs
         ]
         # Ref già processati senza shadow: solo shadow (ob_frames vuoto, test_normal=False)
@@ -1455,7 +1600,7 @@ def evaluate_from_db(
             (ref, [],
              shadow_normal_map.get(ref.frame_id, []),
              dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, False,
-             shadow_prob, shadow_prob_cal)
+             shadow_prob, shadow_prob_cal, db_path, min_overlap_px)
             for ref in refs_shadow_only
         ]
         if refs_shadow_only:
@@ -1701,6 +1846,16 @@ def main():
                               "Se non specificato eredita da --shadow-prob. "
                               "Tenerla bassa (~0.1) riduce la varianza di sigma_cal "
                               "e stabilizza la soglia per-camera (vedi report §3.10).")
+    p_build.add_argument("--roi", default=None,
+                         help='ROI rettangolare "x,y,w,h" in pixel originali. '
+                              "Se specificata, solo le patch interne alla ROI "
+                              "entrano nella bank e nel calcolo della calibrazione. "
+                              "Usare quando la telecamera inquadra piu della sola "
+                              "porta (es. include il pavimento con ombre solari).")
+    p_build.add_argument("--roi-rect-json", default=None,
+                         help="Alternativa a --roi: path al JSON prodotto da "
+                              "annotate_rect_roi.py. La stringa roi viene letta "
+                              "automaticamente dal file.")
 
     # ── Comando TEST ──────────────────────────────────────────────────────────
     p_test = sub.add_parser("test", help="Testa un'immagine per anomalie")
@@ -1709,7 +1864,20 @@ def main():
     p_test.add_argument("--img",       required=True,
                         help="Immagine da testare")
     p_test.add_argument("--roi",
-                        help='ROI in pixel: "x,y,w,h" (opzionale)')
+                        help='ROI rettangolare in pixel: "x,y,w,h" (opzionale, legacy)')
+    p_test.add_argument("--roi-rect-json", default=None,
+                        help="Alternativa a --roi: path al JSON prodotto da "
+                             "annotate_rect_roi.py. La stringa roi viene letta "
+                             "automaticamente dal file.")
+    p_test.add_argument("--roi-json", default=None,
+                        help="Path a un JSON di poligoni del telaio porta "
+                             "(prodotto da annotate_door_roi.py). Se presente, "
+                             "lo scoring usa il connected-component gating: una "
+                             "componente di anomalia conta solo se interseca uno "
+                             "stipite (vedi report §3.14).")
+    p_test.add_argument("--min-overlap-px", type=int, default=10,
+                        help="Pixel minimi di intersezione componente / frame "
+                             "ROI per accettarla (default: 10).")
     p_test.add_argument("--threshold", type=float, default=None,
                         help="Soglia manuale (default: auto calibrata mu+k*sigma)")
     p_test.add_argument("--k",         type=float, default=3.0,
@@ -1795,10 +1963,19 @@ def main():
                                 "'pooled': theta_i = mu_i + k*sigma_pop, dove sigma_pop = median(sigma_i) "
                                 "sulla popolazione di reference. Riduce la varianza stocastica della soglia "
                                 "(vedi report §3.12).")
+    p_eval_db.add_argument("--min-overlap-px", type=int, default=10,
+                           help="Pixel minimi di intersezione tra componente di anomalia e "
+                                "frame ROI per considerare la componente valida (default: 10). "
+                                "Applicato solo per reference con ROI annotata nel DB.")
 
     args = parser.parse_args()
 
     if args.command == "build":
+        roi_build = args.roi
+        if not roi_build and args.roi_rect_json:
+            roi_build = load_roi_from_rect_json(args.roi_rect_json)
+            if roi_build:
+                print(f"[INFO] ROI caricata da {args.roi_rect_json}: {roi_build}")
         build_memory_bank(
             args.ref, args.bank,
             n_augments=args.aug,
@@ -1806,10 +1983,17 @@ def main():
             coreset_p=args.coreset_p,
             shadow_prob=args.shadow_prob,
             shadow_prob_cal=args.shadow_prob_cal,
+            roi=roi_build,
         )
     elif args.command == "test":
+        roi_test = args.roi
+        if not roi_test and args.roi_rect_json:
+            roi_test = load_roi_from_rect_json(args.roi_rect_json)
+            if roi_test:
+                print(f"[INFO] ROI caricata da {args.roi_rect_json}: {roi_test}")
         test_image(args.bank, args.img,
-                   roi=args.roi, threshold=args.threshold, k_sigma=args.k)
+                   roi=roi_test, threshold=args.threshold, k_sigma=args.k,
+                   roi_json=args.roi_json, min_overlap_px=args.min_overlap_px)
     elif args.command == "evaluate":
         seeds = [int(s) for s in args.test_seeds.split(",")]
         evaluate(
@@ -1846,6 +2030,7 @@ def main():
             shadow_prob=args.shadow_prob,
             shadow_prob_cal=args.shadow_prob_cal,
             sigma_mode=args.sigma_mode,
+            min_overlap_px=args.min_overlap_px,
         )
 
 

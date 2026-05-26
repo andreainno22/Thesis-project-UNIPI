@@ -46,6 +46,25 @@ CREATE TABLE IF NOT EXISTS annotations_masks (
 
 CREATE INDEX IF NOT EXISTS idx_mask_frame ON annotations_masks(frame_id);
 
+-- ROI polygons defining the door frame regions (jambs, mullion, threshold).
+-- One frame may have multiple polygons (one per labelled region). The
+-- "polygon" column stores a JSON array of [x, y] integer pairs in the
+-- coordinate system of the original (un-resized) image.
+CREATE TABLE IF NOT EXISTS roi_polygons (
+    roi_id INTEGER PRIMARY KEY,
+    frame_id TEXT NOT NULL REFERENCES frames(frame_id),
+    label TEXT NOT NULL CHECK (
+        label IN ('left_jamb','right_jamb','center_mullion',
+                  'threshold','architrave','other')
+    ),
+    polygon JSON NOT NULL,
+    img_w INTEGER NOT NULL,
+    img_h INTEGER NOT NULL,
+    source_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_roi_frame ON roi_polygons(frame_id);
+
 CREATE TABLE IF NOT EXISTS experiments (
     exp_id INTEGER PRIMARY KEY,
     pipeline TEXT NOT NULL CHECK (pipeline IN ('P1','P2','P3','P4')),

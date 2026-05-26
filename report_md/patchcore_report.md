@@ -763,3 +763,89 @@ La validazione di questo problema verrà condotta su un **test set manuale** di 
 - scena ostruita
 
 La ROI verrà configurata manualmente per ogni inquadratura, e si verificherà empiricamente se il falso positivo sul fondo esterno scompare con la ROI attiva senza degradare il TPR sull'ostruzione. Il confronto baseline/ROI su questo test set specifico fornirà la stima quantitativa del fenomeno.
+
+#### Affinamento della regola: l'ostruzione deve toccare uno stipite
+
+La formulazione iniziale "ROI = soglia + telaio" trattava la frame mask come un'area di interesse spaziale: i pixel fuori dall'area venivano azzerati prima di calcolare il massimo. Questa scelta ha un limite quando il fondo dietro il vetro produce un anomaly score elevato anche solo in un punto: se la sua componente non si estende al telaio, deve comunque essere respinta.
+
+La regola raffinata, allineata con il protocollo di annotazione di Talebi et al. (paper "Real Time Exit Blockage Detection via Door-Centric Change Monitoring"), è formulata come gating per **connected component**:
+
+> Una componente connessa di pixel con anomaly score >= θ è valida solo se interseca la frame mask in almeno `min_overlap_px` pixel. Lo score finale dell'immagine è il massimo della anomaly map ristretto alle componenti valide, oppure 0 se nessuna componente sopravvive.
+
+**Connected components.** L'algoritmo prende la mappa binaria ottenuta dalla sogliatura e raggruppa i pixel "accesi" in isole separate, dove ogni isola e un insieme di pixel connessi tra loro (connettivita 8: ognuno dei 4 vicini ortogonali piu i 4 diagonali). Il risultato e un'etichetta intera distinta per ogni blob contiguo:
+
+```
+Mappa binaria (1 = score >= θ):    Componenti etichettate:
+
+0  0  0  0  0  0  0               0  0  0  0  0  0  0
+0  1  1  0  0  1  0               0  A  A  0  0  B  0
+0  1  1  0  0  1  0      ->       0  A  A  0  0  B  0
+0  0  0  0  1  1  0               0  0  0  0  B  B  0
+0  0  1  0  0  0  0               0  0  C  0  0  0  0
+0  0  0  0  0  0  0               0  0  0  0  0  0  0
+```
+
+Tre componenti distinte (A, B, C) perche non hanno pixel adiacenti tra loro. Per ciascuna si calcola il numero di pixel che cadono nella frame mask: se l'intersezione e inferiore a `min_overlap_px` la componente viene scartata. Lo score finale e il massimo dei valori continui dell'anomaly map sui soli pixel delle componenti superstiti; se nessuna sopravvive lo score e 0.0.
+
+L'algoritmo viene applicato con `cv2.connectedComponents(..., connectivity=8)`.
+
+Conseguenze:
+
+- Una persona o un riflesso visibili attraverso il vetro generano una componente interamente nella zona vetro: zero intersezione con il telaio -> respinto.
+- Un carrello davanti alla porta genera una componente che si estende dalla zona vetro alla soglia o agli stipiti: intersezione > soglia -> accettato.
+- L'oggetto stesso non deve necessariamente toccare il telaio: basta che la componente di anomalia (più estesa per via dello smoothing gaussiano sigma=4) lo raggiunga.
+
+Il parametro `min_overlap_px` (default 10) è robusto a piccoli errori di annotazione e a oggetti che lambiscono marginalmente lo stipite, ma rifiuta le componenti chiaramente confinate al vetro. Valori più alti rendono la regola più stretta (richiedono ostruzioni più estese del telaio); valori più bassi la rendono più permissiva.
+
+**Perche la memory bank include anche la zona vetro.** Una scelta alternativa sarebbe escludere la zona vetrata dalla build phase, includendo nella bank solo le patch degli stipiti. Questo approccio e pero controproducente: a test time il modello estrae comunque feature dall'intera immagine, e per le patch della zona vetro cerca i vicini piu prossimi in una bank che non ne contiene nessuno. La distanza kNN risultante e alta non per la presenza di un'anomalia, ma per pura assenza di riferimento - un mismatch di distribuzione. Lo score in quella zona sarebbe sistematicamente gonfiato anche su scene perfettamente normali, rendendo la zona vetro sempre anomala per costruzione. La scelta corretta e quindi includere l'immagine completa nella bank, lasciando che il gating filtri a posteriori i blob che non toccano il telaio.
+
+**Effetto del resize sull'anomaly score e dimensione minima degli oggetti.** Ogni immagine viene ridimensionata a 224x224 prima dell'estrazione delle feature. La feature map risultante e una griglia di 28x28 patch (una ogni 8px nell'input ridimensionato); dopo il neighborhood pooling 3x3, ogni feature vector integra un'area di 24x24px nell'immagine 224x224. Poiche build e test usano lo stesso resize, il confronto e consistente e non introduce bias sistematici. Il limite reale e la perdita di dettaglio per oggetti piccoli: un oggetto deve occupare almeno 2-3 patch adiacenti per generare un segnale anomalo distinguibile dal rumore, il che corrisponde a circa 16-24px nell'input 224x224.
+
+Per un'immagine originale 960x1280 (come le immagini poli_ingegneria) il calcolo inverso dello scaling fornisce la dimensione minima nella risoluzione originale:
+
+| Copertura nella griglia | px in 224x224 | px in larghezza (960px orig.) | px in altezza (1280px orig.) |
+|---|---|---|---|
+| 1 patch | 8px | ~34px | ~46px |
+| 2 patch (minimo pratico) | 16px | ~69px | ~91px |
+| 3x3 neighborhood | 24px | ~103px | ~137px |
+
+Il Gaussian blur con sigma=4 applicato sull'anomaly map espande i blob attorno all'oggetto, abbassando ulteriormente la soglia percettiva: un oggetto da 30-40px puo produrre un blob visibile da 60-70px dopo smoothing. Per le ostruzioni tipiche (carrello, sedia a rotelle, cestino) riprese da 2-3 metri la dimensione e ampiamente superiore a questi limiti. Il problema degli oggetti sotto-soglia riguarda oggetti molto lontani, parzialmente visibili ai bordi dell'inquadratura, o di dimensioni molto ridotte (es. un piccolo pacchetto).
+
+**Assunzione di camera fissa.** Il meccanismo di gating presuppone che la telecamera sia fisicamente stabile: i poligoni del telaio vengono annotati una volta sola sull'immagine di riferimento e riutilizzati su tutti i frame successivi. Se la camera subisce uno spostamento fisico (vibrazioni, urto, riposizionamento), uno zoom o una variazione di inclinazione, la ROI proiettata non coincide piu con gli stipiti reali nella scena, e il gating puo rigettare ostruzioni legittime o non filtrare variazioni di fondo. Per piccoli drift il parametro `min_overlap_px` e i poligoni leggermente sovraddimensionati assorbono qualche pixel di errore, ma non compensano spostamenti significativi. Questa e una limitazione esplicita del sistema: il deployment corretto richiede una camera montata in modo rigido e non soggetta a vibrazioni ricorrenti. Estensioni future potrebbero includere un tracking automatico degli angoli del telaio (es. tramite omografia) per aggiornare la ROI dinamicamente senza richiedere una nuova annotazione manuale.
+
+**Ortogonalita rispetto alle ombre.** Il gating e neutro rispetto al problema dei falsi positivi da ombra descritto nella sezione precedente. Le ombre proiettate sul pavimento davanti alla porta generano componenti anomale che si estendono tipicamente fino alla soglia (`threshold`) o ai montanti laterali; superano quindi il filtro e producono lo stesso score che si otterrebbe senza gating. Il gating interviene unicamente quando la componente e interamente confinata nella zona vetrata, lontana dal telaio - scenario che non si verifica per le ombre. Il fix per le ombre rimane distinto e indipendente: shadow augmentation nella fase di build per includere nella memory bank varianti normali con ombra, abbassando cosi il loro score al di sotto della soglia di calibrazione. I due meccanismi sono complementari e non interferenti.
+
+**Ombre solari geometriche e composizione ROI rettangolare + gating.** Nelle scene con luce solare diretta attraverso porte a vetri (es. uscite di emergenza esposte a sud), le ombre proiettate sul pavimento possono essere forti, hard-edged e geometricamente strutturate - proiezioni della griglia del telaio che cambiano con l'angolo solare durante la giornata e la stagione. La shadow augmentation sintetica nella build phase non e sufficiente per questo caso: le augmentazioni aggiungono blob scuri casuali, ma non riproducono la variabilita delle proiezioni solari reali, che dipendono da un parametro continuo (posizione del sole) non campionabile esaustivamente da un singolo riferimento.
+
+La strategia corretta per queste scene e combinare il flag `--roi "x,y,w,h"` (ROI rettangolare legacy) con il gating poligonale. La ROI rettangolare viene configurata per includere solo il rettangolo della porta, escludendo il pavimento antistante. Le ombre sul pavimento cadono interamente fuori da questa ROI e vengono azzerate prima del gating, senza contribuire allo score. All'interno della ROI rettangolare, il gating poligonale filtra poi le variazioni di background attraverso il vetro. I due meccanismi si compongono in sequenza: il rettangolo elimina il pavimento, i poligoni eliminano il vetro. Il risultato e un detector sensibile unicamente alle anomalie che cadono sul telaio fisico della porta.
+
+#### Architettura di poligoni etichettati
+
+La ROI non è una singola maschera binaria, ma una lista di poligoni etichettati per stipite. Le label predefinite sono:
+
+| Label | Regione |
+|---|---|
+| `left_jamb` | Telaio verticale sinistro |
+| `right_jamb` | Telaio verticale destro |
+| `center_mullion` | Montante verticale centrale (porte doppie) |
+| `threshold` | Soglia / fascia inferiore davanti alla porta |
+| `architrave` | Traverso superiore |
+| `other` | Catch-all per geometrie non standard |
+
+Per il calcolo del gating, l'unione di tutti i poligoni costituisce la frame mask. La separazione per label è preservata nel JSON e nel DB per analisi successive (ad esempio: misurare in quale stipite cade più frequentemente l'intersezione, o tarare `min_overlap_px` per label specifiche).
+
+I poligoni sono salvati in coordinate dell'immagine originale (non normalizzate) per non perdere precisione dopo resize. La rasterizzazione alla risoluzione di lavoro avviene a runtime via `cv2.fillPoly`, con scaling lineare delle coordinate.
+
+#### Implementazione
+
+Il meccanismo è realizzato come pipeline a tre stadi:
+
+1. **Annotazione interattiva** (`src/annotate_door_roi.py`): un tool basato su matplotlib permette di disegnare un poligono per ciascuno stipite. Click sinistro = vertice, tasto destro = chiude il poligono, 'l' = cicla label, 'n'/'p' = naviga tra immagini, 'q' = salva e esci. L'output è un JSON per immagine in `Dataset/roi/<stem>.json` con i campi `image_path`, `img_w`, `img_h`, `polygons: [{label, polygon}, ...]`.
+
+2. **Import nel DB** (`src/import_roi_to_db.py`): i JSON vengono inseriti nella tabella `roi_polygons`, con matching per `file_path` relativo al `dataset-root`. L'import sostituisce di default i poligoni esistenti per la stessa frame (flag `--append` per la modalità additiva). Le frame non presenti in `frames` vengono saltate con un warning -- per renderle visibili bisogna prima eseguire `load_dataset_to_db.py`.
+
+3. **Scoring con gating** (`src/roi_utils.py` + `compute_image_score_from_pil`): al test time, dopo aver costruito l'anomaly map smoothata, si rasterizza il `frame_mask` dai poligoni alla risoluzione originale, si threshold-binarizza la mappa, si calcolano le componenti connesse (cv2 8-connectivity), e una componente è valida solo se ha almeno `min_overlap_px` pixel di intersezione con la frame mask. Lo score finale è il massimo della mappa ristretto alle componenti valide, o 0.0 se nessuna sopravvive.
+
+Il valore di soglia usato per la binarizzazione è la stessa `θ_i = μ_i + k·σ_i` (o `μ_i + k·σ_pop` in pooled mode) calibrata sulla camera. La calibrazione resta non-gated per preservare la distribuzione naturale degli score sui campioni normali. Il gating viene applicato esclusivamente in fase di test, per i campioni `normal`, `shadow_normal` e `obstructed` delle reference che hanno una ROI annotata nel DB; per le altre reference, l'evaluate-db ricade sul comportamento storico (max della mappa intera).
+
+I CSV di output di `evaluate-db` includono una colonna `gated ∈ {0, 1}` per distinguere le righe processate con gating da quelle non gated, in modo che le analisi successive possano stratificare i risultati. La presenza di ROI annotate non è mutuamente esclusiva con il vecchio flag `--roi "x,y,w,h"`: se entrambi sono attivi, il rettangolo legacy maschera prima la mappa e il gating opera sulla porzione superstite.
