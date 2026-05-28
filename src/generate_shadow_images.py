@@ -155,7 +155,7 @@ def add_combined_shadow(img_pil: Image.Image, rng: np.random.Generator) -> Image
     return img
 
 
-# Pool atomico usato dalla modalità random
+# Pool atomico usato dalla modalità random (ombre)
 _SHADOW_POOL = [add_elliptical_shadow, add_directional_shadow, add_stripe_shadow]
 
 _SHADOW_FN = {
@@ -164,6 +164,170 @@ _SHADOW_FN = {
     "stripe":      add_stripe_shadow,
     "combined":    add_combined_shadow,
     "random":      None,   # gestito esplicitamente in generate_shadow_variants
+}
+
+
+# ── Generatori di luce ────────────────────────────────────────────────────────
+
+def add_elliptical_light(
+    img_pil: Image.Image,
+    rng: np.random.Generator,
+    intensity_range: tuple[float, float] = (0.20, 0.50),
+    blur_sigma_range: tuple[float, float] = (12.0, 35.0),
+) -> Image.Image:
+    """
+    Aggiunge un fascio luminoso ellittico con bordi morbidi.
+    Simula luce da lucernario, lampada a soffitto puntata, o riflesso luminoso.
+    Applica una leggera tinta calda (R↑, B↓) per simulare luce solare/alogena.
+    """
+    arr  = np.array(img_pil).astype(np.float32)
+    h, w = arr.shape[:2]
+
+    cx        = int(rng.integers(w // 5, 4 * w // 5))
+    cy        = int(rng.integers(h // 5, 4 * h // 5))
+    a         = int(rng.integers(w // 10, w // 3))
+    b         = int(rng.integers(h // 10, h // 3))
+    angle     = rng.uniform(0.0, np.pi)
+    intensity = rng.uniform(*intensity_range)
+
+    Y, X    = np.ogrid[:h, :w]
+    cos_a   = np.cos(angle);  sin_a = np.sin(angle)
+    x_rot   =  (X - cx) * cos_a + (Y - cy) * sin_a
+    y_rot   = -(X - cx) * sin_a + (Y - cy) * cos_a
+    mask    = ((x_rot / (a + 1e-6)) ** 2 + (y_rot / (b + 1e-6)) ** 2 <= 1).astype(np.float32)
+
+    sigma     = rng.uniform(*blur_sigma_range)
+    mask_soft = cv2.GaussianBlur(mask, (0, 0), sigmaX=float(sigma))
+
+    r_extra = float(rng.uniform(0.0, 0.15))
+    b_less  = float(rng.uniform(0.0, 0.08))
+
+    arr_out = arr.copy()
+    arr_out[:, :, 0] = arr[:, :, 0] * (1.0 + (intensity + r_extra) * mask_soft)
+    arr_out[:, :, 1] = arr[:, :, 1] * (1.0 + intensity * mask_soft)
+    arr_out[:, :, 2] = arr[:, :, 2] * (1.0 + max(0.0, intensity - b_less) * mask_soft)
+    return Image.fromarray(np.clip(arr_out, 0, 255).astype(np.uint8))
+
+
+def add_directional_light(
+    img_pil: Image.Image,
+    rng: np.random.Generator,
+    intensity_range: tuple[float, float] = (0.15, 0.40),
+    coverage_range:  tuple[float, float] = (0.20, 0.55),
+) -> Image.Image:
+    """
+    Aggiunge un gradiente luminoso progressivo da uno dei quattro lati.
+    Simula luce diffusa da una finestra laterale, una porta aperta su ambiente
+    illuminato, o una lampada a parete che inonda un lato del corridoio.
+    """
+    arr       = np.array(img_pil).astype(np.float32)
+    h, w      = arr.shape[:2]
+    intensity = rng.uniform(*intensity_range)
+    coverage  = rng.uniform(*coverage_range)
+    direction = int(rng.integers(0, 4))   # 0=sinistra 1=destra 2=alto 3=basso
+
+    if direction in (0, 1):
+        n    = int(w * coverage)
+        grad = np.linspace(1.0, 0.0, max(n, 1), dtype=np.float32)
+        if direction == 0:
+            row = np.concatenate([grad, np.zeros(w - n, dtype=np.float32)])
+        else:
+            row = np.concatenate([np.zeros(w - n, dtype=np.float32), grad[::-1]])
+        mask = np.tile(row, (h, 1))
+    else:
+        n    = int(h * coverage)
+        grad = np.linspace(1.0, 0.0, max(n, 1), dtype=np.float32)
+        if direction == 2:
+            col = np.concatenate([grad, np.zeros(h - n, dtype=np.float32)])
+        else:
+            col = np.concatenate([np.zeros(h - n, dtype=np.float32), grad[::-1]])
+        mask = np.tile(col.reshape(-1, 1), (1, w))
+
+    factor = 1.0 + intensity * mask[:, :, np.newaxis]
+    return Image.fromarray(np.clip(arr * factor, 0, 255).astype(np.uint8))
+
+
+def add_stripe_light(
+    img_pil: Image.Image,
+    rng: np.random.Generator,
+    intensity_range:  tuple[float, float] = (0.25, 0.55),
+    width_range:      tuple[float, float] = (0.05, 0.20),
+    blur_sigma_range: tuple[float, float] = (6.0, 18.0),
+) -> Image.Image:
+    """
+    Aggiunge una striscia luminosa con bordi sfumati.
+    Tre orientamenti:
+      - Orizzontale : finestra a traversa, luce radente da sotto una porta.
+      - Verticale   : crack in una porta o parete, lampada da pavimento.
+      - Diagonale   : fascio solare che taglia la scena (l'angolo tipico del sole).
+                      Il fascio diagonale riceve una tinta calda (R↑, B↓) più
+                      pronunciata per simulare la cromaticità della luce solare diretta.
+    """
+    arr  = np.array(img_pil).astype(np.float32)
+    h, w = arr.shape[:2]
+    intensity   = rng.uniform(*intensity_range)
+    orientation = int(rng.integers(0, 3))   # 0=horizontal, 1=vertical, 2=diagonal
+
+    if orientation == 0:   # orizzontale
+        band_half = max(2, int(h * rng.uniform(*width_range) / 2))
+        center    = int(rng.integers(band_half, h - band_half))
+        mask      = np.zeros((h, w), dtype=np.float32)
+        mask[max(0, center - band_half):min(h, center + band_half), :] = 1.0
+        sigma     = rng.uniform(*blur_sigma_range)
+        mask_soft = cv2.GaussianBlur(mask, (0, 0), sigmaX=float(sigma))
+        arr_out   = np.clip(arr * (1.0 + intensity * mask_soft[:, :, np.newaxis]), 0, 255)
+
+    elif orientation == 1:   # verticale
+        band_half = max(2, int(w * rng.uniform(*width_range) / 2))
+        center    = int(rng.integers(band_half, w - band_half))
+        mask      = np.zeros((h, w), dtype=np.float32)
+        mask[:, max(0, center - band_half):min(w, center + band_half)] = 1.0
+        sigma     = rng.uniform(*blur_sigma_range)
+        mask_soft = cv2.GaussianBlur(mask, (0, 0), sigmaX=float(sigma))
+        arr_out   = np.clip(arr * (1.0 + intensity * mask_soft[:, :, np.newaxis]), 0, 255)
+
+    else:   # diagonale: fascio solare
+        if rng.random() < 0.5:
+            angle_deg = rng.uniform(25.0, 65.0)    # sale da sinistra a destra
+        else:
+            angle_deg = rng.uniform(115.0, 155.0)  # sale da destra a sinistra
+        angle_rad = np.radians(float(angle_deg))
+        sin_a = float(np.sin(angle_rad))
+        cos_a = float(np.cos(angle_rad))
+
+        Y_grid, X_grid = np.mgrid[:h, :w]
+        perp_map = (-X_grid.astype(np.float32) * sin_a
+                    + Y_grid.astype(np.float32) * cos_a)
+        p_min    = float(perp_map.min())
+        p_max    = float(perp_map.max())
+        p_range  = p_max - p_min
+        bh       = max(4.0, p_range * rng.uniform(*width_range) / 2)
+        center_p = float(rng.uniform(p_min + bh, p_max - bh))
+
+        mask_soft = np.clip(1.0 - np.abs(perp_map - center_p) / (bh + 1e-6),
+                            0.0, 1.0).astype(np.float32)
+        sigma     = rng.uniform(*blur_sigma_range)
+        mask_soft = cv2.GaussianBlur(mask_soft, (0, 0), sigmaX=float(sigma))
+
+        r_extra = float(rng.uniform(0.05, 0.18))
+        b_less  = float(rng.uniform(0.03, 0.10))
+        arr_out = arr.copy()
+        arr_out[:, :, 0] = arr[:, :, 0] * (1.0 + (intensity + r_extra) * mask_soft)
+        arr_out[:, :, 1] = arr[:, :, 1] * (1.0 + intensity * mask_soft)
+        arr_out[:, :, 2] = arr[:, :, 2] * (1.0 + max(0.0, intensity - b_less) * mask_soft)
+        arr_out = np.clip(arr_out, 0, 255)
+
+    return Image.fromarray(arr_out.astype(np.uint8))
+
+
+# Pool atomico usato dalla modalità random (luci)
+_LIGHT_POOL = [add_elliptical_light, add_directional_light, add_stripe_light]
+
+_LIGHT_FN = {
+    "light_elliptical":  add_elliptical_light,
+    "light_directional": add_directional_light,
+    "light_stripe":      add_stripe_light,
+    "light_random":      None,   # gestito esplicitamente in generate_shadow_variants
 }
 
 
@@ -177,6 +341,7 @@ def load_shadow_frames_to_db(
     pairs: list[tuple[Path, Path]],   # (shadow_path, original_path)
     dataset_root: Path,
     db_path: Path,
+    source: str = "shadow",
 ) -> tuple[int, int]:
     """
     Inserisce i frame shadow normali nel DB, ereditando i metadati dall'originale.
@@ -233,9 +398,9 @@ def load_shadow_frames_to_db(
                 (
                     shadow_rel, shadow_rel,
                     venue_type, is_normal,
-                    None,        # obstacle_class - non rilevante per shadow
+                    None,        # obstacle_class - non rilevante per shadow/light
                     occlusion_type, occlusion_level,
-                    split, "shadow",
+                    split, source,
                     source_group, ref_id,
                 ),
             )
@@ -249,6 +414,9 @@ def load_shadow_frames_to_db(
 
 
 # ── Generazione immagini ──────────────────────────────────────────────────────
+
+_ALL_FN: dict = {**_SHADOW_FN, **_LIGHT_FN}
+
 
 def generate_shadow_variants(
     input_dir: str,
@@ -266,15 +434,20 @@ def generate_shadow_variants(
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    if shadow_type not in _SHADOW_FN:
-        print(f"ERRORE: shadow_type '{shadow_type}' non valido. Scegli fra: {list(_SHADOW_FN)}")
+    is_light = shadow_type.startswith("light_")
+    pool     = _LIGHT_POOL if is_light else _SHADOW_POOL
+    db_source = "light" if is_light else "shadow"
+    suffix_tag = "light" if is_light else "shadow"
+
+    if shadow_type not in _ALL_FN:
+        print(f"ERRORE: tipo '{shadow_type}' non valido. Scegli fra: {list(_ALL_FN)}")
         sys.exit(1)
 
     if n_shadows_min < 1 or n_shadows_max < n_shadows_min:
         print("ERRORE: --shadows-min deve essere >= 1 e <= --shadows-max")
         sys.exit(1)
 
-    shadow_fn = _SHADOW_FN[shadow_type]   # None per random, gestito sotto
+    disturbance_fn = _ALL_FN[shadow_type]   # None per random/light_random
 
     img_paths = sorted(p for p in in_path.iterdir() if p.suffix.lower() in extensions)
     if not img_paths:
@@ -283,41 +456,42 @@ def generate_shadow_variants(
 
     load_db = db_path is not None and dataset_root is not None
 
-    shadows_desc = (
-        f"random [{n_shadows_min}–{n_shadows_max}] da pool "
-        f"{{ellittica, direzionale, striscia}}"
-        if shadow_type == "random"
+    random_types = ("random", "light_random")
+    type_desc = (
+        f"{shadow_type} [{n_shadows_min}–{n_shadows_max}] da pool "
+        f"{{{', '.join(f.__name__ for f in pool)}}}"
+        if shadow_type in random_types
         else shadow_type
     )
     print(f"\n{'='*60}")
-    print(f"GENERATE SHADOW IMAGES")
+    print(f"GENERATE {'LIGHT' if is_light else 'SHADOW'} IMAGES")
     print(f"  Input    : {in_path}  ({len(img_paths)} immagini)")
     print(f"  Output   : {out_path}")
-    print(f"  Tipo     : {shadows_desc}")
+    print(f"  Tipo     : {type_desc}")
     print(f"  Varianti : {n_variants}")
     print(f"  Seed     : {seed}")
-    print(f"  DB       : {db_path or 'non usato'}")
+    print(f"  DB       : {db_path or 'non usato'}  (source='{db_source}')")
     print(f"{'='*60}\n")
 
     rng   = np.random.default_rng(seed)
-    pairs: list[tuple[Path, Path]] = []   # (shadow_path, orig_path)
+    pairs: list[tuple[Path, Path]] = []   # (out_path, orig_path)
 
     for img_path in img_paths:
         img_pil = Image.open(img_path).convert("RGB")
         for k in range(n_variants):
-            out_name   = f"{img_path.stem}_shadow{k:02d}{img_path.suffix}"
-            out_file   = out_path / out_name
+            out_name = f"{img_path.stem}_{suffix_tag}{k:02d}{img_path.suffix}"
+            out_file = out_path / out_name
 
-            if shadow_type == "random":
-                n_sh = int(rng.integers(n_shadows_min, n_shadows_max + 1))
-                shadow_img = img_pil
-                for _ in range(n_sh):
-                    fn = _SHADOW_POOL[int(rng.integers(0, len(_SHADOW_POOL)))]
-                    shadow_img = fn(shadow_img, rng)
+            if shadow_type in random_types:
+                n_d = int(rng.integers(n_shadows_min, n_shadows_max + 1))
+                out_img = img_pil
+                for _ in range(n_d):
+                    fn = pool[int(rng.integers(0, len(pool)))]
+                    out_img = fn(out_img, rng)
             else:
-                shadow_img = shadow_fn(img_pil, rng)
+                out_img = disturbance_fn(img_pil, rng)
 
-            shadow_img.save(out_file)
+            out_img.save(out_file)
             pairs.append((out_file, img_path))
         print(f"  {img_path.name}  →  {n_variants} varianti")
 
@@ -327,7 +501,9 @@ def generate_shadow_variants(
     if load_db:
         ds_root = Path(dataset_root)
         print(f"\nInserimento nel DB: {db_path} ...")
-        inserted, skipped = load_shadow_frames_to_db(pairs, ds_root, Path(db_path))
+        inserted, skipped = load_shadow_frames_to_db(
+            pairs, ds_root, Path(db_path), source=db_source
+        )
         print(f"  Inseriti : {inserted}")
         if skipped:
             print(f"  Saltati  : {skipped}  (originale non trovato nel DB)")
@@ -346,9 +522,10 @@ def main() -> None:
     parser.add_argument("--n-variants",   type=int, default=1,
                         help="Numero di varianti per immagine (default: 1)")
     parser.add_argument("--shadow-type",  default="random",
-                        choices=list(_SHADOW_FN),
-                        help="Tipo ombra: elliptical | directional | stripe | "
-                             "random (default) | combined")
+                        choices=list(_ALL_FN),
+                        help="Tipo: elliptical|directional|stripe|random|combined "
+                             "(ombre) oppure light_elliptical|light_directional|"
+                             "light_stripe|light_random (luci). Default: random")
     parser.add_argument("--shadows-min",  type=int, default=1,
                         help="Numero minimo di ombre per variante, solo con --shadow-type random "
                              "(default: 1)")

@@ -819,6 +819,22 @@ Il Gaussian blur con sigma=4 applicato sull'anomaly map espande i blob attorno a
 
 La strategia corretta per queste scene e combinare il flag `--roi "x,y,w,h"` (ROI rettangolare legacy) con il gating poligonale. La ROI rettangolare viene configurata per includere solo il rettangolo della porta, escludendo il pavimento antistante. Le ombre sul pavimento cadono interamente fuori da questa ROI e vengono azzerate prima del gating, senza contribuire allo score. All'interno della ROI rettangolare, il gating poligonale filtra poi le variazioni di background attraverso il vetro. I due meccanismi si compongono in sequenza: il rettangolo elimina il pavimento, i poligoni eliminano il vetro. Il risultato e un detector sensibile unicamente alle anomalie che cadono sul telaio fisico della porta.
 
+#### Generalizzazione: gating poligonale per ogni tipo di porta
+
+La discussione precedente ha presentato il gating poligonale come specifico per le porte a vetri, dove il pannello centrale e una zona "rumorosa" da escludere. In realta il meccanismo e piu generale: si applica a qualsiasi scena in cui sia possibile distinguere zone strutturalmente stabili (telaio fisico) da zone soggette a variabilita visiva (pannelli, vetri, riflessi, illuminazione locale).
+
+Per una porta solida con pannello opaco, una variazione di luce diretta o un riflesso speculare sul pannello centrale produce una componente anomala interamente confinata sul pannello, senza intersezione con stipiti, soglia o architrave. Il gating la respinge esattamente come respinge le variazioni di background attraverso il vetro. Un ostacolo fisico davanti alla porta (carrello, sedia a rotelle, cestino, pacco) e invece sempre **fisicamente connesso al pavimento** - poggia a terra o e sostenuto da supporti che toccano il suolo - quindi la componente anomala si estende necessariamente fino alla soglia annotata, soddisfa il criterio di intersezione e viene accettata. Questo vincolo fisico (gli ostacoli sono grounded) e quello che rende il filtro affidabile: le anomalie genuine hanno una struttura geometrica predicibile rispetto al telaio, i disturbi no.
+
+In altre parole, escludere il pannello centrale dalla maschera di gating equivale a dire al sistema: "qualunque cosa accada sul pannello senza propagarsi al telaio fisico e un disturbo, non un'ostruzione". Questa formulazione e valida per:
+
+- Porte a vetri (pannello = vetro, disturbo = background esterno variabile)
+- Porte opache con illuminazione variabile (pannello = superficie verniciata, disturbo = riflessi e luce diretta)
+- Porte metalliche o lucide (pannello = superficie speculare, disturbo = riflessi della scena interna)
+
+L'unica anomalia genuina che il poligonale potrebbe respingere e un oggetto **interamente** sul pannello senza contatto col pavimento o col telaio - un caso poco rilevante per il blocco di uscite di emergenza, dove gli ostacoli sono per definizione fisici e grounded. Per evitare ambiguita, in casi rari di oggetti appesi e possibile estendere il poligono `architrave` per includere parte del traverso superiore.
+
+La raccomandazione operativa e quindi di annotare i poligoni di stipiti e soglia anche per le porte non a vetri quando la scena presenta forte variabilita di illuminazione locale sul pannello, e di tenere il gating disattivato (solo `--roi-rect-json`) per scene con pannelli opachi in illuminazione stabile, dove l'annotazione aggiuntiva non porta beneficio.
+
 #### Architettura di poligoni etichettati
 
 La ROI non è una singola maschera binaria, ma una lista di poligoni etichettati per stipite. Le label predefinite sono:
@@ -849,3 +865,57 @@ Il meccanismo è realizzato come pipeline a tre stadi:
 Il valore di soglia usato per la binarizzazione è la stessa `θ_i = μ_i + k·σ_i` (o `μ_i + k·σ_pop` in pooled mode) calibrata sulla camera. La calibrazione resta non-gated per preservare la distribuzione naturale degli score sui campioni normali. Il gating viene applicato esclusivamente in fase di test, per i campioni `normal`, `shadow_normal` e `obstructed` delle reference che hanno una ROI annotata nel DB; per le altre reference, l'evaluate-db ricade sul comportamento storico (max della mappa intera).
 
 I CSV di output di `evaluate-db` includono una colonna `gated ∈ {0, 1}` per distinguere le righe processate con gating da quelle non gated, in modo che le analisi successive possano stratificare i risultati. La presenza di ROI annotate non è mutuamente esclusiva con il vecchio flag `--roi "x,y,w,h"`: se entrambi sono attivi, il rettangolo legacy maschera prima la mappa e il gating opera sulla porzione superstite.
+
+## 4. Inquadramento delle suite di test e validità statistica
+
+Il sistema è stato sottoposto a piu suite di test in fasi successive, ciascuna con uno scopo specifico nel percorso di sviluppo. La presente sezione formalizza il ruolo di ogni suite, evitando di interpretare risultati intermedi come benchmark finali e chiarendo cosa ciascuna misurazione effettivamente dimostra.
+
+### 4.1 Architettura sperimentale a fasi
+
+Il lavoro segue una struttura ad **ablazione progressiva**, in cui ogni componente del sistema viene introdotto in risposta a un failure mode identificato empiricamente. Le suite di test corrispondono a fasi distinte di questa progressione:
+
+| Fase | Test set | Componenti attive | Scopo |
+|---|---|---|---|
+| A - Baseline | Copy-paste sintetico (`ostruzioni_reali`) | PatchCore vanilla, no ROI | Caratterizzare il comportamento di base e identificare failure modes |
+| B - Diagnosi ombre | Copy-paste + augmentazione ombre sintetiche | PatchCore vanilla, no ROI | Quantificare l'impatto delle ombre sul FPR |
+| C - Shadow fix | Copy-paste + ombre | PatchCore + shadow_aug in build | Misurare l'effetto della shadow augmentation |
+| D - Glass door fix | Test set reale (poli_ingegneria + Pinterest) | PatchCore + shadow_aug + ROI gating + rect ROI | Valutare il sistema completo su scene reali con porte a vetri |
+
+Ogni transizione tra fasi e motivata da una diagnosi quantitativa della fase precedente, non da scelte arbitrarie di design.
+
+### 4.2 Interpretazione dei risultati del baseline
+
+I risultati ottenuti nelle fasi A, B e C sono stati condotti sul dataset copy-paste sintetico, senza definizione della ROI poligonale. Questa configurazione corrisponde a una caratterizzazione del **comportamento di base** del rilevatore PatchCore in assenza dei meccanismi di gating successivamente introdotti.
+
+I valori assoluti di precisione, recall e FPR ottenuti in queste fasi **non rappresentano il benchmark finale del sistema** e non possono essere proiettati come stima delle performance in produzione. Essi mantengono pero una valenza precisa nel contesto sperimentale:
+
+1. **Validazione metodologica.** La pipeline build → calibrazione → test → evaluate funziona correttamente sui dati sintetici, con AUROC significativamente sopra il chance level. Questo conferma che lo score patch-level di PatchCore e discriminativo per la classe di anomalie considerate.
+2. **Caratterizzazione dei failure modes.** L'analisi quantitativa dei falsi positivi nelle fasi A e B ha identificato due categorie ricorrenti: variazioni di sfondo attraverso il vetro e ombre proiettate sul pavimento. Questa diagnosi e l'evidenza empirica che giustifica le aggiunte successive (shadow augmentation, ROI gating). Senza la fase di baseline, gli interventi correttivi sarebbero stati guidati da intuizione anziche da evidenza.
+3. **Riferimento per ablazione.** I numeri di baseline costituiscono il punto di confronto rispetto al quale misurare l'effetto incrementale di ogni componente. La metrica rilevante non e il valore assoluto di AUROC ma il delta tra configurazioni: `Δ_shadow_aug = AUROC(C) - AUROC(B)`, `Δ_gating = AUROC(D) - AUROC(C)`.
+
+### 4.3 Dimensione dei dataset e potenza statistica
+
+Le fasi A-C utilizzano il dataset copy-paste sintetico, che conta circa un migliaio di immagini di riferimento tra porte e corridoi, con composite generati da `generate_synthetic_dataset.py`. Questo volume e adeguato per una validazione statistica robusta: gli intervalli di confidenza sulle metriche aggregate (AUROC, FPR, F1) sono stretti e i confronti tra configurazioni (baseline vs shadow_aug) hanno potenza sufficiente a rilevare effetti di interesse pratico. I risultati di queste fasi non soffrono di limitazioni di dimensione del campione.
+
+La fase D, invece, opera su un test set custom di porte a vetri (poli_ingegneria + immagini Pinterest) dove ogni scena richiede annotazione manuale di ROI rettangolare e poligoni del telaio. Il volume e necessariamente contenuto - dell'ordine di alcune decine di scene - per il costo lineare dell'annotazione. Le limitazioni statistiche si concentrano qui:
+
+- Intervalli di confidenza ampi sulle metriche assolute (FPR e TPR su poche decine di campioni hanno IC bootstrap ampi).
+- Bassa potenza nel rilevare differenze piccole tra configurazioni.
+- Sensibilita all'identita delle scene specifiche incluse: una porta con illuminazione particolare puo dominare l'aggregato.
+
+Per la fase D si adottano specifici accorgimenti:
+
+- **AUROC con bootstrap confidence intervals (95%)** invece di accuracy puntuale. I CI da bootstrap (1000 resampling) forniscono una stima dell'incertezza compatibile con N piccoli e l'AUROC e meno sensibile della accuracy allo sbilanciamento di classi.
+- **Paired test (McNemar)** tra configurazioni successive valutate sulle stesse immagini. Questo aumenta la potenza statistica rispetto a un confronto a campioni indipendenti, sfruttando il fatto che le coppie (con/senza gating) condividono le stesse fonti di varianza per-scena.
+- **Disclaim espliciti** nelle didascalie ("on a dataset of N=X glass-door scenes, the results suggest..."): nessuna proiezione su performance in produzione e effettuata dai dati di fase D.
+
+Il copy-paste delle fasi A-C e quindi il test set quantitativamente significativo, mentre la fase D ha valore principalmente qualitativo: dimostrare che il meccanismo di gating si comporta come atteso su scene reali, validando il design ma non quantificando precisamente il guadagno. La generalizzazione su scala maggiore richiederebbe un dataset di porte a vetri annotato in modo automatico (es. SAM) o semi-automatico.
+
+### 4.4 Sintesi della narrativa sperimentale
+
+Il messaggio metodologico della tesi si articola su due livelli di evidenza, con peso statistico diverso:
+
+- **Fasi A-C (copy-paste, N ~ 1000)**: validazione quantitativa con potenza statistica adeguata. I numeri sono interpretabili come stime stabili dell'effetto dei singoli componenti (shadow augmentation, decoupling della soglia, pooled sigma). I delta misurati sono significativi e generalizzabili a scene simili (porte e corridoi sintetici con ostruzioni copy-paste).
+- **Fase D (test set custom con porte a vetri, N ~ poche decine)**: validazione qualitativa del meccanismo di gating su scene reali. I numeri vanno letti come illustrativi - confermano o smentiscono il comportamento atteso del filtro, ma non quantificano un benchmark assoluto.
+
+Il messaggio finale e dunque: "la diagnosi sui dati sintetici copia-incolla (statisticamente solida) ha identificato due failure modes principali; l'introduzione di shadow augmentation e ROI gating riduce empiricamente la loro incidenza, e la validazione qualitativa su scene reali a camera fissa conferma il comportamento atteso del sistema completo." La validazione quantitativa del gating su scala maggiore e indicata come estensione naturale, condizionata alla disponibilita di un test set piu ampio di porte a vetri annotato in modo automatico o semi-automatico (es. SAM per la segmentazione del telaio).

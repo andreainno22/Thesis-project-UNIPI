@@ -62,6 +62,7 @@ from typing import Iterable
 import cv2
 from generate_shadow_images import (
     add_elliptical_shadow, add_directional_shadow, add_stripe_shadow,
+    _LIGHT_POOL,
 )
 from roi_utils import (
     gated_anomaly_score, load_roi_from_db, rasterize_frame_mask,
@@ -95,7 +96,8 @@ DEFAULT_DB_PATH = ROOT_DIR / "Aggregated_dataset_db" / "occlusion.db"
 def augment_reference(img_pil: Image.Image, n: int = 15,
                       seed: int = 42,
                       include_original: bool = True,
-                      shadow_prob: float = 0.0) -> list[Image.Image]:
+                      shadow_prob: float = 0.0,
+                      light_prob: float = 0.0) -> list[Image.Image]:
     """
     Genera n varianti fotometriche di una singola immagine.
     Varia: luminosità, contrasto, saturazione, temperatura colore,
@@ -113,6 +115,11 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
         shadow_prob: probabilità (0–1) di applicare un'ombra sintetica casuale
                      a ciascuna variante, dopo le augmentazioni fotometriche.
                      Default 0.0 (nessuna ombra). Usare ~0.4 per robustezza.
+        light_prob:  probabilità (0–1) di applicare un fascio luminoso sintetico
+                     (ellittico, direzionale, striscia/solare) a ciascuna variante.
+                     Indipendente da shadow_prob: una variante può ricevere sia
+                     ombra che luce. Default 0.0. Usare ~0.3 per robustezza ai
+                     fasci di luce da finestre. Seed dedicato: seed+199999.
     """
     variants = [img_pil] if include_original else []
 
@@ -160,6 +167,16 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
             for _ in range(n_shadows):
                 shadow_fn = _SHADOW_POOL[int(shadow_rng.integers(len(_SHADOW_POOL)))]
                 img = shadow_fn(img, shadow_rng)
+
+        # Fascio luminoso sintetico opzionale - indipendente dall'ombra.
+        # Simula luci da finestre, lucernai, lampade puntate.
+        # RNG dedicato con seed = seed + 199999 (distinto da seed+99999 shadow).
+        if light_prob > 0.0 and rng.random() < light_prob:
+            light_rng = np.random.default_rng(seed + 199999)
+            n_lights = int(light_rng.integers(1, 4))
+            for _ in range(n_lights):
+                light_fn = _LIGHT_POOL[int(light_rng.integers(len(_LIGHT_POOL)))]
+                img = light_fn(img, light_rng)
 
         variants.append(img)
 
@@ -601,7 +618,8 @@ def _ensure_worker_model() -> None:
 def _process_ref_worker(args: tuple) -> dict:
     (ref, ob_frames, shadow_normal_frames, dataset_root_path, n_augments, n_cal,
      coreset_p, k_sigma, roi_tuple, test_normal,
-     shadow_prob, shadow_prob_cal, db_path, min_overlap_px) = args
+     shadow_prob, shadow_prob_cal, light_prob, light_prob_cal,
+     db_path, min_overlap_px) = args
 
     _ensure_worker_model()
     model = _worker_model
@@ -624,8 +642,10 @@ def _process_ref_worker(args: tuple) -> dict:
                 roi, target_h=orig_h, target_w=orig_w,
             )
 
-    bank_variants = augment_reference(ref_img, n=n_augments, seed=42, include_original=False, shadow_prob=shadow_prob)
-    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, include_original=False, shadow_prob=shadow_prob_cal)
+    bank_variants = augment_reference(ref_img, n=n_augments, seed=42, include_original=False,
+                                      shadow_prob=shadow_prob, light_prob=light_prob)
+    cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, include_original=False,
+                                      shadow_prob=shadow_prob_cal, light_prob=light_prob_cal)
 
     all_features = []
     for img in bank_variants:
@@ -810,6 +830,8 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
                       n_cal: int = 10, coreset_p: float = CORESET_P,
                       shadow_prob: float = 0.0,
                       shadow_prob_cal: float | None = None,
+                      light_prob: float = 0.0,
+                      light_prob_cal: float | None = None,
                       roi: str | None = None):
     """
     Costruisce la memory bank da una singola immagine di riferimento.
@@ -832,6 +854,8 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
     """
     if shadow_prob_cal is None:
         shadow_prob_cal = shadow_prob
+    if light_prob_cal is None:
+        light_prob_cal = light_prob
 
     print(f"\n{'='*60}")
     print(f"BUILD memory bank")
@@ -839,8 +863,8 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
     print(f"  Augmentazioni bank      : {n_augments}  (seed=42)")
     print(f"  Augmentazioni cal.      : {n_cal}  (seed=1000, unseen dalla bank)")
     print(f"  Coreset fraction        : {coreset_p*100:.1f}%")
-    print(f"  Shadow prob (build)     : {shadow_prob:.2f}")
-    print(f"  Shadow prob (cal)       : {shadow_prob_cal:.2f}")
+    print(f"  Shadow prob (build/cal) : {shadow_prob:.2f} / {shadow_prob_cal:.2f}")
+    print(f"  Light  prob (build/cal) : {light_prob:.2f} / {light_prob_cal:.2f}")
     print(f"  ROI rettangolare        : {roi or 'intera immagine'}")
     print(f"  Salvataggio in          : {bank_path}")
     print(f"  Device                  : {DEVICE}")
@@ -849,12 +873,14 @@ def build_memory_bank(ref_path: str, bank_path: str, n_augments: int = 15,
     ref_img = Image.open(ref_path).convert("RGB")
 
     # 1a. Varianti per la memory bank (seed=42)
-    bank_variants = augment_reference(ref_img, n=n_augments, seed=42, shadow_prob=shadow_prob)
+    bank_variants = augment_reference(ref_img, n=n_augments, seed=42,
+                                      shadow_prob=shadow_prob, light_prob=light_prob)
     print(f"[1/5] Augmentation bank : {len(bank_variants)} immagini (seed=42)")
 
     # 1b. Varianti per calibrazione soglia (seed=1000 → statisticamente indipendenti)
     #     NON entrano nella bank: simulano immagini normali future mai viste.
-    cal_variants = augment_reference(ref_img, n=n_cal, seed=1000, shadow_prob=shadow_prob_cal)
+    cal_variants = augment_reference(ref_img, n=n_cal, seed=1000,
+                                     shadow_prob=shadow_prob_cal, light_prob=light_prob_cal)
     print(f"      Augmentation cal.  : {len(cal_variants)} immagini (seed=1000)")
 
     # Salva preview
@@ -1449,11 +1475,15 @@ def evaluate_from_db(
     resume: bool = False,
     shadow_prob: float = 0.0,
     shadow_prob_cal: float | None = None,
+    light_prob: float = 0.0,
+    light_prob_cal: float | None = None,
     sigma_mode: str = "per_camera",
     min_overlap_px: int = 10,
 ) -> None:
     if shadow_prob_cal is None:
         shadow_prob_cal = shadow_prob
+    if light_prob_cal is None:
+        light_prob_cal = light_prob
     if sigma_mode not in ("per_camera", "pooled"):
         raise ValueError(f"sigma_mode deve essere 'per_camera' o 'pooled', non '{sigma_mode}'")
 
@@ -1496,6 +1526,8 @@ def evaluate_from_db(
             "test_normal": test_normal,
             "shadow_prob": shadow_prob,
             "shadow_prob_cal": shadow_prob_cal,
+            "light_prob": light_prob,
+            "light_prob_cal": light_prob_cal,
             "sigma_mode": sigma_mode,
             "min_overlap_px": min_overlap_px,
         }
@@ -1570,8 +1602,8 @@ def evaluate_from_db(
         print(f"  Soglia       : mu + {k_sigma}*sigma")
         print(f"  Aug bank/cal : {n_augments} / {n_cal}")
         print(f"  Coreset      : {coreset_p*100:.1f}%")
-        print(f"  Shadow prob bld: {shadow_prob:.2f}")
-        print(f"  Shadow prob cal: {shadow_prob_cal:.2f}")
+        print(f"  Shadow prob bld/cal: {shadow_prob:.2f} / {shadow_prob_cal:.2f}")
+        print(f"  Light  prob bld/cal: {light_prob:.2f} / {light_prob_cal:.2f}")
         print(f"  Sigma mode   : {sigma_mode}")
         print(f"  Workers      : {n_workers}")
         print(f"{'='*60}\n")
@@ -1592,7 +1624,8 @@ def evaluate_from_db(
             (ref, ob_map.get(ref.frame_id, []),
              shadow_normal_map.get(ref.frame_id, []),
              dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, test_normal,
-             shadow_prob, shadow_prob_cal, db_path, min_overlap_px)
+             shadow_prob, shadow_prob_cal, light_prob, light_prob_cal,
+             db_path, min_overlap_px)
             for ref in refs
         ]
         # Ref già processati senza shadow: solo shadow (ob_frames vuoto, test_normal=False)
@@ -1600,7 +1633,8 @@ def evaluate_from_db(
             (ref, [],
              shadow_normal_map.get(ref.frame_id, []),
              dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, False,
-             shadow_prob, shadow_prob_cal, db_path, min_overlap_px)
+             shadow_prob, shadow_prob_cal, light_prob, light_prob_cal,
+             db_path, min_overlap_px)
             for ref in refs_shadow_only
         ]
         if refs_shadow_only:
@@ -1846,6 +1880,13 @@ def main():
                               "Se non specificato eredita da --shadow-prob. "
                               "Tenerla bassa (~0.1) riduce la varianza di sigma_cal "
                               "e stabilizza la soglia per-camera (vedi report §3.10).")
+    p_build.add_argument("--light-prob", type=float, default=0.0,
+                         help="Probabilità fascio luminoso sintetico sulle varianti di build "
+                              "(default: 0.0). Usare ~0.3 per robustezza a luci da finestre.")
+    p_build.add_argument("--light-prob-cal", type=float, default=None,
+                         help="Probabilità luce sulle varianti di calibrazione. "
+                              "Se non specificato eredita da --light-prob. "
+                              "Tenerla bassa (~0.1) per stabilizzare sigma_cal.")
     p_build.add_argument("--roi", default=None,
                          help='ROI rettangolare "x,y,w,h" in pixel originali. '
                               "Se specificata, solo le patch interne alla ROI "
@@ -1956,6 +1997,12 @@ def main():
     p_eval_db.add_argument("--shadow-prob-cal", type=float, default=None,
                            help="Probabilità ombra sulle varianti di calibrazione. "
                                 "Se non specificato eredita da --shadow-prob.")
+    p_eval_db.add_argument("--light-prob", type=float, default=0.0,
+                           help="Probabilità fascio luminoso sintetico sulle varianti di build "
+                                "(default: 0.0). Usare ~0.3 per robustezza a luci da finestre.")
+    p_eval_db.add_argument("--light-prob-cal", type=float, default=None,
+                           help="Probabilità luce sulle varianti di calibrazione. "
+                                "Se non specificato eredita da --light-prob.")
     p_eval_db.add_argument("--sigma-mode", choices=["per_camera", "pooled"],
                            default="per_camera",
                            help="Stima della sigma per la soglia. "
@@ -1983,6 +2030,8 @@ def main():
             coreset_p=args.coreset_p,
             shadow_prob=args.shadow_prob,
             shadow_prob_cal=args.shadow_prob_cal,
+            light_prob=args.light_prob,
+            light_prob_cal=args.light_prob_cal,
             roi=roi_build,
         )
     elif args.command == "test":
@@ -2029,6 +2078,8 @@ def main():
             resume=args.resume,
             shadow_prob=args.shadow_prob,
             shadow_prob_cal=args.shadow_prob_cal,
+            light_prob=args.light_prob,
+            light_prob_cal=args.light_prob_cal,
             sigma_mode=args.sigma_mode,
             min_overlap_px=args.min_overlap_px,
         )
