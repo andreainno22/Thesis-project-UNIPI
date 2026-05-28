@@ -866,6 +866,79 @@ Il valore di soglia usato per la binarizzazione è la stessa `θ_i = μ_i + k·�
 
 I CSV di output di `evaluate-db` includono una colonna `gated ∈ {0, 1}` per distinguere le righe processate con gating da quelle non gated, in modo che le analisi successive possano stratificare i risultati. La presenza di ROI annotate non è mutuamente esclusiva con il vecchio flag `--roi "x,y,w,h"`: se entrambi sono attivi, il rettangolo legacy maschera prima la mappa e il gating opera sulla porzione superstite.
 
+---
+
+### 3.15 Light augmentation e ablation study (risultati pending)
+
+#### 3.15.1 Motivazione
+
+Il sistema con pooled sigma (§3.13) raggiunge shadow_FPR = 12.2% e TPR = 99.8% sul test sintetico. Rimane però una sorgente di falsi positivi strutturalmente analoga alle ombre: le variazioni di illuminazione locale per **eccesso** anziché per difetto. Fasci di luce da lucernari, finestre laterali, riflessioni solari su superfici lucide, o lampade puntate generano patch features aumentate in luminosità che - esattamente come le ombre - non hanno corrispondenti nella memory bank costruita da varianti fotometriche standard.
+
+Il failure mode è speculare a quello delle ombre:
+
+> scena normale + fascio di luce → features fuori distribuzione → score > θ → falso allarme
+
+Le tre modalità di luce sintetica già implementate in `generate_shadow_images.py` coprono i casi principali negli ambienti corridoio/porta di un ospedale o edificio pubblico:
+
+| Tipo | Scenario fisico simulato |
+|---|---|
+| Ellittica | Fascio da lucernario, lampada a soffitto puntata, riflesso luminoso su pavimento |
+| Direzionale | Gradiente progressivo da finestra laterale o porta aperta su ambiente illuminato |
+| Striscia orizzontale/verticale | Luce radente da traversa, crack in una porta o parete |
+| Striscia diagonale (solare) | Raggio solare che taglia la scena; riceve tinta calda (R↑, B↓) per simulare la cromaticità della luce solare diretta |
+
+Il fix proposto segue la stessa logica della shadow augmentation (§3.7): includere varianti con luce nella bank (`light_prob` = 0.4) e con probabilità ridotta nella calibrazione (`light_prob_cal` = 0.1). I due parametri sono indipendenti da `shadow_prob` e `shadow_prob_cal`: una variante può ricevere ombra, luce, entrambi, o nessuno dei due.
+
+#### 3.15.2 Dataset light_test
+
+Per misurare il light_FPR analogamente al shadow_FPR è stato generato un dataset `light_test`:
+
+```
+Dataset/light_test/
+  normali_porte/      550 immagini  (porta_*_light00.jpg)
+  normali_corridoi/   550 immagini  (corridoio_*_light00.jpg)
+```
+
+Generato con `--shadow-type light_random --n-variants 1 --seed 42` dalla stessa sorgente di `shadow_test`. Registrate nel DB con `source='light'`, `is_normal=1`, `reference_frame_id` all'originale. `evaluate-db` le raccoglie tramite `query_shadow_normal_frames` (filtro per `source`) e riporta un `light_FPR` separato da `shadow_FPR` e `clean_FPR`.
+
+#### 3.15.3 Coverage della bank con due tipi di disturbance
+
+Con `aug=15`, `shadow_prob=0.4`, `light_prob=0.4` la distribuzione attesa delle varianti è:
+
+| Tipo variante | Probabilità | N atteso (aug=15) | N atteso (aug=25) |
+|---|---|---|---|
+| Solo fotometrica | 0.6 × 0.6 = 0.36 | 5.4 | 9.0 |
+| Shadow only | 0.4 × 0.6 = 0.24 | 3.6 | 6.0 |
+| Light only | 0.6 × 0.4 = 0.24 | 3.6 | 6.0 |
+| Shadow + Light | 0.4 × 0.4 = 0.16 | 2.4 | 4.0 |
+
+Con `aug=15` il coreset (1% di 784×15 ≈ 117 punti) deve coprire quattro sottospazi invece di tre. Il rischio è che i ~3.6 shadow-only variants siano insufficienti rispetto al caso shadow-only (§3.7, ~6 shadow variants su 15). Con `aug=25` si ottengono ~6.0 shadow-only + ~6.0 light-only, ripristinando la coverage per tipo al livello del run shadow-only originale, a costo di un ~65% di tempo di build aggiuntivo.
+
+#### 3.15.4 Ablation design
+
+Quattro configurazioni, tutte con `k=4.0`, `sigma_mode=pooled`, `cal=30`, `split=test`:
+
+| # | Config | sp (build) | lp (build) | aug | spc (cal) | lpc (cal) | Scopo |
+|---|--------|-----------|-----------|-----|----------|----------|-------|
+| 0 | C-pooled (baseline) | 0.4 | 0.0 | 15 | 0.1 | 0.0 | Riferimento - nessuna light aug |
+| 1 | L-only | 0.0 | 0.4 | 15 | 0.0 | 0.1 | Isola effetto light aug, senza shadow |
+| 2 | SL-15 | 0.4 | 0.4 | 15 | 0.1 | 0.1 | Shadow + light, bank compatta |
+| 3 | SL-25 | 0.4 | 0.4 | 25 | 0.1 | 0.1 | Shadow + light, bank più grande |
+
+*sp = shadow_prob, lp = light_prob, spc = shadow_prob_cal, lpc = light_prob_cal*
+
+**Ipotesi testate:**
+
+- **Run 1 vs 0**: il light aug riduce il light_FPR? Quanto costa in shadow_FPR (la bank non ha più shadow variants) e TPR?
+- **Run 2 vs 0**: effetto combinato con bank invariata. Rischio di regressione su shadow_FPR per coverage ridotta per tipo.
+- **Run 3 vs 2**: `aug=25` recupera la coverage persa in SL-15? Atteso: shadow_FPR e light_FPR entrambi più bassi rispetto a SL-15.
+
+**Metriche da riportare:**
+
+Clean FPR | Shadow FPR | Light FPR | Obstructed TPR | F1 | AUROC | σ_θ
+
+---
+
 ## 4. Inquadramento delle suite di test e validità statistica
 
 Il sistema è stato sottoposto a piu suite di test in fasi successive, ciascuna con uno scopo specifico nel percorso di sviluppo. La presente sezione formalizza il ruolo di ogni suite, evitando di interpretare risultati intermedi come benchmark finali e chiarendo cosa ciascuna misurazione effettivamente dimostra.

@@ -168,6 +168,22 @@ A critical design choice is to **decouple the shadow probability between build a
 
 The motivation for decoupling is that the two phases have opposing requirements: the bank needs maximum coverage to reduce kNN distances on shadow patches; the calibration needs a stable distribution to produce a reliable `mu` and `sigma` for threshold computation. Using `shadow_prob_cal = shadow_prob = 0.4` makes `sigma_cal` high-variance (a few unlucky variants with heavy shadows can produce a sigma outlier), which with `k * sigma` amplification yields per-camera thresholds that are either too high (false negatives) or too low (false positives).
 
+### Light Augmentation
+
+Shadow augmentation addresses darkening disturbances; the symmetric failure mode is localized **brightness excess** - light beams from skylights, lateral windows, specular reflections on shiny surfaces, or direct sunlight entering through a glass door. These generate patch features elevated in luminosity that, like shadows, fall outside the distribution of a photometric-only memory bank.
+
+Three synthetic light types are implemented, each modeling a physically distinct illumination pattern:
+
+| Type | Description |
+|---|---|
+| Elliptical | Bright ellipse with soft borders; models skylight beam, spotlight, or specular floor reflection |
+| Directional | Progressive bright gradient from one edge; models lateral window or open door onto a lit space |
+| Stripe | Horizontal, vertical, or diagonal bright band; the diagonal variant receives a warm color tint (R↑, B↓) to simulate the chromaticity of direct sunlight |
+
+The same decoupling principle as shadow augmentation applies: `light_prob=0.4` for build variants (maximum bank coverage for light patches) and `light_prob_cal=0.1` for calibration variants (stable `sigma_cal`). The two parameters are independent of `shadow_prob` and `shadow_prob_cal`: a variant can receive a shadow, a light beam, both, or neither.
+
+**Bank coverage with two disturbance types.** When both `shadow_prob=0.4` and `light_prob=0.4` are active with `aug=15`, the expected breakdown across 15 variants is: 5.4 pure-photometric, 3.6 shadow-only, 3.6 light-only, and 2.4 shadow-plus-light. The coreset (~117 points) must cover four feature subspaces instead of three. With `aug=15` this leaves ~3.6 shadow-only variants - roughly half the ~6 available in the shadow-only configuration of Phase C - raising the risk of a regression in shadow FPR. Increasing to `aug=25` restores per-type coverage to ~6 shadow-only and ~6 light-only variants, at the cost of a ~65% longer build time per camera. The ablation in Phase E quantifies whether bank size is the limiting factor for dual-augmentation performance.
+
 ### Calibration Stabilization: Pooled Sigma
 
 Per-camera threshold calibration using `theta_i = mu_i + k * sigma_cal_i` has a structural instability: `sigma_cal_i`, estimated on n=10-30 samples with `shadow_prob_cal`=0.1, has a relative standard error of approximately 18% (n=30). This translates directly to an 18% relative uncertainty in the `k * sigma_cal_i` term of the threshold.
@@ -207,6 +223,7 @@ The evaluation protocol is organized as a progressive ablation:
 | C-decoupled | Decoupled shadow_prob (0.4/0.1), cal=30 | Stabilize threshold distribution |
 | C-pooled | Pooled sigma, k=4.0 | Eliminate threshold variance tail |
 | D | Real glass-door scenes + ROI gating | Validate gating on real scenes (pending) |
+| E | Light augmentation ablation (L-only, SL-15, SL-25) | Reduce light FPR; quantify bank size effect (pending) |
 
 ### Phase A: Baseline Performance on Copy-Paste Dataset
 
@@ -324,11 +341,31 @@ The metrics to be reported include: FPR on glass-background-change scenes (i.e.,
 
 The expected result, based on the physical grounding argument, is that gating substantially reduces glass-background FPR (components confined to the glass panel are rejected) while maintaining TPR for physical obstructions (which extend to the threshold annotation). The quantitative magnitude of the effect depends on the severity of background variation in the collected scenes.
 
+### Phase E: Light Augmentation Ablation
+
+*(Results pending - runs scheduled.)*
+
+Phase E addresses the symmetric counterpart of the shadow failure mode: localized brightness excess from light beams, specular reflections, and direct sunlight entering through glass panels. The evaluation uses a `light_test` dataset of 1100 synthetic light-augmented normal scenes (550 doors, 550 corridors), generated with the three light types described in the Implementation section and registered in the database as `source='light'`.
+
+Four configurations are evaluated as a progressive ablation, all at k=4.0, sigma_mode=pooled, cal=30:
+
+| Config | shadow_prob | light_prob | aug | shadow_prob_cal | light_prob_cal |
+|---|---|---|---|---|---|
+| C-pooled (ref.) | 0.4 | 0.0 | 15 | 0.1 | 0.0 |
+| L-only | 0.0 | 0.4 | 15 | 0.0 | 0.1 |
+| SL-15 | 0.4 | 0.4 | 15 | 0.1 | 0.1 |
+| SL-25 | 0.4 | 0.4 | 25 | 0.1 | 0.1 |
+
+The L-only configuration isolates the effect of light augmentation without shadow interaction; SL-15 tests the combined case on the existing bank size; SL-25 tests whether increasing the bank from 15 to 25 variants recovers the per-type coverage diluted when two disturbance classes are active simultaneously (see Implementation section).
+
+The primary metric of interest is `light_FPR` - the false positive rate on light-augmented normal scenes - alongside `shadow_FPR` and `TPR` to detect any regression introduced by the change. AUROC is expected to remain at ~0.998 regardless of augmentation configuration, as the backbone's discriminative capacity is invariant to threshold placement.
+
 ### Discussion
 
 The progressive ablation demonstrates that the failure modes of the P3 pipeline are diagnosable and fixable within the PatchCore framework without architectural changes:
 
 - **Cast shadows**: addressed by including synthetic shadow variants in the bank augmentation, with decoupled calibration to prevent threshold inflation.
+- **Localized brightness excess** (light beams, reflections, direct sunlight): addressed symmetrically to shadows, by adding synthetic light variants to the bank; ablation over bank size (Phase E, pending) quantifies the interaction with shadow augmentation when both are active.
 - **Glass-door backgrounds**: addressed by connected-component polygon gating, exploiting the physical constraint that real obstructions are floor-grounded.
 - **Threshold instability across cameras**: addressed by pooling the sigma estimate across all cameras in the deployment, replacing a noisy per-camera estimate with a robust population-level value.
 

@@ -436,10 +436,11 @@ def query_reference_frames(
 def query_shadow_normal_frames(
     conn: sqlite3.Connection,
     ref_ids: list[str],
+    source: str = "shadow",
 ) -> dict[str, list[DBFrame]]:
     """
-    Ritorna i frame shadow normali (is_normal=1, source='shadow') raggruppati
-    per reference_frame_id. Usati per testare la robustezza FP alle ombre.
+    Ritorna i frame normali con disturbance sintetica (is_normal=1, source=source)
+    raggruppati per reference_frame_id. source='shadow' per ombre, 'light' per luci.
     """
     if not ref_ids:
         return {}
@@ -449,10 +450,10 @@ def query_shadow_normal_frames(
         sql = (
             "SELECT frame_id, file_path, venue_type, split, source, is_normal, "
             "reference_frame_id FROM frames "
-            "WHERE is_normal = 1 AND source = 'shadow' "
+            "WHERE is_normal = 1 AND source = ? "
             "AND reference_frame_id IN (" + placeholders + ")"
         )
-        for row in conn.execute(sql, list(chunk)).fetchall():
+        for row in conn.execute(sql, [source] + list(chunk)).fetchall():
             frame = DBFrame(
                 frame_id=row[0], file_path=row[1], venue_type=row[2],
                 split=row[3], source=row[4], is_normal=row[5],
@@ -616,7 +617,7 @@ def _ensure_worker_model() -> None:
 
 
 def _process_ref_worker(args: tuple) -> dict:
-    (ref, ob_frames, shadow_normal_frames, dataset_root_path, n_augments, n_cal,
+    (ref, ob_frames, shadow_normal_frames, light_normal_frames, dataset_root_path, n_augments, n_cal,
      coreset_p, k_sigma, roi_tuple, test_normal,
      shadow_prob, shadow_prob_cal, light_prob, light_prob_cal,
      db_path, min_overlap_px) = args
@@ -677,8 +678,11 @@ def _process_ref_worker(args: tuple) -> dict:
         "fp": 0, "tp": 0, "fn": 0,
         "shadow_normal_scores": [], "shadow_normal_scores_norm": [],
         "shadow_fp": 0,
+        "light_normal_scores": [], "light_normal_scores_norm": [],
+        "light_fp": 0,
         "fn_candidates": [],          # (score, ref_path, ob_path) solo per FN
         "shadow_fp_candidates": [],   # (score, ref_path, sn_path) solo per shadow FP
+        "light_fp_candidates": [],    # (score, ref_path, ln_path) solo per light FP
         "has_roi": int(frame_mask is not None),
     }
     missing_files: list[str] = []
@@ -726,6 +730,33 @@ def _process_ref_worker(args: tuple) -> dict:
             "file_path": sn.file_path, "score": round(sn_score, 6),
             "normalized_score": round(norm_sn, 6),
             "threshold": round(threshold, 6), "is_anomaly": int(is_fp_sh),
+            "mu": round(mu, 6), "sigma": round(sigma, 6),
+            "gated": int(frame_mask is not None),
+        })
+
+    # Light normal: testa FP robustezza - la scena è normale, il fascio luminoso non deve triggerare
+    for ln in light_normal_frames:
+        ln_path = resolve_dataset_path(dataset_root_path, ln.file_path)
+        if not ln_path.exists():
+            missing_files.append(str(ln_path))
+            continue
+        ln_img   = Image.open(ln_path).convert("RGB")
+        ln_score = compute_image_score_from_pil(
+            model, ln_img, bank, roi_tuple, **gate_kwargs,
+        )
+        is_fp_ln = ln_score > threshold
+        norm_ln  = (ln_score - mu) / (sigma + 1e-8)
+        stats["light_normal_scores"].append(ln_score)
+        stats["light_normal_scores_norm"].append(norm_ln)
+        if is_fp_ln:
+            stats["light_fp"] += 1
+            stats["light_fp_candidates"].append((ln_score, str(ref_path), str(ln_path)))
+        rows.append({
+            "reference_id": ref.frame_id, "test_id": ln.frame_id,
+            "test_type": "light_normal", "venue_type": ln.venue_type,
+            "file_path": ln.file_path, "score": round(ln_score, 6),
+            "normalized_score": round(norm_ln, 6),
+            "threshold": round(threshold, 6), "is_anomaly": int(is_fp_ln),
             "mu": round(mu, 6), "sigma": round(sigma, 6),
             "gated": int(frame_mask is not None),
         })
@@ -1283,8 +1314,9 @@ def insert_results(
 ) -> None:
     conn.execute(
         "INSERT INTO results (exp_id, fold, venue_type, precision, recall, F1, auroc, "
-        "anomaly_threshold, false_alarm_rate, false_negative_rate, shadow_false_alarm_rate) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "anomaly_threshold, false_alarm_rate, false_negative_rate, "
+        "shadow_false_alarm_rate, light_false_alarm_rate) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             exp_id,
             fold,
@@ -1297,6 +1329,7 @@ def insert_results(
             metrics.get("false_alarm_rate"),
             metrics.get("false_negative_rate"),
             metrics.get("shadow_false_alarm_rate"),
+            metrics.get("light_false_alarm_rate"),
         ),
     )
 
@@ -1309,8 +1342,11 @@ def _empty_venue_stats_entry() -> dict:
         "fp": 0, "tp": 0, "fn": 0,
         "shadow_normal_scores": [], "shadow_normal_scores_norm": [],
         "shadow_fp": 0,
+        "light_normal_scores": [], "light_normal_scores_norm": [],
+        "light_fp": 0,
         "fn_candidates": [],
         "shadow_fp_candidates": [],
+        "light_fp_candidates": [],
     }
 
 
@@ -1413,6 +1449,15 @@ def _rebuild_venue_stats_from_rows(
                 if ref_path_str:
                     sn_path = str(dataset_root / row["file_path"])
                     stats["shadow_fp_candidates"].append((score, ref_path_str, sn_path))
+        elif test_type == "light_normal":
+            stats["light_normal_scores"].append(score)
+            stats["light_normal_scores_norm"].append(norm_score)
+            if is_anomaly:
+                stats["light_fp"] += 1
+                ref_path_str = _resolve_ref_path(conn, ref_id, dataset_root)
+                if ref_path_str:
+                    ln_path = str(dataset_root / row["file_path"])
+                    stats["light_fp_candidates"].append((score, ref_path_str, ln_path))
 
     return venue_stats
 
@@ -1421,14 +1466,16 @@ def _load_existing_csv_stats(
     csv_path: str,
     dataset_root: Path,
     conn: sqlite3.Connection,
-) -> tuple[set[str], dict[str, dict], set[str], list[dict]]:
+) -> tuple[set[str], dict[str, dict], set[str], set[str], list[dict]]:
     """
     Legge un CSV parziale e ricostruisce venue_stats + l'insieme dei reference_id
-    già processati. Ritorna anche refs_with_shadow: reference che hanno già almeno
-    una riga shadow_normal nel CSV, così da non rivalutarle nella passata shadow-only.
+    già processati. Ritorna anche refs_with_shadow e refs_with_light: reference che
+    hanno già almeno una riga shadow_normal / light_normal nel CSV, così da non
+    rivalutarle nella passata disturbance-only.
     """
     processed: set[str] = set()
     refs_with_shadow: set[str] = set()
+    refs_with_light: set[str] = set()
     loaded_rows: list[dict] = []
 
     with open(csv_path, "r", newline="", encoding="utf-8") as f:
@@ -1451,9 +1498,11 @@ def _load_existing_csv_stats(
             processed.add(row["reference_id"])
             if row["test_type"] == "shadow_normal":
                 refs_with_shadow.add(row["reference_id"])
+            elif row["test_type"] == "light_normal":
+                refs_with_light.add(row["reference_id"])
 
     venue_stats = _rebuild_venue_stats_from_rows(loaded_rows, dataset_root, conn)
-    return processed, venue_stats, refs_with_shadow, loaded_rows
+    return processed, venue_stats, refs_with_shadow, refs_with_light, loaded_rows
 
 
 def evaluate_from_db(
@@ -1549,20 +1598,20 @@ def evaluate_from_db(
         # ── Resume: carica risultati esistenti e filtra i ref già processati ──
         venue_stats: dict[str, dict] = {}
         resume_skipped = 0
-        refs_shadow_only: list[DBFrame] = []   # processati senza shadow → solo shadow
+        refs_shadow_only: list[DBFrame] = []   # processati senza disturbance → passata disturbance-only
         loaded_rows: list[dict] = []
         if resume and out_csv and Path(out_csv).exists():
-            processed_ids, venue_stats, refs_with_shadow, loaded_rows = (
+            processed_ids, venue_stats, refs_with_shadow, refs_with_light, loaded_rows = (
                 _load_existing_csv_stats(out_csv, dataset_root_path, conn)
             )
             resume_skipped = len(processed_ids)
-            # Ref già processati ma senza righe shadow → passata shadow-only
-            shadow_only_ids = processed_ids - refs_with_shadow
-            refs_shadow_only = [r for r in refs if r.frame_id in shadow_only_ids]
+            # Ref già processati ma senza shadow O senza light → passata disturbance-only
+            disturbance_only_ids = processed_ids - (refs_with_shadow & refs_with_light)
+            refs_shadow_only = [r for r in refs if r.frame_id in disturbance_only_ids]
             # Ref da processare completamente
             refs = [r for r in refs if r.frame_id not in processed_ids]
             print(f"  Resume: {resume_skipped} già nel CSV "
-                  f"({len(refs_shadow_only)} necessitano shadow-only), "
+                  f"({len(refs_shadow_only)} necessitano disturbance-only), "
                   f"{len(refs)} da processare completamente.")
 
         # In pooled mode rinvio la scrittura CSV alla fine (post-recalibrazione)
@@ -1609,29 +1658,32 @@ def evaluate_from_db(
         print(f"{'='*60}\n")
 
         # ── Elaborazione parallela per reference ──────────────────────────────
-        # La query shadow copre sia i ref nuovi sia quelli shadow-only
+        # Le query shadow e light coprono sia i ref nuovi sia quelli shadow-only
         all_refs_for_shadow = refs + refs_shadow_only
-        shadow_normal_map = query_shadow_normal_frames(
-            conn, [r.frame_id for r in all_refs_for_shadow]
-        )
-        # Scarta refs_shadow_only che non hanno ombre nel DB (niente da fare)
+        all_ref_ids = [r.frame_id for r in all_refs_for_shadow]
+        shadow_normal_map = query_shadow_normal_frames(conn, all_ref_ids, source="shadow")
+        light_normal_map  = query_shadow_normal_frames(conn, all_ref_ids, source="light")
+        # Scarta refs_shadow_only che non hanno né ombre né luci nel DB (niente da fare)
         refs_shadow_only = [
-            r for r in refs_shadow_only if shadow_normal_map.get(r.frame_id)
+            r for r in refs_shadow_only
+            if shadow_normal_map.get(r.frame_id) or light_normal_map.get(r.frame_id)
         ]
 
-        # Ref nuovi: test completo (normal + obstructed + shadow)
+        # Ref nuovi: test completo (normal + obstructed + shadow + light)
         worker_args_list = [
             (ref, ob_map.get(ref.frame_id, []),
              shadow_normal_map.get(ref.frame_id, []),
+             light_normal_map.get(ref.frame_id, []),
              dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, test_normal,
              shadow_prob, shadow_prob_cal, light_prob, light_prob_cal,
              db_path, min_overlap_px)
             for ref in refs
         ]
-        # Ref già processati senza shadow: solo shadow (ob_frames vuoto, test_normal=False)
+        # Ref già processati senza shadow/light: solo disturbance (ob_frames vuoto, test_normal=False)
         worker_args_list += [
             (ref, [],
              shadow_normal_map.get(ref.frame_id, []),
+             light_normal_map.get(ref.frame_id, []),
              dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, False,
              shadow_prob, shadow_prob_cal, light_prob, light_prob_cal,
              db_path, min_overlap_px)
@@ -1677,9 +1729,10 @@ def evaluate_from_db(
             for key in ("normal_scores", "ob_scores", "normal_scores_norm",
                         "ob_scores_norm", "ob_candidates", "thresholds",
                         "shadow_normal_scores", "shadow_normal_scores_norm",
-                        "fn_candidates", "shadow_fp_candidates"):
+                        "light_normal_scores", "light_normal_scores_norm",
+                        "fn_candidates", "shadow_fp_candidates", "light_fp_candidates"):
                 stats[key].extend(stats_w.get(key, []))
-            for key in ("fp", "tp", "fn", "shadow_fp"):
+            for key in ("fp", "tp", "fn", "shadow_fp", "light_fp"):
                 stats[key] += stats_w.get(key, 0)
 
         # ── Pooled sigma recalibration (post-processing in-memory) ────────────
@@ -1729,7 +1782,8 @@ def evaluate_from_db(
                                label: str, score: float, venue_type: str) -> None:
                 ref_img_v = Image.open(ref_path_str).convert("RGB")
                 bv = augment_reference(ref_img_v, n=n_augments, seed=42,
-                                       include_original=False, shadow_prob=shadow_prob)
+                                       include_original=False, shadow_prob=shadow_prob,
+                                       light_prob=light_prob)
                 feats_list = []
                 for img_v in bv:
                     f, _, _ = extract_patch_features(model, load_image_tensor(img_v))
@@ -1755,6 +1809,7 @@ def evaluate_from_db(
             for venue_type, stats in venue_stats.items():
                 fn_cands = stats.get("fn_candidates", [])
                 sh_cands = stats.get("shadow_fp_candidates", [])
+                ln_cands = stats.get("light_fp_candidates", [])
 
                 # FN più convinto (score minimo - modello più lontano dalla soglia)
                 if fn_cands:
@@ -1773,29 +1828,39 @@ def evaluate_from_db(
                     worst_sh = max(sh_cands, key=lambda x: x[0])
                     _save_heatmap(*worst_sh[1:], label="shadow_fp_worst", score=worst_sh[0], venue_type=venue_type)
 
+                # Light FP più convinto
+                if ln_cands:
+                    worst_ln = max(ln_cands, key=lambda x: x[0])
+                    _save_heatmap(*worst_ln[1:], label="light_fp_worst", score=worst_ln[0], venue_type=venue_type)
+
         for venue_type, stats in venue_stats.items():
             normal_scores = stats["normal_scores"]
             ob_scores = stats["ob_scores"]
             normal_scores_norm = stats["normal_scores_norm"]
             ob_scores_norm = stats["ob_scores_norm"]
             shadow_normal_scores = stats.get("shadow_normal_scores", [])
-            fp = stats["fp"]
-            tp = stats["tp"]
-            fn = stats["fn"]
+            light_normal_scores  = stats.get("light_normal_scores", [])
+            fp        = stats["fp"]
+            tp        = stats["tp"]
+            fn        = stats["fn"]
             shadow_fp = stats.get("shadow_fp", 0)
+            light_fp  = stats.get("light_fp", 0)
 
             normal_total = len(normal_scores)
-            ob_total = len(ob_scores)
+            ob_total     = len(ob_scores)
             shadow_total = len(shadow_normal_scores)
+            light_total  = len(light_normal_scores)
 
-            # false_alarm_rate: FPR su sole immagini clean (comparabile tra run con/senza shadow aug)
+            # false_alarm_rate: FPR su sole immagini clean (comparabile tra run con/senza disturbance aug)
             false_alarm_rate = fp / normal_total if normal_total else None
             # shadow_false_alarm_rate: FPR su shadow_normal (None se non testato)
             shadow_false_alarm_rate = shadow_fp / shadow_total if shadow_total else None
+            # light_false_alarm_rate: FPR su light_normal (None se non testato)
+            light_false_alarm_rate = light_fp / light_total if light_total else None
             false_negative_rate = fn / ob_total if ob_total else None
             recall = tp / ob_total if ob_total else None
-            # precision include tutti i FP (clean + shadow): coerente con il notebook
-            total_fp = fp + shadow_fp
+            # precision include tutti i FP (clean + shadow + light): coerente con il notebook
+            total_fp = fp + shadow_fp + light_fp
             precision = tp / (tp + total_fp) if (tp + total_fp) > 0 else None
             f1 = None
             if precision is not None and recall is not None and (precision + recall) > 0:
@@ -1825,6 +1890,7 @@ def evaluate_from_db(
                     "false_alarm_rate": false_alarm_rate,
                     "false_negative_rate": false_negative_rate,
                     "shadow_false_alarm_rate": shadow_false_alarm_rate,
+                    "light_false_alarm_rate": light_false_alarm_rate,
                 },
             )
 
@@ -1837,10 +1903,14 @@ def evaluate_from_db(
             n_norm = len(stats["normal_scores"])
             n_ob   = len(stats["ob_scores"])
             n_shn  = len(stats["shadow_normal_scores"])
+            n_ltn  = len(stats.get("light_normal_scores", []))
             line   = f"  {venue_type}: normals={n_norm} obstr={n_ob}"
             if n_shn:
                 fpr_sh = stats["shadow_fp"] / n_shn
                 line  += f" | shadow_normals={n_shn} shadow_FPR={fpr_sh:.2%}"
+            if n_ltn:
+                fpr_lt = stats.get("light_fp", 0) / n_ltn
+                line  += f" | light_normals={n_ltn} light_FPR={fpr_lt:.2%}"
             print(line)
         if missing_files:
             print(f"  File mancanti: {len(missing_files)}")

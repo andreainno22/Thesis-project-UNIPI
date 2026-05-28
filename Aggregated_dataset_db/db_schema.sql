@@ -93,7 +93,8 @@ CREATE TABLE IF NOT EXISTS results (
     latency_ms REAL,
     false_alarm_rate REAL,
     false_negative_rate REAL,
-    shadow_false_alarm_rate REAL  -- FPR su shadow_normal; NULL se shadow non testato
+    shadow_false_alarm_rate REAL,  -- FPR su shadow_normal; NULL se shadow non testato
+    light_false_alarm_rate REAL    -- FPR su light_normal; NULL se light non testato
 );
 
 CREATE INDEX IF NOT EXISTS idx_results_exp ON results(exp_id);
