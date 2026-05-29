@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS roi_polygons (
     frame_id TEXT NOT NULL REFERENCES frames(frame_id),
     label TEXT NOT NULL CHECK (
         label IN ('left_jamb','right_jamb','center_mullion',
-                  'threshold','architrave','other')
+                  'threshold','architrave','other','door_region')
     ),
     polygon JSON NOT NULL,
     img_w INTEGER NOT NULL,
@@ -94,7 +94,8 @@ CREATE TABLE IF NOT EXISTS results (
     false_alarm_rate REAL,
     false_negative_rate REAL,
     shadow_false_alarm_rate REAL,  -- FPR su shadow_normal; NULL se shadow non testato
-    light_false_alarm_rate REAL    -- FPR su light_normal; NULL se light non testato
+    light_false_alarm_rate REAL,   -- FPR su light_normal; NULL se light non testato
+    bg_false_alarm_rate REAL       -- FPR su bg_normal (background_change); NULL se non testato
 );
 
 CREATE INDEX IF NOT EXISTS idx_results_exp ON results(exp_id);

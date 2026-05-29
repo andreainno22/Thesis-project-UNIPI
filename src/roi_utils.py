@@ -25,7 +25,19 @@ import numpy as np
 VALID_LABELS = {
     "left_jamb", "right_jamb", "center_mullion",
     "threshold", "architrave", "other",
+    "door_region",
 }
+
+# Labels that define structural frame regions (used for connected-component
+# gating). door_region is excluded because it spans the whole door including
+# the panel/glass area, where background changes happen.
+FRAME_LABELS = {
+    "left_jamb", "right_jamb", "center_mullion",
+    "threshold", "architrave",
+}
+
+# Labels usable as a build-time ROI (patches inside enter the memory bank).
+BUILD_ROI_LABELS = {"door_region"}
 
 
 @dataclass
@@ -180,6 +192,56 @@ def gated_anomaly_score(
         if cmax > best_score:
             best_score = cmax
     return best_score, valid_mask
+
+
+def polygon_to_patch_mask(
+    roi: FrameRoi,
+    img_size: int = 224,
+    patch_h: int = 28,
+    patch_w: int = 28,
+    labels: Optional[set[str]] = None,
+) -> Optional[np.ndarray]:
+    """Convert polygon ROI to a boolean patch-grid mask.
+
+    A patch at grid position (pi, pj) is included if its center, mapped back
+    to the original image coordinates, falls inside the union of polygons
+    matching `labels`. Returns a flat boolean array of shape (patch_h*patch_w,)
+    suitable for indexing patch-level feature tensors.
+
+    Returns None if no matching polygon exists (no filtering should be applied).
+    """
+    if labels is None:
+        labels = BUILD_ROI_LABELS
+    if roi.is_empty:
+        return None
+    polys = [pts for label, pts in roi.polygons if label in labels]
+    if not polys:
+        return None
+
+    # Build mask on the img_size grid first via fillPoly, then sample the
+    # patch grid centers. Coordinates of polygons are in the original image
+    # frame; we scale them to img_size.
+    sx = img_size / float(roi.img_w)
+    sy = img_size / float(roi.img_h)
+    img_mask = np.zeros((img_size, img_size), dtype=np.uint8)
+    for pts in polys:
+        scaled = np.empty_like(pts, dtype=np.int32)
+        scaled[:, 0] = np.clip(np.round(pts[:, 0] * sx), 0, img_size - 1)
+        scaled[:, 1] = np.clip(np.round(pts[:, 1] * sy), 0, img_size - 1)
+        cv2.fillPoly(img_mask, [scaled], 1)
+
+    cell_w = img_size / patch_w
+    cell_h = img_size / patch_h
+    out = np.zeros(patch_h * patch_w, dtype=bool)
+    for pi in range(patch_h):
+        cy = int((pi + 0.5) * cell_h)
+        cy = min(cy, img_size - 1)
+        for pj in range(patch_w):
+            cx = int((pj + 0.5) * cell_w)
+            cx = min(cx, img_size - 1)
+            if img_mask[cy, cx]:
+                out[pi * patch_w + pj] = True
+    return out
 
 
 def find_roi_json_for_image(

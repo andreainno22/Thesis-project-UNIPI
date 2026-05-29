@@ -811,7 +811,24 @@ Per un'immagine originale 960x1280 (come le immagini poli_ingegneria) il calcolo
 
 Il Gaussian blur con sigma=4 applicato sull'anomaly map espande i blob attorno all'oggetto, abbassando ulteriormente la soglia percettiva: un oggetto da 30-40px puo produrre un blob visibile da 60-70px dopo smoothing. Per le ostruzioni tipiche (carrello, sedia a rotelle, cestino) riprese da 2-3 metri la dimensione e ampiamente superiore a questi limiti. Il problema degli oggetti sotto-soglia riguarda oggetti molto lontani, parzialmente visibili ai bordi dell'inquadratura, o di dimensioni molto ridotte (es. un piccolo pacchetto).
 
-**Assunzione di camera fissa.** Il meccanismo di gating presuppone che la telecamera sia fisicamente stabile: i poligoni del telaio vengono annotati una volta sola sull'immagine di riferimento e riutilizzati su tutti i frame successivi. Se la camera subisce uno spostamento fisico (vibrazioni, urto, riposizionamento), uno zoom o una variazione di inclinazione, la ROI proiettata non coincide piu con gli stipiti reali nella scena, e il gating puo rigettare ostruzioni legittime o non filtrare variazioni di fondo. Per piccoli drift il parametro `min_overlap_px` e i poligoni leggermente sovraddimensionati assorbono qualche pixel di errore, ma non compensano spostamenti significativi. Questa e una limitazione esplicita del sistema: il deployment corretto richiede una camera montata in modo rigido e non soggetta a vibrazioni ricorrenti. Estensioni future potrebbero includere un tracking automatico degli angoli del telaio (es. tramite omografia) per aggiornare la ROI dinamicamente senza richiedere una nuova annotazione manuale.
+**Assunzione di camera fissa e tolleranza spaziale nativa.** Il meccanismo di gating presuppone che la telecamera sia fisicamente stabile: i poligoni del telaio vengono annotati una volta sola sull'immagine di riferimento e riutilizzati su tutti i frame successivi. Prima di quantificare la sensibilità a micro-spostamenti, vale la pena analizzare quanta tolleranza spaziale il sistema possiede già per costruzione.
+
+Due elementi della pipeline assorbono piccoli disallineamenti senza modifiche:
+
+1. **Neighborhood pooling 3×3**: ogni patch feature è la media del suo intorno 3×3, che copre 24×24 px nell'immagine originale a risoluzione nativa (per un'immagine 960×1280 come quelle di poli_ingegneria). Uno spostamento di 1-2 patch nella griglia 28×28 non altera significativamente le feature.
+2. **Gaussian smoothing σ=4 sulla anomaly map**: allarga e ammorbidisce i blob, riducendo la sensibilità alla posizione esatta di ciascun pixel anomalo.
+
+Una foto scattata a mano libera dista tipicamente 5-15 px di traslazione e 0.5-2° di rotazione rispetto al reference. Dopo il resize a 224×224 questo si riduce a 1-3 px — interamente assorbito dal neighborhood pooling. Il problema emerge solo per spostamenti più grandi (urto fisico alla telecamera, riposizionamento) o per zoom involontario.
+
+**Strategie di mitigazione per spostamenti residui:**
+
+*Opzione A - Geometric augmentation nel bank* (zero costo a test time): aggiungere piccole trasformazioni affini alle varianti del bank (shift ±5-10 px, rotazione ±2°). La bank impara a riconoscere come normale la stessa scena con piccoli spostamenti. Parametro suggerito: `geom_prob=0.5`, `max_shift_px=8`, `max_rot_deg=2.0`. Questa opzione è conservativa e non introduce latenza aggiuntiva a inferenza.
+
+*Opzione B - ECC registration a test time*: allineare ogni immagine di test al reference prima dell'estrazione delle feature tramite `cv2.findTransformECC` con modalità `MOTION_EUCLIDEAN` (traslazione + rotazione). Più robusto per spostamenti maggiori, ma aggiunge un passo di preprocessing seriale e introduce un potenziale failure mode (registration failure su scene molto diverse). Adatto se la camera può subire drift progressivo nel tempo.
+
+**Indicazioni pratiche per la raccolta dati.** Per il test set di validazione (Fase D), la variabilità di uno scatto a mano libera è eliminabile con accorgimenti a costo zero: un segno sul pavimento per il posizionamento dei piedi e appoggio a una superficie fissa per ogni scatto. Questo riduce la variabilità residua a meno di 5 px, dentro la tolleranza nativa del sistema, senza richiedere nessuna modifica al codice. L'implementazione della geometric augmentation rimane una direzione futura opzionale per il caso di camera fisicamente instabile (es. supporto vibrante in ambiente industriale).
+
+Rimane una limitazione esplicita per spostamenti grandi (urto fisico, riposizionamento deliberato): la ROI proiettata non coincide più con gli stipiti reali, e il gating può rigettare ostruzioni legittime o non filtrare variazioni di fondo. Il deployment corretto richiede una camera montata in modo rigido. Un tracking automatico degli angoli del telaio (es. tramite omografia incrementale) per aggiornare la ROI dinamicamente è una possibile estensione futura.
 
 **Ortogonalita rispetto alle ombre.** Il gating e neutro rispetto al problema dei falsi positivi da ombra descritto nella sezione precedente. Le ombre proiettate sul pavimento davanti alla porta generano componenti anomale che si estendono tipicamente fino alla soglia (`threshold`) o ai montanti laterali; superano quindi il filtro e producono lo stesso score che si otterrebbe senza gating. Il gating interviene unicamente quando la componente e interamente confinata nella zona vetrata, lontana dal telaio - scenario che non si verifica per le ombre. Il fix per le ombre rimane distinto e indipendente: shadow augmentation nella fase di build per includere nella memory bank varianti normali con ombra, abbassando cosi il loro score al di sotto della soglia di calibrazione. I due meccanismi sono complementari e non interferenti.
 
@@ -901,7 +918,30 @@ Dataset/light_test/
 
 Generato con `--shadow-type light_random --n-variants 1 --seed 42` dalla stessa sorgente di `shadow_test`. Registrate nel DB con `source='light'`, `is_normal=1`, `reference_frame_id` all'originale. `evaluate-db` le raccoglie tramite `query_shadow_normal_frames` (filtro per `source`) e riporta un `light_FPR` separato da `shadow_FPR` e `clean_FPR`.
 
-#### 3.15.3 Coverage della bank con due tipi di disturbance
+#### 3.15.3 Asimmetria tra spazio shadow e spazio light (caveat metodologico)
+
+Un'osservazione importante per l'interpretazione dei risultati: i due test set `shadow_test` e `light_test`, pur condividendo la stessa struttura (3 modalità: ellittica, direzionale, striscia; k ∈ [1,3] stacked per immagine), **non coprono spazi visivi di dimensione equivalente**. La generazione delle luci sintetiche in `generate_shadow_images.py` introduce due dimensioni aggiuntive rispetto alle ombre, motivate dal realismo fisico:
+
+| Dimensione | Shadow | Light |
+|---|---|---|
+| Forma + intensità | sì | sì |
+| Direzionalità (stripe) | 2 orientamenti (oriz, vert) | **3 orientamenti** (oriz, vert, **diagonale solare**) |
+| Shift cromatico | nessuno | **R↑, B↓** su elliptical e stripe diagonale (tinta calda solare) |
+| Angolo continuo solare | n/a | **25-65° o 115-155°** parametrizzato |
+
+Le scelte sono fisicamente motivate - il sole reale produce raggi diagonali con cromaticità calda, mentre le ombre proiettate non hanno equivalente cromatico - ma hanno una conseguenza metodologica: a parità di copertura della bank (es. ~6 light variants e ~6 shadow variants su 15 totali), il sottospazio light richiede di rappresentare più modalità con lo stesso budget di varianti.
+
+**Conseguenze per l'interpretazione dei risultati:**
+
+1. **Il confronto diretto `shadow_FPR vs light_FPR` non è apples-to-apples.** Un light_FPR del 23% non implica che il light aug sia "metà efficace" di un shadow aug che raggiunge il 12% - significa che lo stesso budget di varianti deve coprire uno spazio più diversificato.
+
+2. **Il confronto valido è within-category**: light_FPR_L1 vs light_FPR_SL15 vs light_FPR_SL25 misura l'effetto di shadow co-augmentation e bank size sulla copertura del sottospazio light. shadow_FPR_C-pooled vs shadow_FPR_SL15 vs shadow_FPR_SL25 misura l'analogo per il sottospazio shadow.
+
+3. **Motivazione aggiuntiva per SL-25**: la maggiore diversità del sottospazio light giustifica esplicitamente l'aumento di `aug` a 25 quando il light aug è attivo. Non è solo "più varianti = meglio in generale", ma "il test set delle luci ha più modalità, quindi serve copertura proporzionalmente più ampia".
+
+Una possibile estensione future-work è quantificare la varianza spaziale+cromatica relativa dei due test set (es. distanza media tra feature vectors estratti dal backbone sulle 3 modalità di ciascun tipo), o ridurre la light augmentation alle stesse 3 modalità geometriche delle ombre per ottenere una comparabilità diretta. La scelta nella tesi è di mantenere la light augmentation realistica (modeling fisicamente fondato) e riportare il caveat dell'asimmetria nei risultati.
+
+#### 3.15.4 Coverage della bank con due tipi di disturbance
 
 Con `aug=15`, `shadow_prob=0.4`, `light_prob=0.4` la distribuzione attesa delle varianti è:
 
@@ -914,7 +954,7 @@ Con `aug=15`, `shadow_prob=0.4`, `light_prob=0.4` la distribuzione attesa delle 
 
 Con `aug=15` il coreset (1% di 784×15 ≈ 117 punti) deve coprire quattro sottospazi invece di tre. Il rischio è che i ~3.6 shadow-only variants siano insufficienti rispetto al caso shadow-only (§3.7, ~6 shadow variants su 15). Con `aug=25` si ottengono ~6.0 shadow-only + ~6.0 light-only, ripristinando la coverage per tipo al livello del run shadow-only originale, a costo di un ~65% di tempo di build aggiuntivo.
 
-#### 3.15.4 Ablation design
+#### 3.15.5 Ablation design
 
 Quattro configurazioni, tutte con `k=4.0`, `sigma_mode=pooled`, `cal=30`, `split=test`:
 
@@ -936,6 +976,66 @@ Quattro configurazioni, tutte con `k=4.0`, `sigma_mode=pooled`, `cal=30`, `split
 **Metriche da riportare:**
 
 Clean FPR | Shadow FPR | Light FPR | Obstructed TPR | F1 | AUROC | σ_θ
+
+#### 3.15.6 Risultati Run 1: L-only
+
+Configurazione: `shadow_prob=0.0`, `light_prob=0.4`, `aug=15`, `shadow_prob_cal=0.0`, `light_prob_cal=0.1`, `cal=30`, `k=4.0`, `sigma_mode=pooled`. Test set: 990 reference (porte + corridoi), ciascuna con 1 normal + 1 shadow_normal + 1 light_normal + 1 obstructed.
+
+**Risultati aggregati:**
+
+| Metrica | C-pooled (sp=0.4, lp=0.0) | **L-only (sp=0.0, lp=0.4)** | Δ |
+|---|---|---|---|
+| Clean FPR | 0.0% | **0.0%** | invariato |
+| **Shadow FPR** | 12.2% | **37.7%** | **+25.5 pp** (regressione attesa) |
+| **Light FPR** | n/d | **23.2%** | nuovo, vedi sotto |
+| Obstr TPR | 99.8% | **100.0%** | +0.2 pp |
+| Obstr FNR | 0.2% | 0.0% | -0.2 pp |
+| Precision | 89.1% | 62.2% | -26.9 pp |
+| F1 | 0.941 | **0.767** | -0.174 |
+| AUROC (N+S+L vs Obstr) | 0.998 | **0.9985** | invariato |
+| σ_θ | 0.137 | **0.131** | -4% (stabile) |
+
+**Distribuzione degli score:**
+
+| Categoria | mean | std | min | max |
+|---|---|---|---|---|
+| Normal | 2.557 | 0.133 | 2.037 | 2.992 |
+| Shadow normal | 3.212 | 0.430 | 2.145 | 4.505 |
+| Light normal | 3.040 | 0.379 | 2.079 | 4.313 |
+| Obstructed | 4.675 | 0.344 | 3.685 | 5.859 |
+
+**Soglie per-camera (post-pooling):** mean=3.333, std=0.131, range=[2.867, 3.724]. Distribuzione compatta, nessuna coda patologica.
+
+**Breakdown per venue:**
+
+| Venue | Clean FPR | Shadow FPR | Light FPR | TPR |
+|---|---|---|---|---|
+| corridoio | 0.0% | 33.7% | 21.4% | 100% |
+| porta | 0.0% | 41.6% | 25.1% | 100% |
+
+#### 3.15.7 Interpretazione del Run 1
+
+**Il light augmentation funziona.** La light_FPR scende a 23.2%, contro un atteso ≥70% che ci si aspetterebbe da un bank senza copertura di patch luminose (estrapolando dal pattern shadow: la shadow_FPR del baseline pre-fix era 90%, e con `lp=0.0` ci aspettiamo un comportamento analogo). Il meccanismo è quello previsto in §3.7 - le patch con fascio luminoso nel test set trovano corrispondenti nella bank, abbassando la distanza kNN e portando lo score sotto la soglia di calibrazione.
+
+**Conferma del ruolo strutturale della shadow augmentation.** Rimuovere la shadow aug fa salire la shadow_FPR da 12.2% (C-pooled) a 37.7%. Questo conferma che in C-pooled la shadow aug era attivamente discriminante e non un effetto secondario di scelte fortunate dei seed - rimuovendola, il sistema perde robustezza esattamente nel modo predetto dal modello di failure di §3.1.
+
+**Il light_FPR (23%) non è confrontabile direttamente con lo shadow_FPR di C-pooled (12%).** Come documentato in §3.15.3, lo spazio delle luci è intrinsecamente più ampio: tre orientamenti di striscia (oriz/vert/diagonale) invece di due, parametro angolare continuo per il fascio solare diagonale, e shift cromatici (R↑, B↓) assenti dalle ombre. Lo stesso budget di copertura (~6 light variants su 15 nel bank) deve quindi rappresentare uno spazio visivo più diversificato, e una light_FPR residua di 23% riflette in parte questa diversità intrinseca, non un'inferiorità del meccanismo di fix.
+
+**AUROC 0.9985 conferma capacità discriminativa intatta.** Il backbone separa correttamente normali (clean + shadow + light) da obstructed in unità normalizzate. Il problema è esclusivamente nel piazzamento delle soglie per-camera, come confermato dal threshold-sweep globale:
+
+| Threshold globale | Normal FPR | Shadow FPR | Light FPR | TPR |
+|---|---|---|---|---|
+| 3.40 | 0.0% | 33.9% | 19.7% | 100% |
+| **3.67** | **0.0%** | **14.9%** | **5.2%** | **100%** |
+| 3.95 | 0.0% | 4.7% | 0.4% | 98.5% |
+
+Esiste una soglia globale (~3.67) che otterrebbe simultaneamente shadow_FPR=15%, light_FPR=5%, TPR=100%, ma le soglie per-camera attuali (mean=3.33) sono più basse, riflettendo il fatto che `mu_cal` per-camera è abbassato dalla mancata copertura della shadow aug.
+
+**Asimmetria porta vs corridoio.** Le porte sono più difficili sia per shadow (41.6% vs 33.7%) che per light (25.1% vs 21.4%). Ipotesi: le scene con porte (in particolare quelle a vetri presenti nel dataset poli_ingegneria) hanno maggiore variabilità di sfondo che si sovrappone parzialmente con i pattern di disturbance, rendendo il discriminator meno netto.
+
+**Stabilità delle soglie.** σ_θ=0.131, comparabile a C-pooled (0.137) - il pooled sigma con median continua a eliminare la coda patologica anche in questa configurazione, indipendentemente dal tipo di augmentation attivo.
+
+**Conclusione del Run 1.** L'F1 0.767 non è un risultato da difendere come benchmark - è il "single-disturbance-fix" baseline che giustifica l'esigenza dei run successivi. Il valore informativo è duplice: (i) conferma che il light aug funziona come fix isolato, (ii) quantifica il costo di non avere la shadow aug, motivando il design SL-15/SL-25 dove entrambi gli augmenti sono attivi simultaneamente.
 
 ---
 

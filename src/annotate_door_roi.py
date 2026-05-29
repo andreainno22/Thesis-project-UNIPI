@@ -13,9 +13,9 @@ Comandi (interattivi):
   - 'u' / Backspace            : rimuove l'ultimo vertice
   - 'd'                        : elimina l'ultimo poligono chiuso
   - 's'                        : salva il JSON corrente
-  - 'n'                        : passa all'immagine successiva (auto-save)
-  - 'p'                        : passa all'immagine precedente (auto-save)
-  - 'q' / chiusura finestra    : esci (auto-save)
+  - 'n'                        : passa all'immagine successiva
+  - 'p'                        : passa all'immagine precedente
+  - 'q' / chiusura finestra    : esci
 
 Esempio:
   python annotate_door_roi.py \
@@ -41,6 +41,7 @@ from PIL import Image
 
 # Label valide, in ordine in cui vengono ciclate con il tasto 'l'.
 LABEL_CYCLE = [
+    "door_region",
     "left_jamb",
     "center_mullion",
     "right_jamb",
@@ -50,6 +51,7 @@ LABEL_CYCLE = [
 ]
 
 LABEL_COLORS = {
+    "door_region":    "#1abc9c",
     "left_jamb":      "#e74c3c",
     "right_jamb":     "#3498db",
     "center_mullion": "#9b59b6",
@@ -122,6 +124,13 @@ class RoiAnnotator:
         self.current_points: list[list[int]] = []
         self.annotation: Optional[ImageAnnotation] = None
 
+        # Disable matplotlib default keybindings that conflict with our shortcuts:
+        # 'p' = pan, 'l' = yscale, 's' = save dialog, 'backspace'/'c' = back view,
+        # 'q' = quit, 'd' = grid minor, 'n' is free but clear to be safe.
+        for km in ("keymap.pan", "keymap.yscale", "keymap.save",
+                   "keymap.back", "keymap.quit", "keymap.grid_minor"):
+            plt.rcParams[km] = []
+
         self.fig, self.ax = plt.subplots(figsize=(10, 12))
         self.fig.canvas.mpl_connect("button_press_event", self.on_click)
         self.fig.canvas.mpl_connect("key_press_event", self.on_key)
@@ -184,7 +193,8 @@ class RoiAnnotator:
             self.ax.plot(xs + xs[:1], ys + ys[:1],
                         marker="o", color=color, linewidth=1.5, linestyle="--")
 
-        self.fig.canvas.draw_idle()
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
 
     def on_click(self, event: MouseEvent):
         if event.inaxes != self.ax or event.xdata is None or event.ydata is None:
@@ -219,21 +229,18 @@ class RoiAnnotator:
         elif key == "s":
             self._save()
         elif key == "n":
-            self._save()
             if self.idx + 1 < len(self.image_paths):
                 self.idx += 1
                 self._load_current()
             else:
                 print("[INFO] gia' all'ultima immagine.")
         elif key == "p":
-            self._save()
             if self.idx > 0:
                 self.idx -= 1
                 self._load_current()
             else:
                 print("[INFO] gia' alla prima immagine.")
         elif key == "q":
-            self._save()
             plt.close(self.fig)
 
     def _close_polygon(self):
