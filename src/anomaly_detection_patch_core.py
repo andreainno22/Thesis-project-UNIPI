@@ -99,7 +99,6 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
                       include_original: bool = True,
                       shadow_prob: float = 0.0,
                       light_prob: float = 0.0,
-                      geom_prob: float = 0.0,
                       max_shift_px: int = 0,
                       max_rot_deg: float = 0.0) -> list[Image.Image]:
     """
@@ -124,15 +123,14 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
                      Indipendente da shadow_prob: una variante può ricevere sia
                      ombra che luce. Default 0.0. Usare ~0.3 per robustezza ai
                      fasci di luce da finestre. Seed dedicato: seed+199999.
-        geom_prob:   probabilità (0–1) di applicare una piccola trasformazione
-                     geometrica (shift + rotazione) a ciascuna variante. Simula
-                     micro-vibrazioni della camera in deployment con mounting rigido.
-                     Default 0.0. Usare ~0.5 per robustezza a shift di pochi px.
-        max_shift_px: ampiezza massima dello shift in pixel (uniforme in
-                     [-max_shift_px, +max_shift_px] su entrambi gli assi).
-                     Riferito alla risoluzione originale dell'immagine.
-        max_rot_deg: ampiezza massima della rotazione in gradi (uniforme in
-                     [-max_rot_deg, +max_rot_deg]).
+        max_shift_px: ampiezza massima dello shift in pixel applicato SEMPRE a
+                     ogni variante (analogo a brightness e contrast: sempre on,
+                     magnitudo random in [-max_shift_px, +max_shift_px] su
+                     entrambi gli assi). Riferito alla risoluzione originale.
+                     Default 0 = disabilitato. Simula micro-vibrazioni della
+                     camera in deployment con mounting rigido.
+        max_rot_deg: ampiezza massima della rotazione applicata SEMPRE in modo
+                     analogo (magnitudo uniforme in [-max_rot_deg, +max_rot_deg]).
     """
     variants = [img_pil] if include_original else []
 
@@ -191,11 +189,11 @@ def augment_reference(img_pil: Image.Image, n: int = 15,
                 light_fn = _LIGHT_POOL[int(light_rng.integers(len(_LIGHT_POOL)))]
                 img = light_fn(img, light_rng)
 
-        # Trasformazione geometrica opzionale (shift + rotazione piccoli) -
-        # applicata dopo tutte le altre augmentazioni. Usa la rng principale
-        # (per-variante), così ogni variante riceve uno shift diverso.
-        # Simula micro-spostamenti della camera (vibrazioni, urti minori).
-        if geom_prob > 0.0 and (max_shift_px > 0 or max_rot_deg > 0.0) and rng.random() < geom_prob:
+        # Trasformazione geometrica (shift + rotazione piccoli) - applicata SEMPRE
+        # se max_shift_px o max_rot_deg > 0, con magnitudo random per-variante.
+        # Analogo a brightness/contrast: ogni variante ha una posizione leggermente
+        # diversa, simulando micro-spostamenti della camera in deployment.
+        if max_shift_px > 0 or max_rot_deg > 0.0:
             shift_x = int(rng.integers(-max_shift_px, max_shift_px + 1)) if max_shift_px > 0 else 0
             shift_y = int(rng.integers(-max_shift_px, max_shift_px + 1)) if max_shift_px > 0 else 0
             rot_deg = float(rng.uniform(-max_rot_deg, max_rot_deg))      if max_rot_deg > 0.0 else 0.0
@@ -669,7 +667,7 @@ def _process_ref_worker(args: tuple) -> dict:
      dataset_root_path, n_augments, n_cal,
      coreset_p, k_sigma, roi_tuple, test_normal,
      shadow_prob, shadow_prob_cal, light_prob, light_prob_cal,
-     geom_prob, geom_prob_cal, max_shift_px, max_rot_deg,
+     max_shift_px, max_rot_deg,
      db_path, min_overlap_px) = args
 
     _ensure_worker_model()
@@ -716,12 +714,10 @@ def _process_ref_worker(args: tuple) -> dict:
 
     bank_variants = augment_reference(ref_img, n=n_augments, seed=42, include_original=False,
                                       shadow_prob=shadow_prob, light_prob=light_prob,
-                                      geom_prob=geom_prob, max_shift_px=max_shift_px,
-                                      max_rot_deg=max_rot_deg)
+                                      max_shift_px=max_shift_px, max_rot_deg=max_rot_deg)
     cal_variants  = augment_reference(ref_img, n=n_cal,       seed=1000, include_original=False,
                                       shadow_prob=shadow_prob_cal, light_prob=light_prob_cal,
-                                      geom_prob=geom_prob_cal, max_shift_px=max_shift_px,
-                                      max_rot_deg=max_rot_deg)
+                                      max_shift_px=max_shift_px, max_rot_deg=max_rot_deg)
 
     all_features = []
     for img in bank_variants:
@@ -1659,8 +1655,6 @@ def evaluate_from_db(
     shadow_prob_cal: float | None = None,
     light_prob: float = 0.0,
     light_prob_cal: float | None = None,
-    geom_prob: float = 0.0,
-    geom_prob_cal: float | None = None,
     max_shift_px: int = 0,
     max_rot_deg: float = 0.0,
     bg_source: str = "background_change",
@@ -1671,8 +1665,6 @@ def evaluate_from_db(
         shadow_prob_cal = shadow_prob
     if light_prob_cal is None:
         light_prob_cal = light_prob
-    if geom_prob_cal is None:
-        geom_prob_cal = geom_prob
     if sigma_mode not in ("per_camera", "pooled"):
         raise ValueError(f"sigma_mode deve essere 'per_camera' o 'pooled', non '{sigma_mode}'")
 
@@ -1717,8 +1709,6 @@ def evaluate_from_db(
             "shadow_prob_cal": shadow_prob_cal,
             "light_prob": light_prob,
             "light_prob_cal": light_prob_cal,
-            "geom_prob": geom_prob,
-            "geom_prob_cal": geom_prob_cal,
             "max_shift_px": max_shift_px,
             "max_rot_deg": max_rot_deg,
             "bg_source": bg_source,
@@ -1799,8 +1789,7 @@ def evaluate_from_db(
         print(f"  Coreset      : {coreset_p*100:.1f}%")
         print(f"  Shadow prob bld/cal: {shadow_prob:.2f} / {shadow_prob_cal:.2f}")
         print(f"  Light  prob bld/cal: {light_prob:.2f} / {light_prob_cal:.2f}")
-        print(f"  Geom   prob bld/cal: {geom_prob:.2f} / {geom_prob_cal:.2f}  "
-              f"(max_shift_px={max_shift_px}, max_rot_deg={max_rot_deg})")
+        print(f"  Geom aug (always-on if >0): max_shift_px={max_shift_px}  max_rot_deg={max_rot_deg}")
         print(f"  Bg source    : {bg_source}")
         print(f"  Sigma mode   : {sigma_mode}")
         print(f"  Workers      : {n_workers}")
@@ -1829,7 +1818,7 @@ def evaluate_from_db(
              bg_normal_map.get(ref.frame_id, []),
              dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, test_normal,
              shadow_prob, shadow_prob_cal, light_prob, light_prob_cal,
-             geom_prob, geom_prob_cal, max_shift_px, max_rot_deg,
+             max_shift_px, max_rot_deg,
              db_path, min_overlap_px)
             for ref in refs
         ]
@@ -1841,7 +1830,7 @@ def evaluate_from_db(
              bg_normal_map.get(ref.frame_id, []),
              dataset_root_path, n_augments, n_cal, coreset_p, k_sigma, roi_tuple, False,
              shadow_prob, shadow_prob_cal, light_prob, light_prob_cal,
-             geom_prob, geom_prob_cal, max_shift_px, max_rot_deg,
+             max_shift_px, max_rot_deg,
              db_path, min_overlap_px)
             for ref in refs_shadow_only
         ]
@@ -2245,20 +2234,14 @@ def main():
     p_eval_db.add_argument("--light-prob-cal", type=float, default=None,
                            help="Probabilità luce sulle varianti di calibrazione. "
                                 "Se non specificato eredita da --light-prob.")
-    p_eval_db.add_argument("--geom-prob", type=float, default=0.0,
-                           help="Probabilità di shift+rotazione geometrica casuale sulle "
-                                "varianti di build (default: 0.0). Simula micro-vibrazioni "
-                                "della camera in deployment con mounting rigido. "
-                                "Richiede anche --max-shift-px e/o --max-rot-deg > 0.")
-    p_eval_db.add_argument("--geom-prob-cal", type=float, default=None,
-                           help="Probabilità geom sulle varianti di calibrazione. "
-                                "Se non specificato eredita da --geom-prob.")
     p_eval_db.add_argument("--max-shift-px", type=int, default=0,
-                           help="Ampiezza massima dello shift in pixel (uniforme in "
-                                "[-N, +N] su entrambi gli assi) usata se geom_prob > 0 "
-                                "(default: 0 = disabilitato).")
+                           help="Ampiezza massima dello shift in pixel applicato a ogni "
+                                "variante di bank e calibrazione (uniforme in [-N, +N] su "
+                                "entrambi gli assi, sempre attivo come brightness/contrast). "
+                                "Default: 0 = disabilitato. Simula micro-vibrazioni camera.")
     p_eval_db.add_argument("--max-rot-deg", type=float, default=0.0,
-                           help="Ampiezza massima della rotazione in gradi (default: 0.0).")
+                           help="Ampiezza massima della rotazione in gradi applicata a ogni "
+                                "variante (sempre attivo se > 0). Default: 0.0.")
     p_eval_db.add_argument("--bg-source", default="background_change",
                            help="Source da usare per la query dei frame bg_normal "
                                 "(default: 'background_change'). Usa es. "
@@ -2340,8 +2323,6 @@ def main():
             shadow_prob_cal=args.shadow_prob_cal,
             light_prob=args.light_prob,
             light_prob_cal=args.light_prob_cal,
-            geom_prob=args.geom_prob,
-            geom_prob_cal=args.geom_prob_cal,
             max_shift_px=args.max_shift_px,
             max_rot_deg=args.max_rot_deg,
             bg_source=args.bg_source,
