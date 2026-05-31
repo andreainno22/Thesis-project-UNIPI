@@ -119,25 +119,34 @@ def add_stripe_shadow(
     intensity_range: tuple[float, float] = (0.25, 0.55),
     width_range:     tuple[float, float] = (0.05, 0.20),
     blur_sigma_range: tuple[float, float] = (8.0, 22.0),
+    orientation: str = "random",
+    position: float | None = None,
 ) -> Image.Image:
     """
     Aggiunge una striscia scura orizzontale o verticale con bordi sfumati.
-    Simula l'ombra proiettata da una trave del soffitto, uno scaffale a muro
-    o un traverso architettonico - pattern molto comune in corridoi industriali.
+    orientation: 'horizontal' | 'vertical' | 'random'
+    position: posizione relativa del centro [0.0-1.0]; None = casuale
     """
     arr       = np.array(img_pil).astype(np.float32)
     h, w      = arr.shape[:2]
     intensity = rng.uniform(*intensity_range)
-    horizontal = bool(rng.integers(0, 2))
+    if orientation == "horizontal":
+        horizontal = True
+    elif orientation == "vertical":
+        horizontal = False
+    else:
+        horizontal = bool(rng.integers(0, 2))
 
     mask = np.zeros((h, w), dtype=np.float32)
     if horizontal:
         band_half = max(2, int(h * rng.uniform(*width_range) / 2))
-        center    = int(rng.integers(band_half, h - band_half))
+        center    = int(position * h) if position is not None else int(rng.integers(band_half, h - band_half))
+        center    = int(np.clip(center, band_half, h - band_half))
         mask[max(0, center - band_half):min(h, center + band_half), :] = 1.0
     else:
         band_half = max(2, int(w * rng.uniform(*width_range) / 2))
-        center    = int(rng.integers(band_half, w - band_half))
+        center    = int(position * w) if position is not None else int(rng.integers(band_half, w - band_half))
+        center    = int(np.clip(center, band_half, w - band_half))
         mask[:, max(0, center - band_half):min(w, center + band_half)] = 1.0
 
     sigma     = rng.uniform(*blur_sigma_range)
@@ -253,33 +262,40 @@ def add_stripe_light(
     intensity_range:  tuple[float, float] = (0.25, 0.55),
     width_range:      tuple[float, float] = (0.05, 0.20),
     blur_sigma_range: tuple[float, float] = (6.0, 18.0),
+    orientation: str = "random",
+    position: float | None = None,
 ) -> Image.Image:
     """
     Aggiunge una striscia luminosa con bordi sfumati.
-    Tre orientamenti:
-      - Orizzontale : finestra a traversa, luce radente da sotto una porta.
-      - Verticale   : crack in una porta o parete, lampada da pavimento.
-      - Diagonale   : fascio solare che taglia la scena (l'angolo tipico del sole).
-                      Il fascio diagonale riceve una tinta calda (R↑, B↓) più
-                      pronunciata per simulare la cromaticità della luce solare diretta.
+    orientation: 'horizontal' | 'vertical' | 'diagonal' | 'random'
+    position: posizione relativa del centro [0.0-1.0]; None = casuale
     """
     arr  = np.array(img_pil).astype(np.float32)
     h, w = arr.shape[:2]
-    intensity   = rng.uniform(*intensity_range)
-    orientation = int(rng.integers(0, 3))   # 0=horizontal, 1=vertical, 2=diagonal
+    intensity = rng.uniform(*intensity_range)
+    if orientation == "horizontal":
+        ori_idx = 0
+    elif orientation == "vertical":
+        ori_idx = 1
+    elif orientation == "diagonal":
+        ori_idx = 2
+    else:
+        ori_idx = int(rng.integers(0, 3))   # 0=horizontal, 1=vertical, 2=diagonal
 
-    if orientation == 0:   # orizzontale
+    if ori_idx == 0:   # orizzontale
         band_half = max(2, int(h * rng.uniform(*width_range) / 2))
-        center    = int(rng.integers(band_half, h - band_half))
+        center    = int(position * h) if position is not None else int(rng.integers(band_half, h - band_half))
+        center    = int(np.clip(center, band_half, h - band_half))
         mask      = np.zeros((h, w), dtype=np.float32)
         mask[max(0, center - band_half):min(h, center + band_half), :] = 1.0
         sigma     = rng.uniform(*blur_sigma_range)
         mask_soft = cv2.GaussianBlur(mask, (0, 0), sigmaX=float(sigma))
         arr_out   = np.clip(arr * (1.0 + intensity * mask_soft[:, :, np.newaxis]), 0, 255)
 
-    elif orientation == 1:   # verticale
+    elif ori_idx == 1:   # verticale
         band_half = max(2, int(w * rng.uniform(*width_range) / 2))
-        center    = int(rng.integers(band_half, w - band_half))
+        center    = int(position * w) if position is not None else int(rng.integers(band_half, w - band_half))
+        center    = int(np.clip(center, band_half, w - band_half))
         mask      = np.zeros((h, w), dtype=np.float32)
         mask[:, max(0, center - band_half):min(w, center + band_half)] = 1.0
         sigma     = rng.uniform(*blur_sigma_range)
@@ -302,7 +318,9 @@ def add_stripe_light(
         p_max    = float(perp_map.max())
         p_range  = p_max - p_min
         bh       = max(4.0, p_range * rng.uniform(*width_range) / 2)
-        center_p = float(rng.uniform(p_min + bh, p_max - bh))
+        center_p = (float(position) * (p_max - p_min) + p_min
+                    if position is not None
+                    else float(rng.uniform(p_min + bh, p_max - bh)))
 
         mask_soft = np.clip(1.0 - np.abs(perp_map - center_p) / (bh + 1e-6),
                             0.0, 1.0).astype(np.float32)
@@ -426,6 +444,10 @@ def generate_shadow_variants(
     n_shadows_min: int = 1,
     n_shadows_max: int = 3,
     seed: int = 42,
+    intensity_min: float | None = None,
+    intensity_max: float | None = None,
+    stripe_orientation: str = "random",
+    stripe_position: float | None = None,
     db_path: str | None = None,
     dataset_root: str | None = None,
     extensions: tuple[str, ...] = (".jpg", ".jpeg", ".png"),
@@ -449,6 +471,12 @@ def generate_shadow_variants(
 
     disturbance_fn = _ALL_FN[shadow_type]   # None per random/light_random
 
+    intensity_override: tuple[float, float] | None = None
+    if intensity_min is not None or intensity_max is not None:
+        lo = intensity_min if intensity_min is not None else 0.20
+        hi = intensity_max if intensity_max is not None else 0.80
+        intensity_override = (lo, hi)
+
     img_paths = sorted(p for p in in_path.iterdir() if p.suffix.lower() in extensions)
     if not img_paths:
         print(f"ERRORE: nessuna immagine trovata in {in_path}")
@@ -471,6 +499,8 @@ def generate_shadow_variants(
     print(f"  Varianti : {n_variants}")
     print(f"  Seed     : {seed}")
     print(f"  DB       : {db_path or 'non usato'}  (source='{db_source}')")
+    if intensity_override:
+        print(f"  Intensity: {intensity_override[0]:.2f}–{intensity_override[1]:.2f}  (override)")
     print(f"{'='*60}\n")
 
     rng   = np.random.default_rng(seed)
@@ -482,14 +512,25 @@ def generate_shadow_variants(
             out_name = f"{img_path.stem}_{suffix_tag}{k:02d}{img_path.suffix}"
             out_file = out_path / out_name
 
+            def _call(fn, img):
+                kwargs = {}
+                if intensity_override:
+                    kwargs["intensity_range"] = intensity_override
+                if fn in (add_stripe_shadow, add_stripe_light):
+                    if stripe_orientation != "random":
+                        kwargs["orientation"] = stripe_orientation
+                    if stripe_position is not None:
+                        kwargs["position"] = stripe_position
+                return fn(img, rng, **kwargs)
+
             if shadow_type in random_types:
                 n_d = int(rng.integers(n_shadows_min, n_shadows_max + 1))
                 out_img = img_pil
                 for _ in range(n_d):
                     fn = pool[int(rng.integers(0, len(pool)))]
-                    out_img = fn(out_img, rng)
+                    out_img = _call(fn, out_img)
             else:
-                out_img = disturbance_fn(img_pil, rng)
+                out_img = _call(disturbance_fn, img_pil)
 
             out_img.save(out_file)
             pairs.append((out_file, img_path))
@@ -532,8 +573,18 @@ def main() -> None:
     parser.add_argument("--shadows-max",  type=int, default=3,
                         help="Numero massimo di ombre per variante, solo con --shadow-type random "
                              "(default: 3)")
-    parser.add_argument("--seed",         type=int, default=42,
+    parser.add_argument("--seed",          type=int, default=42,
                         help="Seme RNG (default: 42)")
+    parser.add_argument("--intensity-min", type=float, default=None,
+                        help="Intensita' minima ombra [0.0-1.0] (override; default: valore del tipo)")
+    parser.add_argument("--intensity-max", type=float, default=None,
+                        help="Intensita' massima ombra [0.0-1.0] (override; default: valore del tipo)")
+    parser.add_argument("--stripe-orientation", default="random",
+                        choices=["horizontal", "vertical", "diagonal", "random"],
+                        help="Orientamento striscia per stripe/light_stripe (default: random); "
+                             "'diagonal' solo per light_stripe")
+    parser.add_argument("--stripe-position", type=float, default=None,
+                        help="Posizione centro striscia [0.0-1.0] (es. 0.5 = centro; default: casuale)")
     parser.add_argument("--db",           default=None,
                         help="Path al DB SQLite (necessario per --load-db)")
     parser.add_argument("--dataset-root", default=None,
@@ -551,6 +602,10 @@ def main() -> None:
         n_shadows_min=args.shadows_min,
         n_shadows_max=args.shadows_max,
         seed=args.seed,
+        intensity_min=args.intensity_min,
+        intensity_max=args.intensity_max,
+        stripe_orientation=args.stripe_orientation,
+        stripe_position=args.stripe_position,
         db_path=args.db,
         dataset_root=args.dataset_root,
     )

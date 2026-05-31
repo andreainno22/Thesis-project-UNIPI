@@ -818,7 +818,7 @@ Due elementi della pipeline assorbono piccoli disallineamenti senza modifiche:
 1. **Neighborhood pooling 3×3**: ogni patch feature è la media del suo intorno 3×3, che copre 24×24 px nell'immagine originale a risoluzione nativa (per un'immagine 960×1280 come quelle di poli_ingegneria). Uno spostamento di 1-2 patch nella griglia 28×28 non altera significativamente le feature.
 2. **Gaussian smoothing σ=4 sulla anomaly map**: allarga e ammorbidisce i blob, riducendo la sensibilità alla posizione esatta di ciascun pixel anomalo.
 
-Una foto scattata a mano libera dista tipicamente 5-15 px di traslazione e 0.5-2° di rotazione rispetto al reference. Dopo il resize a 224×224 questo si riduce a 1-3 px — interamente assorbito dal neighborhood pooling. Il problema emerge solo per spostamenti più grandi (urto fisico alla telecamera, riposizionamento) o per zoom involontario.
+Una foto scattata a mano libera dista tipicamente 5-15 px di traslazione e 0.5-2° di rotazione rispetto al reference. Dopo il resize a 224×224 questo si riduce a 1-3 px - interamente assorbito dal neighborhood pooling. Il problema emerge solo per spostamenti più grandi (urto fisico alla telecamera, riposizionamento) o per zoom involontario.
 
 **Strategie di mitigazione per spostamenti residui:**
 
@@ -882,6 +882,30 @@ Il meccanismo è realizzato come pipeline a tre stadi:
 Il valore di soglia usato per la binarizzazione è la stessa `θ_i = μ_i + k·σ_i` (o `μ_i + k·σ_pop` in pooled mode) calibrata sulla camera. La calibrazione resta non-gated per preservare la distribuzione naturale degli score sui campioni normali. Il gating viene applicato esclusivamente in fase di test, per i campioni `normal`, `shadow_normal` e `obstructed` delle reference che hanno una ROI annotata nel DB; per le altre reference, l'evaluate-db ricade sul comportamento storico (max della mappa intera).
 
 I CSV di output di `evaluate-db` includono una colonna `gated ∈ {0, 1}` per distinguere le righe processate con gating da quelle non gated, in modo che le analisi successive possano stratificare i risultati. La presenza di ROI annotate non è mutuamente esclusiva con il vecchio flag `--roi "x,y,w,h"`: se entrambi sono attivi, il rettangolo legacy maschera prima la mappa e il gating opera sulla porzione superstite.
+
+#### Limite intrinseco: porta aperta o stipite parzialmente non visibile
+
+L'intero meccanismo di gating poggia su un'assunzione implicita: **la geometria del telaio annotata nel reference è stabile e visibile a test time**. Questa assunzione regge per una porta chiusa in condizioni normali, ma viene violata in almeno due scenari operativamente rilevanti.
+
+**Porta aperta - doppio failure mode simmetrico.** Quando la porta si apre si manifestano contemporaneamente due failure mode di segno opposto.
+
+Il primo è un **falso positivo strutturale**: il banco è costruito sul reference a porta chiusa, dove soglia e stipiti sono visibili e forniscono patch "normali" alla memory bank. Con la porta aperta quelle stesse zone cambiano radicalmente - la soglia ruota con l'anta e sparisce, gli stipiti laterali vengono parzialmente coperti dall'anta - e il sistema vede una scena fuori distribuzione esattamente nella regione della frame mask. Il gating aggrava il problema invece di attenuarlo: la componente anomala generata dalla sparizione della soglia/stipite cade per definizione dentro la frame mask (e' li' che la struttura e' cambiata) e supera il filtro senza difficolta'. Il risultato e' un allarme certo ogni volta che la porta si apre, indipendentemente dalla presenza di ostacoli.
+
+Il secondo e' un **falso negativo strutturale**: un ostacolo piazzato sulla soglia di una porta aperta non genera una componente anomala che interseca la frame mask (il poligono annotato sul reference punta ora su pixel dell'anta o del vuoto, non sul telaio fisico) -> il gating lo respinge anche se l'ostruzione e' reale.
+
+**Stipite parzialmente occultato.** Anche senza che la porta si apra, un oggetto alto posizionato lateralmente (es. un rack metallico appoggiato allo stipite) può coprire parte della frame mask. Se la componente anomala dell'ostruzione principale non raggiunge la porzione di telaio rimasta visibile, il gating può rifiutarla anche se l'ostruzione è reale.
+
+Entrambi i casi condividono la stessa causa: il gating assume che la frame mask sia sempre "reachable" da una componente anomala genuina, ma questa raggiungibilita dipende dalla visibilita del telaio - che e una proprieta della scena, non del modello.
+
+**Impatto sul sistema di emergenza.** Il caso porta aperta e il piu preoccupante: un'uscita di emergenza non e ostruita solo quando viene bloccata con la porta chiusa, ma anche - e forse piu frequentemente - quando viene bloccata mentre la porta e gia aperta (es. un carrello lasciato nel varco durante le operazioni di movimentazione). Questo e esattamente il caso che il sistema potrebbe mancare.
+
+**Strategie di mitigazione (non implementate, direzioni future).** Il problema non ha una soluzione semplice nel framework attuale:
+
+- *Rilevamento dello stato porta*: un classificatore binario porta-aperta/porta-chiusa (che puo essere molto semplice, anche template matching) puo segnalare quando la geometria del reference e invalidata. In modalita porta aperta il gating verrebbe disattivato, ricadendo sul max-score globale senza filtraggio, a costo di piu falsi positivi da fondo variabile.
+- *Reference multipli*: annotare un reference separato per la porta aperta (memoria bank + ROI specifici per lo stato aperto). Il sistema switcha tra i due in base allo stato rilevato. Duplica la memoria ma mantiene la discriminazione.
+- *Gating adattivo*: rilevare a runtime quali regioni del telaio sono visibili (attraverso matching con il reference) e aggiornare la frame mask di conseguenza. Piu robusto ma significativamente piu complesso.
+
+**Nella tesi questo e dichiarato come limite del metodo**, non come problema risolto. Il sistema e progettato e validato per la condizione operativa nominale (porta chiusa, telaio visibile): e la condizione piu comune in un contesto di sorveglianza continua, in cui la porta e aperta solo transitoriamente durante il passaggio di persone, non in modo stabile. La condizione di porta stabile aperta con ostacolo e un caso d'uso limite che richiede estensioni architetturali fuori dallo scope di questo lavoro.
 
 ---
 
@@ -1036,6 +1060,155 @@ Esiste una soglia globale (~3.67) che otterrebbe simultaneamente shadow_FPR=15%,
 **Stabilità delle soglie.** σ_θ=0.131, comparabile a C-pooled (0.137) - il pooled sigma con median continua a eliminare la coda patologica anche in questa configurazione, indipendentemente dal tipo di augmentation attivo.
 
 **Conclusione del Run 1.** L'F1 0.767 non è un risultato da difendere come benchmark - è il "single-disturbance-fix" baseline che giustifica l'esigenza dei run successivi. Il valore informativo è duplice: (i) conferma che il light aug funziona come fix isolato, (ii) quantifica il costo di non avere la shadow aug, motivando il design SL-15/SL-25 dove entrambi gli augmenti sono attivi simultaneamente.
+
+#### 3.15.8 Risultati completi dell'ablation (L0-L4)
+
+Completati i run mancanti, l'ablation è ora chiusa. Oltre alle quattro configurazioni del design originale (§3.15.5) è stato aggiunto un quinto run di **controllo a budget pari** (L4, fair-budget), non previsto nel design iniziale ma necessario per disaccoppiare due effetti che in SL-15/SL-25 risultano confusi: l'aumento della *copertura* (aggiungere il tipo luce) e l'aumento dell'*intensità totale* di augmentation (più varianti disturbate per immagine).
+
+| # | Config | sp | lp | aug | spc | lpc | budget* | exp_id / artifact |
+|---|--------|----|----|-----|-----|-----|---------|-------------------|
+| L0 | C-pooled (baseline) | 0.4 | 0.0 | 15 | 0.1 | 0.0 | 0.40 | 10 / `ablation_L0bis_shadow_only.csv` |
+| L1 | L-only | 0.0 | 0.4 | 15 | 0.0 | 0.1 | 0.40 | 7 / `ablation_L1_light_only.csv` |
+| L2 | SL-15 | 0.4 | 0.4 | 15 | 0.1 | 0.1 | 0.80 | 8 / `ablation_L2_SL15.csv` |
+| L3 | SL-25 | 0.4 | 0.4 | 25 | 0.1 | 0.1 | 0.80 | 9 / `ablation_L3_SL25.csv` |
+| L4 | fair-budget | 0.23 | 0.23 | 15 | 0.06 | 0.06 | 0.46 | 12 / `ablation_L4_fair_budget.csv` |
+
+*budget = prob. attesa di disturbance per variante (sp+lp), proxy dell'intensità totale di augmentation. L4 è costruito per avere budget ~0.46, comparabile allo 0.40 di L0, ma ripartito tra ombra e luce invece che tutto su ombra.
+
+**Risultati aggregati** (media porta+corridoio; le aggregazioni di L1 coincidono con la tabella di §3.15.6, a conferma della consistenza):
+
+| Config | clean_FPR | shadow_FPR | light_FPR | TPR | FNR | Precision | F1 | θ medio |
+|--------|-----------|------------|-----------|-----|-----|-----------|-----|---------|
+| L0 C-pooled | 0.0% | 12.2% | 5.8% | 99.8% | 0.2% | 84.8% | 0.917 | 3.74 |
+| L1 L-only | 0.0% | 37.7% | 23.2% | 100% | 0.0% | 62.2% | 0.767 | 3.33 |
+| **L2 SL-15** | 0.0% | **2.2%** | **0.30%** | 99.0% | 1.0% | 97.5% | **0.982** | 3.91 |
+| L3 SL-25 | 0.0% | 1.1% | 0.10% | 97.7% | 2.3% | 98.8% | 0.982 | 3.95 |
+| L4 fair-budget | 0.0% | 11.2% | 4.6% | 100% | 0.0% | 86.7% | 0.929 | 3.65 |
+
+**Breakdown per venue** (le porte restano più difficili dei corridoi su entrambe le disturbance):
+
+| Config | venue | shadow_FPR | light_FPR | TPR | F1 |
+|--------|-------|------------|-----------|-----|-----|
+| L0 | corridoio / porta | 8.9% / 15.6% | 5.7% / 5.9% | 100% / 99.6% | 0.932 / 0.901 |
+| L2 | corridoio / porta | 1.4% / 3.0% | 0.2% / 0.4% | 99.6% / 98.4% | 0.990 / 0.975 |
+| L3 | corridoio / porta | 0.8% / 1.4% | 0.0% / 0.2% | 99.0% / 96.4% | 0.991 / 0.973 |
+| L4 | corridoio / porta | 8.5% / 13.9% | 4.7% / 4.4% | 100% / 100% | 0.938 / 0.919 |
+
+**Q1 - Quanto incide il test set con luci sintetiche.** Sul modello senza gestione luci (L0) le immagini con luce producono light_FPR = 5.8% e abbassano il baseline da precision 89% / F1 0.941 (valore senza light test, §3.15.6) a precision 84.8% / F1 0.917. L'impatto è reale ma moderato. Il dato non ovvio è che **la luce è un disturbo più lieve dell'ombra**: anche con una bank priva di copertura luminosa, il light_FPR (5.8%) è inferiore allo shadow_FPR (12.2%). Lo confermano gli score del Run 1 (light normal mean 3.04 < shadow normal 3.21 < obstructed 4.68): il fascio luminoso spinge le feature meno fuori distribuzione dell'ombra. Resta valido il caveat di §3.15.3 - il 5.8% basso riflette l'intensità minore della perturbazione, non una minore ampiezza dello spazio luce (che è anzi più ampio per orientamenti, angolo solare e shift cromatico).
+
+**Q2 - Aggiungere light aug (sopra le ombre) aiuta.** Confronto within-category con shadow fissa a 0.4 (L0 → L2 → L3):
+
+- light_FPR: 5.8% → 0.30% → 0.10% (circa 19x a SL-15);
+- shadow_FPR: 12.2% → 2.2% → 1.1% - aggiungere la luce **migliora anche le ombre**, non le degrada;
+- F1: 0.917 → 0.982; precision 84.8% → 97.5%;
+- costo: recall 99.8% → 99.0% → 97.7% (FNR crescente con la dimensione della bank).
+
+L1 (L-only) resta il controllo che dimostra il **ruolo strutturale della shadow aug**: rimuovendola la soglia per-camera collassa (θ medio 3.33, il più basso) e tutto fa più FP, comprese le luci (light_FPR 23%). Quel 23% non è la light aug che fallisce ma il threshold abbassato dalla mancata copertura ombra (a soglia globale 3.67 lo stesso modello otterrebbe light_FPR 5%, shadow 15%, TPR 100%). **La light aug è quindi un complemento della shadow aug, non un sostituto.**
+
+**Decomposizione budget vs diversificazione (perché serve L4).** L2/L3 applicano il doppio dell'augmentation di L0 (budget 0.80 vs 0.40): parte del loro guadagno è semplicemente "più augmentation → calibrazione con score più alti → θ più alto → meno FP", confuso con l'effetto della copertura luce. Il θ medio cresce in modo monotono col budget (L4 3.65 < L0 3.74 < L2 3.91 < L3 3.95) e traccia direttamente il calo dei FP. L4 isola i due effetti tenendo il budget ~pari a L0 ma diversificato:
+
+- **L4 vs L0** (budget pari, diversificazione pura): light_FPR 5.8% → 4.6%, shadow_FPR 12.2% → 11.2%, F1 0.917 → 0.929. Guadagno marginale, ma a costo zero - recall resta 100% e le ombre non peggiorano nonostante la shadow aug ridotta da 0.4 a 0.23. Da notare che L4 ottiene questo con θ più basso di L0 (3.65 vs 3.74): la bank diversificata produce score per-immagine più bassi sui test disturbati, segno di robustezza intrinseca leggermente maggiore.
+- **L4 vs L2** (stessa ricetta, più budget): divario ampio (light_FPR 4.6% → 0.30%, shadow_FPR 11.2% → 2.2%).
+
+Conclusione della decomposizione: **la fetta dominante del miglioramento di SL-15 sul baseline viene dall'aumento dell'intensità totale di augmentation, non dalla sola copertura del tipo luce.** La diversificazione shadow → shadow+light, a parità di budget, contribuisce un guadagno piccolo ma reale e gratuito (nessun costo su ombre né su recall).
+
+**SL-15 vs SL-25.** Passando da aug 15 a 25 (stessi sp, lp) shadow_FPR e light_FPR si dimezzano ancora (2.2 → 1.1%, 0.30 → 0.10%) e la precision sale, ma il recall scende (99.0 → 97.7%, FNR 1.0 → 2.3%) e **l'F1 resta identico (0.982)**. Le 10 varianti aggiuntive (build +65%) comprano solo meno falsi allarmi a scapito del recall. La scelta è giustificata solo se l'operating point richiede FP minimi (e regge l'argomento coverage di §3.15.4 sullo spazio-luce più ampio), altrimenti sono rendimenti decrescenti.
+
+**Conclusione dell'ablation.** La configurazione raccomandata è **SL-15** (F1 0.982, light_FPR 0.30%, shadow_FPR 2.2%, recall 99.0%): gestisce simultaneamente i due failure mode al costo di +0.8 pp di FNR rispetto al baseline. Le luci sintetiche nel test set incidono in modo moderato (5.8% non trattato, circa metà delle ombre) e vengono quasi azzerate dall'aggiunta della light aug. Il messaggio metodologico onesto da riportare in tesi, evidenziato da L4, è che il guadagno headline non è puro "effetto-luce" ma in larga parte "effetto-budget": più augmentation totale alza la soglia operativa e taglia i FP, mentre la diversificazione a budget costante dà un miglioramento minore ma a costo nullo. Il confronto diretto shadow_FPR vs light_FPR resta non apples-to-apples (§3.15.3): le letture valide sono within-category.
+
+### 3.16 Augmentation e pooling: discriminazione o calibrazione?
+
+Le sezioni §3.7-§3.15 introducono diversi interventi (shadow augmentation, light augmentation, decoupling build/calibration, `--cal 30`, pooled σ) e ne misurano l'effetto su FPR, TPR, F1. Questa sezione risponde a una domanda trasversale: questi interventi migliorano la **capacità discriminativa** del modello (separare scene normali, incluse quelle con ombre e luci, da scene ostruite) oppure agiscono solo sul **piazzamento della soglia**? La distinzione decide cosa la tesi può rivendicare: un guadagno di rappresentazione o un guadagno di calibrazione.
+
+L'analisi è condotta sui CSV di tutte le ablation (esclusi i run su poli_ingegneria). Due gruppi con test set distinti: **Gruppo A** (synthetic copy-paste, 990 normal + shadow + obstructed, senza luci): `senza_gestione_ombre` (no-aug) → `shadow04` → `decoupled` → `decoupled_k4` → `pooled`; **Gruppo B** (ablation L0-L4 con luci, §3.15.8).
+
+#### 3.16.1 La metrica giusta per la discriminazione
+
+L'AUROC è threshold-independent: se un intervento agisce solo sulla soglia, l'AUROC resta invariata; se migliora la separabilità, sale. Ma l'**AUROC normalizzato** del §2.3 (`(score-μ_i)/σ_i`) **non è discriminazione pura**: dipende da quale σ si usa per normalizzare. Verificato sui CSV - nel run pooled `normalized_score=(score-μ_i)/σ_pop` (σ costante), nel decoupled usa σ_i per-camera. Di conseguenza l'AUROC normalizzato-pooled del Gruppo A oscilla 0.954 → 0.987 → 0.972 → 0.998 mentre la separabilità intrinseca non si muove: quel movimento è qualità di calibrazione, non qualità del modello.
+
+La metrica pulita è l'**AUROC per-camera**: la probabilità che un'ostruzione abbia score più alto di una variante-normale *della stessa camera*, sui raw score, mediata sulle camere. Entro una camera μ_i e σ_i sono costanti, quindi raw e normalized differiscono per una trasformazione affine che non altera il ranking: l'AUROC per-camera è invariante sia alla soglia sia alla normalizzazione, e isola la discriminazione intrinseca.
+
+#### 3.16.2 La discriminazione è satura e quasi invariante alle augmentation
+
+AUROC per-camera (clean / shadow / light vs obstructed):
+
+| Config | clean | shadow | light |
+|--------|-------|--------|-------|
+| no-aug (senza_gestione) | 1.000 | 0.996 | n/a |
+| shadow04 / decoupled / k4 / pooled | 1.000 | 0.996 | n/a |
+| L0 shadow-only | 1.000 | 0.996 | 0.997 |
+| L1 light-only | 1.000 | 0.996 | 1.000 |
+| L2 SL-15 / L3 SL-25 / L4 | 1.000 | 0.998 | 1.000 |
+
+Su clean la separazione è perfetta (1.000) ovunque. Su ombre resta 0.996 in tutto il percorso shadow del Gruppo A, **anche senza shadow augmentation** (no-aug = shadow04); su luci migliora solo 0.997 → 1.000. Tutti i movimenti sono al 3°-4° decimale: il backbone WideResNet separa già normale-vs-ostruito quasi perfettamente, e l'augmentation non ha margine da aggiungere.
+
+#### 3.16.3 La prova controllata: AUROC piatta, FPR che oscilla 40×
+
+Gruppo A - le transizioni decoupled → k4 → pooled cambiano solo il meccanismo di soglia, non il banco:
+
+| Config | raw AUROC | per-cam (shadow) | norm-pooled AUROC | shadow_FPR | TPR | F1 |
+|--------|-----------|------------------|-------------------|------------|-----|-----|
+| no-aug | 0.9969 | 0.996 | 0.954 | 90.1% | 100% | 0.688 |
+| shadow04 | 0.9981 | 0.996 | 0.987 | 2.1% | 70.6% | 0.818 |
+| decoupled | 0.9981 | 0.996 | 0.972 | 28.4% | 99.4% | 0.873 |
+| decoupled_k4 | 0.9981 | 0.996 | 0.972 | 13.5% | 93.4% | 0.903 |
+| pooled | 0.9981 | 0.996 | 0.998 | 12.2% | 99.8% | 0.941 |
+
+Lo shadow_FPR salta da 2.1% a 90% a 12% (range 40×) mentre **raw AUROC è costante a 0.9981 e per-camera-shadow inchiodata a 0.996**. È la definizione di effetto solo-soglia, coerente con §3.13 ("AUROC 0.998 invariato... il guadagno di F1 deriva esclusivamente dall'eliminazione della varianza stocastica della soglia"). Anche la shadow augmentation stessa (no-aug → shadow04) abbatte shadow_FPR 90% → 2% con raw AUROC quasi fermo (0.9969 → 0.9981) e per-camera-shadow identica.
+
+#### 3.16.4 Meccanismo: shift distribuzionale, non ri-ordinamento
+
+Come può lo shadow_FPR crollare 90% → 2% se l'AUROC non cambia? Senza ombre nel banco, le patch d'ombra non hanno vicini e producono score alti: restano *sotto* le ostruite (ranking preservato, AUROC 0.996) ma *sopra* una soglia calibrata sui clean, quindi sforano (FPR 90%). Con le ombre nel banco, le ombre-normali trovano corrispondenti e il loro score scende verso la zona normale, cadendo *sotto* la soglia (FPR 2%), senza che il loro ordine rispetto alle ostruite cambi. L'augmentation esegue uno **shift verso il basso** della distribuzione degli score normali-disturbati, rilevante rispetto a una soglia fissa, non un **ri-ordinamento**. Il pooled σ poi stabilizza *dove* quella soglia cade tra le camere. Nessuno dei due aggiunge potere discriminativo: rendono utilizzabile a un operating point unico una discriminazione già eccellente.
+
+#### 3.16.5 Riformulazione del contributo
+
+Il messaggio corretto non è "il modello discrimina meglio" (è già ~1.0, saturo) ma: il backbone separa normale-vs-ostruito quasi perfettamente anche su scene con ombre e luci; il collo di bottiglia è il **piazzamento di una soglia unica robusta ai disturbi**. Shadow/light augmentation (abbassa gli score dei disturbi sotto la soglia) e pooled σ (stabilizza la soglia tra camere) convertono una discriminazione latente in un operating point utilizzabile (FPR 90% → 2% a TPR ~99%, AUROC invariata).
+
+**Caveat (ceiling effect).** La conclusione vale su un test set dove la discriminazione è quasi satura *by design* (§2.4: ostruite copy-paste sullo stesso sfondo, solo l'oggetto è anomalo, segnale forte, AUROC ≈ 1). Su dati più difficili (ostruzioni reali, sfondi variabili) la discriminazione avrebbe headroom e l'augmentation potrebbe contribuire anche alla separabilità, non solo alla calibrazione. Va dichiarato esplicitamente.
+
+#### 3.16.6 Pooling: un meccanismo di regolarizzazione
+
+Il pooled σ è l'esempio più puro di intervento solo-calibrazione: per costruzione (§3.12) sostituisce σ_cal,i per-camera con un'unica σ_pop, lascia μ_i locale, e lascia l'AUROC invariata. Il suo intero valore è la riduzione della varianza delle soglie (σ_θ −73%): è, per definizione, un meccanismo di **regolarizzazione (shrinkage)**. Da qui la domanda: in un deploy reale dove ogni telecamera è fisica, indipendente e calibrabile sui propri frame normali, il pooling serve, o è una stampella del setup sperimentale?
+
+La risposta è un trade-off bias-varianza sulla stima di σ_i:
+
+- **Varianza** della stima per-camera ∝ 1/n_cal. Qui n_cal=30 varianti sintetiche di *una sola* immagine (~3 eventi-ombra) → σ_i molto rumorosa (SE ≈ 18%, §3.12).
+- **Bias** del pooling ∝ eterogeneità *vera* delle σ_i tra camere. Il §3.10 documenta che qui le σ_i estreme sono outlier stocastici (seed-dependent), non di scena ("la stessa camera ricalibrata con un seed diverso avrebbe una soglia diversa") → eterogeneità vera quasi nulla.
+
+Nel regime di questa tesi (banca one-shot da una sola immagine + calibrazione sintetica scarsa) entrambe le condizioni che favoriscono il pooling sono soddisfatte: stima per-camera rumorosa + eterogeneità vera ≈ 0 → il pooling è riduzione di varianza a costo-quasi-zero di bias. È la scelta corretta.
+
+In un deploy reale con abbondanti frame normali per camera la situazione cambia:
+
+- Con migliaia di frame normali reali raccolti su giorni (ombre, luci, ore del giorno reali), σ_i diventa una stima **affidabile**: il rumore che il pooling corregge sparisce.
+- Scene reali possono avere σ_i **genuinamente eterogenee**: una porta a vetri esposta a luce esterna variabile ha uno spread degli score normali realmente maggiore di un corridoio interno stabile. Qui σ_i porta segnale (quella camera merita una tolleranza più alta) e il pooling introdurrebbe bias: forzare la camera ad alta varianza sulla σ_pop mediana abbassa la sua soglia → falsi allarmi cronici; forzare quella a bassa varianza la alza → missed detection.
+
+Quindi il pooling non è una necessità architetturale ma un regolarizzatore il cui beneficio dipende dal regime di dati. Resta prezioso in due scenari operativamente comuni anche nel deploy reale:
+
+1. **Cold-start**: una camera appena installata ha pochi frame normali → σ_i rumorosa → il pooling (borrowing strength dalle altre camere) la regolarizza. Aggiungere camere a un sistema in esercizio è la norma, non un caso limite.
+2. **Robustezza a finestre di calibrazione non rappresentative**: se il periodo di raccolta normale di una camera include per caso condizioni anomale, σ_i si gonfia/sgonfia; il pooling fa da guardrail.
+
+La generalizzazione corretta è il **partial pooling** (shrinkage gerarchico / empirical Bayes):
+
+```
+σ_i* = (1 − w_i) · σ_pop + w_i · σ_i
+```
+
+con peso w_i crescente con n_cal,i (e con l'evidenza che σ_i sia scene-stabile). Il pooling pieno attuale è l'angolo w_i=0 (max shrinkage), corretto per il regime data-starved della tesi; la calibrazione per-camera è w_i=1; l'ottimo è adattivo. Si noti che il design attuale **già** pool-a σ in pieno ma tiene μ_i locale - scelta sensata perché μ_i porta informazione di scena genuina (livello assoluto degli score normali) mentre σ_i qui è dominata dal rumore di campionamento. In deploy reale, se anche σ_i portasse segnale di scena, andrebbe pooled solo parzialmente.
+
+L'esperimento decisivo per un sito reale: misurare la **stabilità test-retest di σ_i** su finestre di calibrazione indipendenti. Se σ_i è stabile per camera tra finestre → è segnale → tendere al per-camera; se oscilla → è rumore → poolare. Il §3.13 raccomanda già di ricalcolare σ_pop sul sito; il passo successivo naturale è renderlo partial pooling pesato sui dati reali di ciascuna camera.
+
+**Una distinzione da non confondere: pooling cross-camera vs σ per-camera da N frame reali.** Nel mappare questo risultato sul deploy reale è facile sovrapporre due meccanismi distinti. Il σ_pop dell'ablation è calcolato sulle σ_cal,i di 990 reference, cioè 990 *scene diverse*: pool-a **attraverso camere diverse**. In deploy reale, invece, la mossa naturale è stimare σ_i da N frame normali *reali della stessa camera* (che ne coprano la variazione naturale: ore, luci, ombre, persone di passaggio): è **stima per-camera con dati adeguati**, non pooling cross-camera. Sono due leve diverse per la stessa grandezza:
+
+| Leva | Meccanismo | Bias | Richiede |
+|------|-----------|------|----------|
+| (a) N frame reali della camera i | più dati sulla **stessa** camera | zero | serie reali per camera |
+| (b) σ_pop cross-camera (ablation, §3.12) | shrinkage verso le **altre** camere | >0 se le camere differiscono | nessun dato per-camera |
+
+Gli ablation di questo capitolo hanno avuto a disposizione **solo la leva (b)** - niente serie temporali reali, solo 1 immagine + augment sintetici per camera. Quindi dimostrano la **diagnosi** (la σ per-camera rumorosa crea soglie patologiche, §3.10) e che **(b) la regolarizza** nel regime data-starved (§3.13). **Non** dimostrano (a): l'efficacia di una σ_i stimata da N frame reali è un'estrapolazione ben motivata, da validare in-situ, non un risultato di questi esperimenti.
+
+Il punto operativo: la leva (a) è **migliore** (bias zero) e, quando disponibile, rende **non necessaria** la (b). Calcolare σ da N frame reali della camera **non è "σ_pop che fa da regolarizzatore"**: è la per-camera σ fatta come si deve, cioè proprio ciò che toglie il bisogno del regolarizzatore cross-camera. Il termine "regolarizzatore" spetta al borrowing cross-camera (b), non alla media su N frame della stessa camera (che è semplice stima con più dati). Si noti che anche la raccomandazione del §3.13 ("ricalcola σ_pop sul sito") resta **cross-camera** (mediana sulle σ_i delle camere del sito), distinta dalla calibrazione within-camera qui descritta.
+
+La sintesi rimane il partial pooling già introdotto sopra (`σ_i* = (1−w_i)·σ_pop + w_i·σ_i`): la leva (b) σ_pop è il *target* di shrinkage e la rete di sicurezza del cold-start, la leva (a) fornisce la stima locale, e `w_i → 1` man mano che la camera accumula frame reali. In deploy maturo si tende al per-camera unbiased; il pooling cross-camera resta dove è strutturalmente utile: l'avvio di una camera nuova.
 
 ---
 
