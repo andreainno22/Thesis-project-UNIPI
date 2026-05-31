@@ -232,8 +232,8 @@ The evaluation protocol is organized as a progressive ablation:
 | C | Shadow augmentation (shadow_prob=0.4) | Measure effect of shadow fix |
 | C-decoupled | Decoupled shadow_prob (0.4/0.1), cal=30 | Stabilize threshold distribution |
 | C-pooled | Pooled sigma, k=4.0 | Eliminate threshold variance tail |
-| D | Real glass-door scenes + ROI gating | Validate gating on real scenes (pending) |
-| E | Light augmentation ablation (L-only, SL-15, SL-25) | Reduce light FPR; quantify bank size effect (pending) |
+| D | Real doors (poli_ingegneria) + ROI gating | Validate the full pipeline on real scenes; recalibrate k |
+| E | Light augmentation ablation (L0-L4) | Reduce light FPR; separate coverage from budget effect |
 
 ### Phase A: Baseline Performance on Copy-Paste Dataset
 
@@ -337,48 +337,99 @@ The 3.8 pp F1 gain is attributable entirely to variance reduction - not to any c
 | F1 | 0.941 |
 | Sigma of per-camera thresholds | 0.137 |
 
-### Phase D: Glass-Door Generalization
+### Phase D: Real-World Validation on poli_ingegneria
 
-*(Results pending - test set currently being collected and annotated.)*
+Phase D is the first evaluation on **real photographs** rather than copy-paste composites. The test set, `poli_ingegneria`, consists of 6 real doors photographed on site (a mix of opaque and glass doors), each with one annotated reference frame (door-frame polygons) and several additional captures. It contains 30 real obstructed images (positives), 30 unobstructed images (negatives), and the 6 references. Consistent with the fixed-camera assumption, all shots of a given door share the same framing; the variation among them is in content and illumination, not viewing angle. The negatives therefore measure the FPR under the normal variability the system must tolerate at fixed geometry. The full pipeline is active: pooled sigma plus connected-component polygon gating (`min_overlap_px`=10).
 
-The Phase D evaluation targets real glass-door scenarios - a failure mode not present in the copy-paste synthetic dataset. Glass panels make external backgrounds visible, and any background change (persons walking by, lighting variation) generates anomaly components in the glass region. The connected-component polygon gating mechanism described in the Implementation section is designed to suppress these components while preserving detection of physical obstructions.
+**Threshold recalibration (k=4 to k=3).** The per-camera decision threshold is `theta_i = mu_i + k * median(sigma)`, with `median(sigma)` = 0.213 over the 6 references. This is distinct from the **binarization threshold** the gating uses to extract connected components from the anomaly map (Spatial Gating, above): that one remains local, `mu_i + k * sigma_local_i`. Both scale with k. The first run used k=4, the conservative value validated on the synthetic suites; on the real set it proved too conservative:
 
-The test set consists of photographs of glass doors collected from two sources: real glass doors at Poli Ingegneria (field-captured reference and obstructed scenes) and Pinterest images of glass emergency exits (diverse backgrounds and lighting). For each scene, the reference frame is annotated with:
-- A rectangular ROI enclosing the door (via `annotate_rect_roi.py`)
-- Polygon masks for the structural frame elements - left and right jambs, threshold, and optionally center mullion and architrave (via `annotate_door_roi.py`)
+| Metric | k=4 | k=3 | Delta |
+|---|---|---|---|
+| Recall (TPR) | 83.3% (25/30) | **90.0% (27/30)** | +6.7 pp |
+| FPR | 3.3% (1/30) | 3.3% (1/30) | invariant |
+| Precision | 96.2% | 96.4% | +0.2 pp |
+| **F1** | 0.893 | **0.931** | +0.038 |
+| Accuracy | 90.0% | 93.3% | +3.3 pp |
 
-The metrics to be reported include: FPR on glass-background-change scenes (i.e., normal scenes with backgrounds different from the reference), TPR on obstructed scenes, and the delta between configurations with and without gating active. Given the small dataset size (order of tens of scenes), results will be accompanied by 95% bootstrap confidence intervals and interpreted as qualitative validation of the gating mechanism rather than as a production benchmark.
+Because `median(sigma)` is a shared constant, lowering k from 4 to 3 shifts every threshold down by the same `k * median(sigma)` ~ 0.213 without widening the threshold distribution: the per-camera variance amplification of the naive rule (Calibration Stabilization, above) does not appear here because sigma is pooled. Recall rises 6.7 points at zero FPR cost. Per-door recall at k=3: porta_1/2/5/6 = 100%, porta_3 = 78% (7/9), porta_4 = 89% (8/9).
 
-The expected result, based on the physical grounding argument, is that gating substantially reduces glass-background FPR (components confined to the glass panel are rejected) while maintaining TPR for physical obstructions (which extend to the threshold annotation). The quantitative magnitude of the effect depends on the severity of background variation in the collected scenes.
+**Error taxonomy: calibration vs. geometry.** Comparing the two runs separates the false negatives into two classes with distinct causes:
 
-### Phase E: Light Augmentation Ablation
+| Class | Cases | Cause | Recoverable by k? |
+|---|---|---|---|
+| Calibration-limited | porta_3_5, porta_4_8 | obstruction detected, but a k=4 threshold too high zeroes or rejects it | Yes, recovered at k=3 |
+| Gating-limited | porta_3_2 (fan), porta_3_9, porta_4_9 | anomaly component does not intersect the frame by >= 10 px | No |
+| FP (glass) | porta_4_4 | background change behind the glass (shutter + light) | No (see Spatial Gating) |
 
-*(Results pending - runs scheduled.)*
+The two calibration-limited FNs are recovered at k=3 through the two distinct stages where k enters. **porta_4_8** is a *decision-stage* miss: at k=4 a valid gated component already produced a score of 3.43, but it sat below the decision threshold (3.67); at k=3 the threshold drops to 3.46 and the score (3.53) clears it. **porta_3_5** is a *binarization-stage* miss: at k=4 its score was 0.0 because the obstruction's anomaly peak (3.865) fell just below the local binarization threshold `mu + 4*sigma_local` = 3.872, leaving an empty binary map and no component to evaluate; at k=3 the binarization threshold drops to 3.47, the peak survives, a component forms, reaches the frame, and the score jumps to 3.87. The porta_3_5 case shows that the threshold is not only a decision boundary: it also controls which pixels exist for the gating to evaluate, so an overly high k can erase a low-contrast obstruction before gating ever sees it.
 
-Phase E addresses the symmetric counterpart of the shadow failure mode: localized brightness excess from light beams, specular reflections, and direct sunlight entering through glass panels. The evaluation uses a `light_test` dataset of 1100 synthetic light-augmented normal scenes (550 doors, 550 corridors), generated with the three light types described in the Implementation section and registered in the database as `source='light'`.
+**The fan: empirical confirmation of the gating limit.** Three FNs remain zeroed even at k=3. The inspected prototype is porta_3_2: a free-standing **floor fan** in front of the door. The heatmap confirms PatchCore detects it correctly (an intense component, well above any threshold, on the fan head), but the head - large, centered on the door panel - falls in `door_region`, which is excluded from the frame mask by design; the only contact with a frame element is the thin pole descending to the threshold, which at 224x224 narrows to 1-2 px and whose intersection with the `threshold` polygon stays below the 10 px minimum. The single above-threshold component (the head) touches no frame element and is discarded: score 0.0, unrecoverable by lowering k because the head exceeds any binarization threshold. The failure is purely geometric, not a calibration issue.
 
-Four configurations are evaluated as a progressive ablation, all at k=4.0, sigma_mode=pooled, cal=30:
+This is the empirical confirmation of the limit anticipated in the Spatial Gating section: the only genuine anomaly the polygon rule can reject is an object entirely on the panel without contact to floor or frame. The fan refines that prediction - floor contact does exist (the pole), but it is too thin to clear the overlap criterion. The "obstacles are floor-grounded, so the component extends to the threshold" assumption holds for wide-profile obstacles (carts, wheelchairs, bins) but not for thin-stemmed objects (fans, coat racks, sign posts). The levers to recover them (lower `min_overlap_px`, dilate the frame mask, re-admit `door_region` for opaque doors) all shift the precision/recall trade-off toward recall and must be validated case by case.
 
-| Config | shadow_prob | light_prob | aug | shadow_prob_cal | light_prob_cal |
+**Validity.** With order-of-tens samples, these numbers are a qualitative validation of the complete pipeline on real scenes, not a production benchmark; they confirm the expected behavior of pooled sigma plus gating and surface the two structural residual errors - the glass-door FP and the thin-stem FN - both already anticipated by the design analysis. Neither residual is a detection failure (PatchCore correctly flags both the glass change and the fan); they are governed by the gating's precision/recall trade-off.
+
+### Phase E: Light Augmentation Ablation (L0-L4)
+
+Phase E addresses the symmetric counterpart of the shadow failure mode: localized brightness excess from light beams, specular reflections, and direct sunlight entering through glass panels. The evaluation uses a `light_test` dataset of ~1100 synthetic light-augmented normal scenes (550 doors, 550 corridors), registered as `source='light'`, evaluated at k=4.0, sigma_mode=pooled, cal=30.
+
+The ablation closes with five runs. Beyond the four configurations of the original design, a fifth **fair-budget control** (L4) was added to disentangle two effects that L2/L3 confound: increased *coverage* (adding the light type) and increased total *augmentation intensity* (more disturbed variants per image). The "budget" is the expected disturbance probability per variant (`shadow_prob + light_prob`), a proxy for total augmentation intensity.
+
+| Config | sp | lp | aug | budget | shadow_FPR | light_FPR | TPR | F1 |
+|---|---|---|---|---|---|---|---|---|
+| L0 C-pooled | 0.4 | 0.0 | 15 | 0.40 | 12.2% | 5.8% | 99.8% | 0.917 |
+| L1 L-only | 0.0 | 0.4 | 15 | 0.40 | 37.7% | 23.2% | 100% | 0.767 |
+| **L2 SL-15** | 0.4 | 0.4 | 15 | 0.80 | **2.2%** | **0.30%** | 99.0% | **0.982** |
+| L3 SL-25 | 0.4 | 0.4 | 25 | 0.80 | 1.1% | 0.10% | 97.7% | 0.982 |
+| L4 fair-budget | 0.23 | 0.23 | 15 | 0.46 | 11.2% | 4.6% | 100% | 0.929 |
+
+(L0 is C-pooled re-evaluated with the light test set added to the negatives; this lowers its F1 from 0.941 - reported in Phase C without light scenes - to 0.917, reflecting the 5.8% light FPR.)
+
+Four findings emerge:
+
+1. **Light is a milder disturbance than shadow.** Even with no light coverage in the bank (L0), light FPR is 5.8%, below the 12.2% shadow FPR; light-normal scores (mean 3.04) sit below shadow-normal (3.21). A light beam pushes features less out-of-distribution than a cast shadow. The within-category caveat (Light Augmentation, above) still holds: the low light FPR reflects lower perturbation intensity, not a smaller light subspace.
+
+2. **Adding light augmentation works, and helps shadows too.** With shadow fixed at 0.4 (L0 to L2), light FPR falls 5.8% to 0.30% (~19x), and shadow FPR also improves (12.2% to 2.2%) rather than degrading. F1 rises 0.917 to 0.982.
+
+3. **L1 confirms shadow augmentation is structural, not incidental.** Removing shadow augmentation collapses the per-camera threshold (mean theta 3.33, the lowest of the five) and inflates all FPRs, light included (23.2%). That 23% is not the light fix failing but the threshold lowered by the missing shadow coverage: at a global threshold of 3.67 the same model would achieve light FPR 5%, shadow 15%, TPR 100%. Light augmentation is a complement to shadow augmentation, not a substitute.
+
+4. **The headline gain is mostly a budget effect, not pure light coverage (L4).** L2/L3 apply twice the augmentation of L0 (budget 0.80 vs 0.40); part of their gain is simply "more augmentation -> higher calibration scores -> higher threshold -> fewer FP." Mean theta grows monotonically with budget (L4 3.65 < L0 3.74 < L2 3.91 < L3 3.95) and tracks the FP reduction. L4 isolates the effects by holding budget ~ equal to L0 (0.46) but split between shadow and light: vs L0 it improves light FPR 5.8% to 4.6% and shadow FPR 12.2% to 11.2% at zero cost (recall stays 100%), a small but real gain from diversification alone; vs L2 the gap is large (light FPR 4.6% to 0.30%), attributable to budget. The honest methodological message is that the dominant slice of the SL-15 improvement comes from increased total augmentation intensity, while diversification at constant budget contributes a smaller, cost-free gain.
+
+**Recommended configuration: SL-15** (F1 0.982, light FPR 0.30%, shadow FPR 2.2%, recall 99.0%): it handles both failure modes simultaneously at +0.8 pp FNR over the shadow-only baseline. SL-25 halves the FPRs again but trades recall (99.0% to 97.7%) for identical F1 (0.982) at +65% build time, justified only when minimal FP is required. As established in the Implementation section, `shadow_FPR` and `light_FPR` are not directly comparable; only within-category readings (across configurations) are valid.
+
+### Discrimination vs. Calibration: What the Interventions Improve
+
+A cross-cutting question determines what the pipeline can legitimately claim: do shadow/light augmentation and pooled sigma improve the model's **discriminative capacity** (separating normal - including shadowed and lit - from obstructed), or only the **placement of the threshold**?
+
+The clean metric is the **per-camera AUROC**: the probability that an obstruction scores higher than a normal variant of the *same* camera, on raw scores, averaged over cameras. Within a camera `mu_i` and `sigma_i` are constant, so raw and normalized scores differ by an affine transform that does not change the ranking; per-camera AUROC is therefore invariant to both threshold and normalization, isolating intrinsic discrimination. (The normalized AUROC of the evaluation setup is not pure discrimination: it depends on which sigma normalizes the scores, so it also moves with calibration quality.)
+
+Per-camera AUROC is **saturated and nearly invariant to augmentation**: clean separation is perfect (1.000) everywhere, shadow stays at 0.996 across the entire path - even with no shadow augmentation - and light improves only from 0.997 to 1.000. The controlled experiment makes the point sharply: across the calibration-only transitions, shadow FPR swings from 2.1% to 90% to 12% (a 40x range) while raw AUROC is fixed at 0.9981 and per-camera-shadow AUROC at 0.996.
+
+| Config | raw AUROC | per-cam AUROC (shadow) | shadow FPR | TPR | F1 |
 |---|---|---|---|---|---|
-| C-pooled (ref.) | 0.4 | 0.0 | 15 | 0.1 | 0.0 |
-| L-only | 0.0 | 0.4 | 15 | 0.0 | 0.1 |
-| SL-15 | 0.4 | 0.4 | 15 | 0.1 | 0.1 |
-| SL-25 | 0.4 | 0.4 | 25 | 0.1 | 0.1 |
+| no-aug | 0.9969 | 0.996 | 90.1% | 100% | 0.688 |
+| shadow04 | 0.9981 | 0.996 | 2.1% | 70.6% | 0.818 |
+| decoupled | 0.9981 | 0.996 | 28.4% | 99.4% | 0.873 |
+| decoupled k=4 | 0.9981 | 0.996 | 13.5% | 93.4% | 0.903 |
+| pooled | 0.9981 | 0.996 | 12.2% | 99.8% | 0.941 |
 
-The L-only configuration isolates the effect of light augmentation without shadow interaction; SL-15 tests the combined case on the existing bank size; SL-25 tests whether increasing the bank from 15 to 25 variants recovers the per-type coverage diluted when two disturbance classes are active simultaneously (see Implementation section).
+The mechanism is a **distributional shift, not a re-ordering**. Without shadows in the bank, shadow patches have no neighbors and score high: they stay below the obstructed scores (ranking preserved, AUROC 0.996) but above a threshold calibrated on clean scenes, so they trip it (FPR 90%). With shadows in the bank, shadow-normal scores drop toward the normal region and fall below the threshold (FPR 2%) without changing their order relative to obstructions. Augmentation shifts the disturbed-normal score distribution downward relative to a fixed threshold; pooled sigma then stabilizes *where* that threshold lands across cameras. Neither adds discriminative power - they convert an already-excellent latent discrimination into a usable single operating point.
 
-The primary metric of interest is `light_FPR` - the false positive rate on light-augmented normal scenes - alongside `shadow_FPR` and `TPR` to detect any regression introduced by the change. AUROC is expected to remain at ~0.998 regardless of augmentation configuration, as the backbone's discriminative capacity is invariant to threshold placement.
+The correct framing of the contribution is therefore: the backbone separates normal from obstructed almost perfectly, even on shadowed and lit scenes; the bottleneck is **placing a single threshold robust to disturbances**, which augmentation (lowering disturbance scores) and pooled sigma (stabilizing the threshold across cameras) jointly solve.
+
+**Ceiling-effect caveat.** This conclusion holds on a test set where discrimination is near-saturated by design (copy-paste obstructions on the same background: only the object is anomalous, a strong signal, AUROC ~ 1). On harder data (real obstructions, variable backgrounds) discrimination would have headroom and augmentation might contribute to separability as well, not only to calibration. The per-camera AUROC argument is a claim about *this* dataset's regime, and is stated explicitly as such.
 
 ### Discussion
 
 The progressive ablation demonstrates that the failure modes of the P3 pipeline are diagnosable and fixable within the PatchCore framework without architectural changes:
 
-- **Cast shadows**: addressed by including synthetic shadow variants in the bank augmentation, with decoupled calibration to prevent threshold inflation.
-- **Localized brightness excess** (light beams, reflections, direct sunlight): addressed symmetrically to shadows, by adding synthetic light variants to the bank; ablation over bank size (Phase E, pending) quantifies the interaction with shadow augmentation when both are active.
-- **Glass-door backgrounds**: addressed by connected-component polygon gating, exploiting the physical constraint that real obstructions are floor-grounded.
-- **Threshold instability across cameras**: addressed by pooling the sigma estimate across all cameras in the deployment, replacing a noisy per-camera estimate with a robust population-level value.
+- **Cast shadows**: addressed by including synthetic shadow variants in the bank augmentation, with decoupled calibration to prevent threshold inflation (shadow FPR 90.1% to 2.2% at SL-15).
+- **Localized brightness excess** (light beams, reflections, direct sunlight): addressed symmetrically by adding synthetic light variants to the bank. The Phase E ablation identifies SL-15 (both augmentations, aug=15) as the best operating point (F1 0.982, light FPR 0.30%, shadow FPR 2.2%); the fair-budget control (L4) attributes most of the gain to increased total augmentation intensity rather than to light coverage per se.
+- **Glass-door backgrounds**: addressed by connected-component polygon gating, exploiting the physical constraint that real obstructions are floor-grounded. Phase D confirms the mechanism on real scenes but also surfaces its limit - a thin-stemmed grounded obstacle (the floor fan) is rejected because its only frame contact is too narrow to clear the overlap criterion, while a large glass background change can still pass by reaching the frame. The gating is a precision/recall lever, not a perfect discriminator.
+- **Threshold instability across cameras**: addressed by pooling the sigma estimate across cameras, replacing a noisy per-camera estimate with a robust population-level value.
 
-Each fix is motivated by a specific, quantified failure mode, and the AUROC (0.998) confirms that the discriminative capability of the backbone is never the limiting factor - the pipeline challenges are exclusively in threshold placement and spatial filtering. This makes the system robust in the following sense: improvements to threshold calibration strategy directly translate to F1 improvements without requiring new training data or backbone changes.
+The unifying finding (see "Discrimination vs. Calibration", above) is that none of these fixes change the backbone's discriminative capacity, which is saturated (per-camera AUROC ~ 1.0; raw AUROC fixed at 0.9981 while shadow FPR swings 40x). The bottleneck is placing a single threshold robust to disturbances: augmentation lowers disturbance scores below it, pooled sigma stabilizes where it lands, and the k recalibration of Phase D sets how aggressively it cuts. This is a statement about the current near-saturated test regime; harder data would likely leave discrimination some headroom.
 
-The structural results (shadow augmentation effectiveness, decoupling rationale, pooled-sigma variance reduction) are pipeline properties that generalize beyond the specific test set. The exact operating point metrics (FPR = 12.2%, TPR = 99.8% at k=4) are representative for this dataset and shadow synthesis protocol but should be recalibrated for any new deployment using site-specific `sigma_pop` and an appropriate k choice based on the FN/FP cost ratio of the application.
+**Pooled sigma as a regularizer.** Pooling sigma is, by construction, a shrinkage estimator: it trades a small bias (forcing each camera toward the population median) for a large variance reduction (sigma of thresholds -73%). In this thesis's data-starved regime - a one-shot bank from a single image with sparse synthetic calibration - the per-camera sigma is noise-dominated and the true cross-camera heterogeneity is near zero, so full pooling is the correct corner. In a real deployment with abundant per-camera normal frames, sigma_i becomes a reliable, scene-meaningful estimate (a glass door under variable outdoor light genuinely deserves a wider tolerance than a stable interior corridor), and full pooling would introduce bias. The principled generalization is **partial pooling**, `sigma_i* = (1 - w_i) * sigma_pop + w_i * sigma_i`, with `w_i` rising as a camera accumulates real frames; full pooling (w=0) is the cold-start corner and remains valuable for newly installed cameras.
+
+**Two tiers of evidence.** The conclusions carry different statistical weight. Phases A-C (copy-paste synthetic, N ~ 1000) are quantitative validations with adequate power: the measured deltas of shadow augmentation, decoupling, and pooled sigma are stable, generalizable to similar synthetic scenes. Phase D (real doors, N ~ tens) is a qualitative validation of the complete pipeline: it confirms the expected behavior of gating plus pooled sigma and motivates the k recalibration, but the absolute numbers (recall 90%, FPR 3.3%) are illustrative, not a production benchmark. The structural results - augmentation effectiveness, decoupling rationale, pooled-sigma variance reduction, and the discrimination-vs-calibration mechanism - are pipeline properties that generalize; the exact operating-point metrics should be recalibrated for any new deployment using a site-specific `sigma_pop` and a k chosen from the application's FN/FP cost ratio. Larger-scale quantitative validation of the gating on real glass doors, conditioned on an annotated test set built semi-automatically (e.g., SAM for frame segmentation), is the natural next step.

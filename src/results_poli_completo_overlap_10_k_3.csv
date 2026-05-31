@@ -1,0 +1,67 @@
+reference_id,test_id,test_type,venue_type,file_path,score,normalized_score,threshold,is_anomaly,mu,sigma,gated
+non_ostruite/poli ingegneria/porta_1_ref.jpg,non_ostruite/poli ingegneria/porta_1_ref.jpg,normal,porta,non_ostruite/poli ingegneria/porta_1_ref.jpg,0.0,-11.175262,3.014533,0,2.376548,0.264504,1
+non_ostruite/poli ingegneria/porta_1_ref.jpg,non_ostruite/poli ingegneria/porta_1_1.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_1_1.jpg,0.0,-11.175262,3.014533,0,2.376548,0.264504,1
+non_ostruite/poli ingegneria/porta_1_ref.jpg,non_ostruite/poli ingegneria/porta_1_2.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_1_2.jpg,0.0,-11.175262,3.014533,0,2.376548,0.264504,1
+non_ostruite/poli ingegneria/porta_1_ref.jpg,non_ostruite/poli ingegneria/porta_1_3.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_1_3.jpg,0.0,-11.175262,3.014533,0,2.376548,0.264504,1
+non_ostruite/poli ingegneria/porta_1_ref.jpg,ostruzioni_poli_ingegneria/porta_1_1.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_1_1.jpg,4.163103,8.400933,3.014533,1,2.376548,0.264504,1
+non_ostruite/poli ingegneria/porta_1_ref.jpg,ostruzioni_poli_ingegneria/porta_1_2.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_1_2.jpg,4.368732,9.367864,3.014533,1,2.376548,0.264504,1
+non_ostruite/poli ingegneria/porta_1_ref.jpg,ostruzioni_poli_ingegneria/porta_1_3.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_1_3.jpg,4.262137,8.866621,3.014533,1,2.376548,0.264504,1
+non_ostruite/poli ingegneria/porta_2_ref.jpg,non_ostruite/poli ingegneria/porta_2_ref.jpg,normal,porta,non_ostruite/poli ingegneria/porta_2_ref.jpg,0.0,-12.941561,3.390156,0,2.752172,0.160819,1
+non_ostruite/poli ingegneria/porta_2_ref.jpg,non_ostruite/poli ingegneria/porta_2_1.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_2_1.jpg,0.0,-12.941561,3.390156,0,2.752172,0.160819,1
+non_ostruite/poli ingegneria/porta_2_ref.jpg,non_ostruite/poli ingegneria/porta_2_2.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_2_2.jpg,0.0,-12.941561,3.390156,0,2.752172,0.160819,1
+non_ostruite/poli ingegneria/porta_2_ref.jpg,non_ostruite/poli ingegneria/porta_2_3.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_2_3.jpg,0.0,-12.941561,3.390156,0,2.752172,0.160819,1
+non_ostruite/poli ingegneria/porta_2_ref.jpg,ostruzioni_poli_ingegneria/porta_2_1.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_2_1.jpg,4.247982,7.03376,3.390156,1,2.752172,0.160819,1
+non_ostruite/poli ingegneria/porta_2_ref.jpg,ostruzioni_poli_ingegneria/porta_2_2.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_2_2.jpg,4.187737,6.750469,3.390156,1,2.752172,0.160819,1
+non_ostruite/poli ingegneria/porta_2_ref.jpg,ostruzioni_poli_ingegneria/porta_2_3.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_2_3.jpg,4.307792,7.315005,3.390156,1,2.752172,0.160819,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,non_ostruite/poli ingegneria/porta_3_ref.jpg,normal,porta,non_ostruite/poli ingegneria/porta_3_ref.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,non_ostruite/poli ingegneria/porta_3_1.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_3_1.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,non_ostruite/poli ingegneria/porta_3_2.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_3_2.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,non_ostruite/poli ingegneria/porta_3_3.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_3_3.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,non_ostruite/poli ingegneria/porta_3_4.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_3_4.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,non_ostruite/poli ingegneria/porta_3_5.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_3_5.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,non_ostruite/poli ingegneria/porta_3_6.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_3_6.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,non_ostruite/poli ingegneria/porta_3_7.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_3_7.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,non_ostruite/poli ingegneria/porta_3_8.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_3_8.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,non_ostruite/poli ingegneria/porta_3_9.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_3_9.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,ostruzioni_poli_ingegneria/porta_3_1.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_3_1.jpg,4.562267,10.757222,2.912605,1,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,ostruzioni_poli_ingegneria/porta_3_2.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_3_2.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,ostruzioni_poli_ingegneria/porta_3_3.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_3_3.jpg,4.332879,9.678569,2.912605,1,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,ostruzioni_poli_ingegneria/porta_3_4.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_3_4.jpg,3.995132,8.090378,2.912605,1,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,ostruzioni_poli_ingegneria/porta_3_5.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_3_5.jpg,3.865123,7.479036,2.912605,1,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,ostruzioni_poli_ingegneria/porta_3_6.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_3_6.jpg,3.94462,7.852855,2.912605,1,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,ostruzioni_poli_ingegneria/porta_3_7.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_3_7.jpg,4.149212,8.81491,2.912605,1,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,ostruzioni_poli_ingegneria/porta_3_8.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_3_8.jpg,4.225663,9.174406,2.912605,1,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_3_ref.jpg,ostruzioni_poli_ingegneria/porta_3_9.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_3_9.jpg,0.0,-10.695965,2.912605,0,2.27462,0.39943,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,non_ostruite/poli ingegneria/porta_4_ref.jpg,normal,porta,non_ostruite/poli ingegneria/porta_4_ref.jpg,0.0,-13.275378,3.461146,0,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,non_ostruite/poli ingegneria/porta_4_1.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_4_1.jpg,0.0,-13.275378,3.461146,0,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,non_ostruite/poli ingegneria/porta_4_2.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_4_2.jpg,0.0,-13.275378,3.461146,0,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,non_ostruite/poli ingegneria/porta_4_3.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_4_3.jpg,0.0,-13.275378,3.461146,0,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,non_ostruite/poli ingegneria/porta_4_4.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_4_4.jpg,3.872844,4.935928,3.461146,1,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,non_ostruite/poli ingegneria/porta_4_5.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_4_5.jpg,0.0,-13.275378,3.461146,0,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,non_ostruite/poli ingegneria/porta_4_6.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_4_6.jpg,0.0,-13.275378,3.461146,0,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,non_ostruite/poli ingegneria/porta_4_7.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_4_7.jpg,0.0,-13.275378,3.461146,0,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,non_ostruite/poli ingegneria/porta_4_8.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_4_8.jpg,0.0,-13.275378,3.461146,0,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,non_ostruite/poli ingegneria/porta_4_9.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_4_9.jpg,0.0,-13.275378,3.461146,0,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,ostruzioni_poli_ingegneria/porta_4_1.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_4_1.jpg,4.479152,7.786976,3.461146,1,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,ostruzioni_poli_ingegneria/porta_4_2.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_4_2.jpg,4.539441,8.070473,3.461146,1,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,ostruzioni_poli_ingegneria/porta_4_3.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_4_3.jpg,4.363631,7.24376,3.461146,1,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,ostruzioni_poli_ingegneria/porta_4_4.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_4_4.jpg,3.73618,4.293292,3.461146,1,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,ostruzioni_poli_ingegneria/porta_4_5.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_4_5.jpg,4.112076,6.060871,3.461146,1,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,ostruzioni_poli_ingegneria/porta_4_6.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_4_6.jpg,3.882476,4.981221,3.461146,1,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,ostruzioni_poli_ingegneria/porta_4_7.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_4_7.jpg,3.973947,5.411346,3.461146,1,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,ostruzioni_poli_ingegneria/porta_4_8.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_4_8.jpg,3.532981,3.337788,3.461146,1,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_4_ref.jpg,ostruzioni_poli_ingegneria/porta_4_9.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_4_9.jpg,0.0,-13.275378,3.461146,0,2.823162,0.146698,1
+non_ostruite/poli ingegneria/porta_5_ref.jpg,non_ostruite/poli ingegneria/porta_5_ref.jpg,normal,porta,non_ostruite/poli ingegneria/porta_5_ref.jpg,0.0,-10.133851,2.793064,0,2.15508,0.547244,1
+non_ostruite/poli ingegneria/porta_5_ref.jpg,non_ostruite/poli ingegneria/porta_5_1.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_5_1.jpg,0.0,-10.133851,2.793064,0,2.15508,0.547244,1
+non_ostruite/poli ingegneria/porta_5_ref.jpg,non_ostruite/poli ingegneria/porta_5_2.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_5_2.jpg,0.0,-10.133851,2.793064,0,2.15508,0.547244,1
+non_ostruite/poli ingegneria/porta_5_ref.jpg,non_ostruite/poli ingegneria/porta_5_3.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_5_3.jpg,0.0,-10.133851,2.793064,0,2.15508,0.547244,1
+non_ostruite/poli ingegneria/porta_5_ref.jpg,ostruzioni_poli_ingegneria/porta_5_1.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_5_1.jpg,5.087831,13.7907,2.793064,1,2.15508,0.547244,1
+non_ostruite/poli ingegneria/porta_5_ref.jpg,ostruzioni_poli_ingegneria/porta_5_2.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_5_2.jpg,4.572112,11.36563,2.793064,1,2.15508,0.547244,1
+non_ostruite/poli ingegneria/porta_5_ref.jpg,ostruzioni_poli_ingegneria/porta_5_3.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_5_3.jpg,4.921253,13.007398,2.793064,1,2.15508,0.547244,1
+non_ostruite/poli ingegneria/porta_6_ref.jpg,non_ostruite/poli ingegneria/porta_6_ref.jpg,normal,porta,non_ostruite/poli ingegneria/porta_6_ref.jpg,0.0,-13.323506,3.471382,0,2.833397,0.126681,1
+non_ostruite/poli ingegneria/porta_6_ref.jpg,non_ostruite/poli ingegneria/porta_6_1.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_6_1.jpg,0.0,-13.323506,3.471382,0,2.833397,0.126681,1
+non_ostruite/poli ingegneria/porta_6_ref.jpg,non_ostruite/poli ingegneria/porta_6_2.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_6_2.jpg,0.0,-13.323506,3.471382,0,2.833397,0.126681,1
+non_ostruite/poli ingegneria/porta_6_ref.jpg,non_ostruite/poli ingegneria/porta_6_3.jpg,bg_normal,porta,non_ostruite/poli ingegneria/porta_6_3.jpg,0.0,-13.323506,3.471382,0,2.833397,0.126681,1
+non_ostruite/poli ingegneria/porta_6_ref.jpg,ostruzioni_poli_ingegneria/porta_6_1.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_6_1.jpg,4.483732,7.760384,3.471382,1,2.833397,0.126681,1
+non_ostruite/poli ingegneria/porta_6_ref.jpg,ostruzioni_poli_ingegneria/porta_6_2.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_6_2.jpg,4.174763,6.307517,3.471382,1,2.833397,0.126681,1
+non_ostruite/poli ingegneria/porta_6_ref.jpg,ostruzioni_poli_ingegneria/porta_6_3.jpg,obstructed,porta,ostruzioni_poli_ingegneria/porta_6_3.jpg,4.288405,6.841896,3.471382,1,2.833397,0.126681,1

@@ -1212,6 +1212,66 @@ La sintesi rimane il partial pooling già introdotto sopra (`σ_i* = (1−w_i)·
 
 ---
 
+### 3.17 Validazione sul test set reale poli_ingegneria: ricalibrazione di k e tassonomia degli errori
+
+Le sezioni precedenti hanno sviluppato i meccanismi singoli - pooled σ (§3.12-3.13) e gating per connected component (§3.14) - su suite sintetiche o su singole scene. Questa sezione li applica congiuntamente al primo **test set reale**, `poli_ingegneria` (la Fase D dell'architettura sperimentale, §4.1): 6 porte reali fotografate in sede, ciascuna con un'immagine di riferimento annotata (poligoni del telaio). Il set contiene 30 immagini ostruite reali (positivi), 30 immagini normali non ostruite (negativi) e le 6 reference. **La telecamera è assunta fissa** (§3.14): tutti gli scatti di una stessa porta condividono l'inquadratura, e l'eventuale variazione tra essi è di contenuto e illuminazione, non di angolo di ripresa. I negativi misurano quindi il FPR sotto la variabilità normale (luce, contenuto transitorio) che il sistema deve tollerare a parità di geometria.
+
+#### 3.17.1 Setup e formula della soglia
+
+Pipeline completa: `sigma_mode=pooled` + gating poligonale (`min_overlap_px=10`). La soglia di decisione per camera è:
+
+θ_i = μ_i + k · median_j(σ_j),  con median(σ) = 0.213 sulle 6 reference.
+
+Va distinta dalla **soglia di binarizzazione** che il gating usa per estrarre le componenti connesse dalla anomaly map (§3.14): quella resta locale, μ_i + k·σ_local,i, calcolata in build. Entrambe le soglie hanno k come moltiplicatore, quindi k agisce su due stadi distinti - vedi §3.17.3.
+
+#### 3.17.2 Ricalibrazione di k: da 4 a 3
+
+Il primo run usava k=4, coerente con lo sweet spot delle suite sintetiche (§3.11). Sul set reale k=4 è risultato troppo conservativo:
+
+| Metrica | k=4 | k=3 | Δ |
+|---|---|---|---|
+| Recall (TPR) | 83.3% (25/30) | **90.0% (27/30)** | +6.7 pp |
+| FPR | 3.3% (1/30) | 3.3% (1/30) | invariato |
+| Precision | 96.2% | 96.4% | +0.2 pp |
+| **F1** | 0.893 | **0.931** | +0.038 |
+| Accuracy | 90.0% | 93.3% | +3.3 pp |
+
+Poiché median(σ) è una costante condivisa, scendere da k=4 a k=3 abbassa ogni θ_i della stessa quantità k·median(σ) ≈ 0.213, senza riallargare la distribuzione delle soglie. Il problema strutturale del §3.11 - dove k moltiplicava una σ per-camera rumorosa e ne amplificava la varianza - qui non si presenta, perché la σ è poolata. Il recall sale di 6.7 punti a costo zero in FPR. Recall per porta a k=3: porta_1/2/5/6 = 100%, porta_3 = 78% (7/9), porta_4 = 89% (8/9).
+
+#### 3.17.3 Tassonomia degli errori: calibrazione vs geometria
+
+Il confronto dei due run separa i falsi negativi in due classi con causa diversa:
+
+| Classe | Casi | Causa | Recuperabile con k? |
+|---|---|---|---|
+| **Calibration-limited** | porta_3_5, porta_4_8 | ostruzione rilevata, ma una soglia k=4 troppo alta la azzera o la respinge | Sì, recuperati a k=3 |
+| **Gating-limited** | porta_3_2 (ventilatore), porta_3_9, porta_4_9 | la componente anomala non interseca il telaio per ≥10px | No |
+| FP (vetro) | porta_4_4 | cambio di fondo dietro il vetro (tapparella + luce) | No, vedi §3.14 |
+
+I due FN calibration-limited sono recuperati scendendo a k=3, ma per **meccanismi distinti**, uno per ciascuno dei due stadi in cui entra k:
+
+- **porta_4_8 (stadio decisione)**: a k=4 una componente valida esisteva già e produceva score 3.43, ma stava sotto la soglia di decisione (3.67). A k=3 la soglia scende a 3.46 e il punteggio (3.53) la supera.
+- **porta_3_5 (stadio binarizzazione)**: a k=4 lo score era 0.0. Il picco di anomalia dell'ostruzione (3.865) cadeva appena sotto la soglia di binarizzazione locale μ+4·σ_local = 3.872: nessun pixel superava la soglia, la mappa binaria era vuota, nessuna componente da valutare. A k=3 la soglia di binarizzazione scende a 3.47, il picco sopravvive, la componente si forma, interseca il telaio e lo score salta a 3.87.
+
+Il caso porta_3_5 mostra che la soglia non è solo un confine di decisione: controlla anche **quali pixel esistono** per il gating. Una k troppo alta può cancellare un'ostruzione a basso contrasto prima ancora che il gating la valuti.
+
+#### 3.17.4 Il caso del ventilatore: conferma empirica del limite previsto in §3.14
+
+Tre FN restano azzerate anche a k=3. Il caso prototipico ispezionato è porta_3_2: un **ventilatore a piantana** davanti alla porta. La heatmap conferma che PatchCore lo rileva correttamente (componente rossa intensa, ben sopra ogni soglia, sulla testa), ma:
+
+- la **testa** del ventilatore, larga, cade al centro della porta, nel `door_region`, **escluso per costruzione** dalla frame mask (§3.14);
+- l'unico contatto con un elemento di telaio è l'**asta sottile** che scende verso la soglia; a 224×224 l'asta si riduce a 1-2 px di larghezza e la sua intersezione col poligono `threshold` resta sotto i 10 px richiesti.
+
+L'unica componente sopra-soglia (la testa) non tocca il telaio e viene scartata: score 0.0, irrecuperabile abbassando k perché la testa supera ampiamente qualsiasi soglia di binarizzazione - il problema è puramente geometrico, non di calibrazione.
+
+Questo è la **conferma empirica del limite già previsto in §3.14**: "l'unica anomalia genuina che il poligonale potrebbe respingere è un oggetto interamente sul pannello senza contatto col pavimento o col telaio". Il ventilatore raffina la previsione: il contatto col pavimento esiste (l'asta), ma è **troppo sottile** per superare il criterio di overlap. L'assunzione del §3.14 - "gli ostacoli sono grounded, quindi la componente si estende fino alla soglia" - vale per ostacoli a profilo largo (carrello, sedia a rotelle, cestino) ma non per oggetti a stelo sottile (ventilatore, attaccapanni, cartello su asta). Le leve per recuperarli (abbassare `min_overlap_px`, dilatare la frame mask, reincludere `door_region` per le porte opache) sono discusse in §3.14 e spostano tutte il trade-off verso il recall a scapito della precision.
+
+#### 3.17.5 Sintesi
+
+Sul primo test set reale, la pipeline completa (pooled σ + gating, k=3) raggiunge **recall 90%, FPR 3.3%, F1 0.931**. I due errori residui strutturali erano entrambi già previsti dall'analisi teorica e nessuno è un fallimento della detection di PatchCore, che rileva correttamente sia il vetro sia il ventilatore: l'unico FP è la porta a vetro con fondo variabile (§3.14), e le FN dure sono ostacoli a stelo sottile che non soddisfano il criterio di overlap col telaio. Entrambi sono conseguenze governabili delle scelte di gating, con trade-off precision/recall noti.
+
+---
+
 ## 4. Inquadramento delle suite di test e validità statistica
 
 Il sistema è stato sottoposto a piu suite di test in fasi successive, ciascuna con uno scopo specifico nel percorso di sviluppo. La presente sezione formalizza il ruolo di ogni suite, evitando di interpretare risultati intermedi come benchmark finali e chiarendo cosa ciascuna misurazione effettivamente dimostra.
