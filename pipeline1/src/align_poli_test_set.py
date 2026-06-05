@@ -15,7 +15,7 @@ suffixed `_aligned`. Original entries remain untouched, so you can run
 `evaluate-db` on either version by toggling --ob-source and --bg-source.
 
 Usage:
-    python src/align_poli_test_set.py
+    python pipeline1/src/align_poli_test_set.py
 """
 from __future__ import annotations
 import sqlite3

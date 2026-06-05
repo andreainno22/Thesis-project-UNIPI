@@ -27,14 +27,14 @@ EVALUATE - valutazione sistematica su directory:
   python anomaly_detection_patch_core.py evaluate \
       --bg-dir    Dataset/non_ostruite/porte \
       --obstr-dir Dataset/ostruzioni_reali/images \
-      --out-csv   eval_results.csv \
+      --out-csv   pipeline1/results/eval_results.csv \
       --k 3.0 --aug 15 --cal 10 --coreset-p 0.01
 
 EVALUATE-DB - valutazione con coppie reference/ostruita da SQLite:
   python anomaly_detection_patch_core.py evaluate-db \
       --db           Aggregated_dataset_db/occlusion.db \
       --dataset-root Dataset \
-      --out-csv      results.csv \
+      --out-csv      pipeline1/results/results.csv \
       --split        test \         # filtro split: train/val/test (opzionale)
       --venue        porta \        # filtro venue: porta/corridoio/scala (opzionale)
       --ref-source   custom \       # filtro source per reference (opzionale)
@@ -1256,7 +1256,7 @@ def test_image(bank_path: str, img_path: str, roi: str = None,
 def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
              k_sigma: float = 3.0, n_augments: int = 15, n_cal: int = 10,
              coreset_p: float = CORESET_P, test_aug_seeds: list = None,
-             out_csv: str = "eval_results.csv", n_workers: int = 1,
+             out_csv: str = "pipeline1/results/eval_results.csv", n_workers: int = 1,
              shadow_prob: float = 0.0, shadow_prob_cal: float | None = None):
     """
     Valutazione sistematica di PatchCore su un dataset di immagini background.
@@ -1381,6 +1381,7 @@ def evaluate(bg_dir: str, obstr_dir: str = None, roi: str = None,
 
     # ── Salva CSV ─────────────────────────────────────────────────────────────
     out_path = Path(out_csv)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", newline="", encoding="utf-8") as csvfile:
         fieldnames = ["name", "mu", "sigma", "threshold",
                       "free_scores", "fp_count", "obstr_score", "is_tp"]
@@ -1690,6 +1691,8 @@ def evaluate_from_db(
 
         roi_tuple = parse_roi(roi)
 
+        if out_csv:
+            Path(out_csv).parent.mkdir(parents=True, exist_ok=True)
         artifact_path = str(Path(out_csv)) if out_csv else None
         dataset_filter = {
             "split": split,
@@ -2174,8 +2177,8 @@ def main():
                         help=f"Frazione coreset (default: {CORESET_P})")
     p_eval.add_argument("--test-seeds", default="2000,2001,2002",
                         help="Seed CSV per test augmentations (default: 2000,2001,2002)")
-    p_eval.add_argument("--out-csv",    default="eval_results.csv",
-                        help="Percorso output CSV risultati (default: eval_results.csv)")
+    p_eval.add_argument("--out-csv",    default="pipeline1/results/eval_results.csv",
+                        help="Percorso output CSV risultati (default: pipeline1/results/eval_results.csv)")
     p_eval.add_argument("--shadow-prob", type=float, default=0.0,
                         help="Probabilità ombra sulle varianti di build (default: 0.0)")
     p_eval.add_argument("--shadow-prob-cal", type=float, default=None,

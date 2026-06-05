@@ -9,7 +9,7 @@ Prefers cv2 (same method as align_poli_test_set.py). If cv2 is missing it falls
 back to a numpy FFT phase-correlation that estimates translation only.
 
 Usage:
-    python src/check_poli_alignment.py
+    python pipeline1/src/check_poli_alignment.py
 """
 from __future__ import annotations
 from pathlib import Path
@@ -47,7 +47,7 @@ def read_gray(path: Path):
     except ImportError:
         raise SystemExit(
             "Neither cv2 nor PIL is available. Run this in the tesi_env "
-            "container: conda run -n tesi_env python src/check_poli_alignment.py"
+            "container: conda run -n tesi_env python pipeline1/src/check_poli_alignment.py"
         )
     with Image.open(path) as im:
         return np.asarray(im.convert("L"))

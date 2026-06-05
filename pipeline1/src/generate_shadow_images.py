@@ -15,7 +15,7 @@ Tipi di ombra disponibili:
 
 Uso tipico:
   # Genera + inserisci nel DB (consigliato)
-  python src/generate_shadow_images.py \\
+  python pipeline1/src/generate_shadow_images.py \\
     --input-dir  Dataset/non_ostruite/porte \\
     --output-dir Dataset/shadow_test/normali \\
     --n-variants 3 --shadow-type random \\
@@ -24,7 +24,7 @@ Uso tipico:
     --dataset-root Dataset
 
   # Solo genera immagini, senza DB
-  python src/generate_shadow_images.py \\
+  python pipeline1/src/generate_shadow_images.py \\
     --input-dir Dataset/non_ostruite/porte \\
     --output-dir Dataset/shadow_test/normali
 """

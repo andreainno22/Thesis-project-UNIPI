@@ -27,7 +27,7 @@ DB mapping (decided with the user):
 Idempotent: frames are upserted; ROI rows for the reference frames are replaced.
 
 Usage:
-    python src/load_poli_to_db.py
+    python pipeline1/src/load_poli_to_db.py
 """
 from __future__ import annotations
 

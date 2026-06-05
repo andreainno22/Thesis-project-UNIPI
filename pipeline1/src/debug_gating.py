@@ -5,7 +5,7 @@ Shows which anomaly components are accepted or rejected by the
 connected-component gating rule, and how they overlap the frame mask.
 
 Usage:
-    python src/debug_gating.py \
+    python pipeline1/src/debug_gating.py \
         --bank memory_bank.pt \
         --img path/to/test.jpg \
         --roi-json Dataset/roi/reference.json \
