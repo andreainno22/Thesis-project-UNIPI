@@ -1,0 +1,32 @@
+\begin{thebibliography}{1}
+
+\bibitem{Roth2022}
+Karsten Roth, Latha Pemula, Joaquin Zepeda, Bernhard Sch{\"o}lkopf, Thomas
+  Brox, and Peter Gehler.
+\newblock Towards total recall in industrial anomaly detection.
+\newblock In {\em Proceedings of the IEEE/CVF Conference on Computer Vision and
+  Pattern Recognition (CVPR)}, pages 14318--14328, 2022.
+
+\bibitem{SenerSavarese2018}
+Ozan Sener and Silvio Savarese.
+\newblock Active learning for convolutional neural networks: A core-set
+  approach.
+\newblock In {\em International Conference on Learning Representations (ICLR)},
+  2018.
+
+\bibitem{enwiki:1357719950}
+{Wikipedia contributors}.
+\newblock Johnson–lindenstrauss lemma --- {Wikipedia}{,} the free
+  encyclopedia.
+\newblock
+  \url{https://en.wikipedia.org/w/index.php?title=Johnson%E2%80%93Lindenstrauss_lemma&oldid=1357719950},
+  2026.
+\newblock [Online; accessed 10-June-2026].
+
+\bibitem{Zagoruyko2016}
+Sergey Zagoruyko and Nikos Komodakis.
+\newblock Wide residual networks.
+\newblock In {\em Proceedings of the British Machine Vision Conference (BMVC)},
+  2016.
+
+\end{thebibliography}

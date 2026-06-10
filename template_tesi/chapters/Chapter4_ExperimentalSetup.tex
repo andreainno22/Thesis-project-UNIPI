@@ -1,0 +1,200 @@
+\chapter{Experimental Setup}
+\label{chap:setup}
+
+\section{Pipeline Implementation}
+
+\subsection{Unsupervised Anomaly Detection with PatchCore (P3)}
+
+This section reports the concrete technical settings of the method derived in
+Chapter~\ref{chap:method}. Each monitored exit is handled by an independent
+memory bank built from a single reference frame, reflecting the deployment
+reality of a fixed camera with a stable normal scene.
+
+\subsubsection{Backbone and feature extraction}
+
+The backbone is a WideResNet50-2 \cite{Zagoruyko2016} pre-trained on ImageNet and
+used frozen (no fine-tuning). Every image is resized to $224 \times 224$ and
+normalised with ImageNet statistics. Features are read from blocks $\ell_2$ and
+$\ell_3$:
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lcc}
+    \hline
+    Block & Spatial resolution & Channels \\
+    \hline
+    $\ell_2$ & $28 \times 28$ & $512$ \\
+    $\ell_3$ & $14 \times 14$ & $1024$ \\
+    \hline
+  \end{tabular}
+  \caption{Feature maps read from the frozen backbone at $224\times224$ input.}
+  \label{tab:p3-layers}
+\end{table}
+
+The $\ell_3$ map is upsampled bilinearly to $28 \times 28$ and concatenated with
+$\ell_2$ along the channel axis, giving a tensor of shape
+$[\,1536, 28, 28\,]$. The $3 \times 3$ neighbourhood average pooling of
+equation~\eqref{eq:nbagg} is applied with unit stride and same-padding, and the
+result is flattened to $N_p = 784$ patch vectors of dimension $1536$ per image.
+The shallowest block ($56\times56$, low-level texture) and the deepest block
+($7\times7$, class-biased abstraction) are not used.
+
+\subsubsection{Build and calibration settings}
+
+The bank is built from $n_{\mathrm{aug}} = 15$ photometric variants of
+$I_{\mathrm{ref}}$ (random seed $42$); the original reference is excluded. The
+photometric augmentation ranges are listed in Table~\ref{tab:p3-photo}.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lll}
+    \hline
+    Transform & Range & Rationale \\
+    \hline
+    Brightness & $\times[0.85, 1.15]$ & Morning / evening / artificial light \\
+    Contrast & $\times[0.90, 1.10]$ & Direct vs.\ diffuse illumination \\
+    Saturation & $\times[0.90, 1.10]$ & LED / fluorescent / incandescent \\
+    Red-channel shift & $[-8, +8]$ & Colour temperature \\
+    Blue-channel shift & $[-20, +20]$ & Colour temperature \\
+    Gaussian noise & $\sigma \in [1, 4]$ & Sensor noise \\
+    Gaussian blur & $r \in [0.5, 1.5]$, $p=0.3$ & Slight lens defocus \\
+    \hline
+  \end{tabular}
+  \caption{Photometric augmentation applied at build time. No large geometric
+  transform is used, as the camera is fixed.}
+  \label{tab:p3-photo}
+\end{table}
+
+In addition to the photometric transforms, an optional small geometric
+perturbation is available for cameras subject to micro-vibration, disabled by
+default ($\delta_{\max} = 0$, $\rho_{\max} = 0$). When enabled, every variant
+receives a per-variant random translation drawn uniformly in
+$[-\delta_{\max}, +\delta_{\max}]$ pixels on each axis and a random rotation drawn
+uniformly in $[-\rho_{\max}, +\rho_{\max}]$ degrees, applied by bilinear affine
+warping at the original resolution; typical settings are $\delta_{\max} = 8$ px
+and $\rho_{\max} = 2^{\circ}$. Unlike the forbidden flips and wide rotations, this
+jitter perturbs the whole scene rigidly and teaches the memory to tolerate a small
+global displacement at no inference-time cost. It is left off for all experiments
+reported in Chapter~\ref{chap:analysis}, where the data-collection protocol (fixed
+foot position, braced camera) keeps hand-held variation within the native
+tolerance of the neighbourhood pooling and the anomaly-map smoothing.
+
+The raw memory of $n_{\mathrm{aug}} \cdot N_p = 15 \times 784 = 11760$ vectors is
+reduced by greedy coreset selection to a fraction $p = 0.01$ (retaining at least
+$50$ points), leaving about $117$ vectors. For efficiency the greedy selection
+of equation~\eqref{eq:coreset} runs on a sparse random projection to $128$
+dimensions (a Johnson-Lindenstrauss embedding), while the final coreset is taken
+from the original $1536$-dimensional features.
+
+The threshold is calibrated on $n_{\mathrm{cal}} = 10$ further variants generated
+with seed $1000$, disjoint from the bank seed to guarantee statistical
+independence; later experiments raise this to $n_{\mathrm{cal}} = 30$ to reduce
+the sampling error on $\sigma$. The re-weighting of equation~\eqref{eq:reweight}
+uses a neighbourhood of size $b = 9$, and the anomaly map is smoothed with a
+Gaussian filter of $\sigma = 4$. The memory bank is serialised to a single file
+holding the coreset features together with the calibration parameters $\mu$ and
+$\sigma$.
+
+\subsubsection{Anti-leakage separation}
+
+The bank, calibration, and test sets are strictly disjoint
+(Table~\ref{tab:p3-leakage}): no data used to build the memory or calibrate the
+threshold enters the test phase, and $I_{\mathrm{ref}}$ is reserved as the only
+genuinely unseen normal sample.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{llcl}
+    \hline
+    Set & Seed & Contains $I_{\mathrm{ref}}$? & Role \\
+    \hline
+    Bank variants ($n_{\mathrm{aug}}=15$) & $42$ & No & Builds the feature memory \\
+    Calibration variants ($n_{\mathrm{cal}}=10$) & $1000$ & No & Estimates $\mu$ and $\sigma$ \\
+    Normal test & -- & Yes & Independent normal sample \\
+    Obstructed test & -- & -- & Anomalous query \\
+    \hline
+  \end{tabular}
+  \caption{Disjoint partition of data across build, calibration, and test.}
+  \label{tab:p3-leakage}
+\end{table}
+
+\subsubsection{Shadow and light augmentation}
+
+Both disturbance families implement three modalities, summarised in
+Table~\ref{tab:p3-disturb}. They are applied after the photometric transforms,
+stacking $k_s \in [1,3]$ instances per affected variant. The light family adds
+two axes absent from shadows: a diagonal (solar) stripe parameterised by a
+continuous incidence angle, and a warm colour shift (red up, blue down) on the
+elliptical and diagonal-stripe lights, modelling the chromaticity of direct
+sunlight. As a consequence the light subspace is intrinsically richer, so the
+raw values of light and shadow false-positive rates are not directly comparable;
+only within-category comparisons (across configurations) are legitimate.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lll}
+    \hline
+    Modality & Shadow & Light \\
+    \hline
+    Elliptical & dark ellipse, blurred border & bright ellipse (beam, specular) \\
+    Directional & dark edge gradient & bright edge gradient (lateral window) \\
+    Stripe & dark band (2 orientations) & bright band (3 orient., solar diagonal) \\
+    Colour shift & none & warm tint on elliptical / diagonal \\
+    \hline
+  \end{tabular}
+  \caption{Synthetic disturbance modalities. Build probabilities
+  $p_{\mathrm{sh}}, p_{\mathrm{li}} = 0.4$; calibration probabilities
+  $p_{\mathrm{sh}}^{\mathrm{cal}}, p_{\mathrm{li}}^{\mathrm{cal}} = 0.1$.}
+  \label{tab:p3-disturb}
+\end{table}
+
+To formally separate the test-time disturbances from the build-time ones, the
+build augmentation draws its shadows and lights from a dedicated random generator
+seeded disjointly from the generator that produces the test disturbances, so the
+two sets never coincide.
+
+\subsubsection{ROI annotation and connected-component gating}
+
+The frame mask of equation~\eqref{eq:gating} is produced by a three-stage tool
+chain. A lightweight interactive annotator draws one polygon per frame element
+(left jamb, right jamb, central mullion, threshold, architrave, or a catch-all
+label) and writes one JSON file per image, storing polygons in original-image
+coordinates to avoid precision loss after resizing. An importer loads these
+polygons into the database, matching by relative file path. At evaluation time
+the polygon set of the reference frame is rasterised to the original resolution,
+the smoothed anomaly map is binarised at $\theta_i$, its $8$-connected components
+are extracted, and a component is kept only if its overlap with the frame mask
+reaches the minimum $\tau = 10$ pixels. The score is the maximum of the
+continuous map over the surviving components, or zero if none survive.
+
+The binarisation threshold used to form the components is the same per-camera
+$\theta_i$ used for the decision, so the sensitivity $k$ acts at two stages -
+which pixels survive binarisation, and which final scores clear the decision. A
+legacy rectangular ROI can be composed in front of the polygon gating: the
+rectangle zeroes the map outside the door bounding box first (suppressing floor
+reflections and solar shadows), and the polygon rule then filters the remaining
+glass-panel variation. The full image is always included in the memory bank:
+excluding the glass region would leave its patches without any neighbour at test
+time, inflating their distance by mere absence of reference and making the panel
+anomalous by construction.
+
+\subsubsection{Pooled-sigma evaluation}
+
+The pooled threshold of equation~\eqref{eq:pooled} is computed in two passes over
+the cameras. The first pass builds each bank, calibrates $\mu_i$ and $\sigma_i$,
+and scores all test samples without yet deciding their label. The second pass
+collects the $\sigma_i$, sets $\sigma_{\mathrm{pop}}$ to their median, and
+recomputes for every sample the threshold $\theta_i = \mu_i + k\,\sigma_{\mathrm{pop}}$,
+the normalised score $(s - \mu_i)/\sigma_{\mathrm{pop}}$, and the binary decision.
+The normalisation makes scores comparable across cameras of different absolute
+scale, so that the aggregated AUROC measures intrinsic separability rather than
+scale differences. The mode (per-camera or pooled) and the value of
+$\sigma_{\mathrm{pop}}$ are recorded with the experiment for reproducibility.
+Pooling affects neither inference time nor memory size, since calibration
+variants never enter the coreset; its only cost is a one-off computation at build
+time.
+
+\section{Application}
+
+[General description of the application, its modules, and overall architecture -
+to be completed.]

@@ -1,0 +1,482 @@
+\chapter{Method}
+\label{chap:method}
+
+\section{Objective}
+
+The goal of this work is to detect, on an edge device, when an obstacle blocks
+an evacuation route (a door or a corridor). Among the pipelines compared in this
+thesis, this chapter develops the third one,
+\emph{Unsupervised Anomaly Detection with PatchCore} (P3), whose distinctive
+property is that it learns only from normal, unobstructed scenes and requires no
+labelled examples of obstructions. The following sections derive the components
+of the method, their mathematical formulation, and the data on which they
+operate; implementation choices and numerical settings are deferred to
+Chapter~\ref{chap:setup}, and the empirical evaluation to
+Chapter~\ref{chap:analysis}.
+
+\section{Pipeline Overview}
+
+\subsection{Unsupervised Anomaly Detection with PatchCore (P3)}
+
+\subsubsection{Motivation and design rationale}
+
+The detection of emergency-exit occlusions presents a fundamental labelling
+bottleneck. Normal scenes - clear, unobstructed doorways and corridors - are
+easy to capture at scale, but the space of possible obstructions is open-ended:
+wheelchairs, carts, stretchers, waste bins, cardboard boxes, and any combination
+thereof can occupy a doorway in arbitrary configurations, orientations, and
+lighting conditions. Collecting and labelling a representative sample of
+anomalous scenes is time-consuming, and any finite labelled set risks leaving
+coverage gaps on obstacle types not seen during training.
+
+P3 sidesteps this bottleneck by framing occlusion detection as
+\emph{one-class anomaly detection}: the system learns only from normal scenes
+and, at inference time, flags any image whose feature representation deviates
+significantly from what was memorised as normal. This removes the need for
+labelled anomalous examples entirely. The choice to adapt PatchCore
+\cite{Roth2022}, originally proposed for industrial surface inspection, to the
+emergency-exit domain is motivated by three properties that align with the
+deployment context:
+
+\begin{enumerate}
+  \item \textbf{One-shot operation}: a single reference photograph of each
+  monitored location is sufficient to build the entire anomaly model. In a real
+  deployment, each fixed camera captures one reference frame of the clear exit;
+  no further data collection is required.
+  \item \textbf{Spatial resolution}: PatchCore operates at the patch level rather
+  than producing a single image-level embedding, preserving the spatial
+  structure of the anomaly and enabling heatmap visualisation and
+  spatially-aware filtering.
+  \item \textbf{Edge compatibility}: inference - feature extraction through a
+  frozen backbone followed by a nearest-neighbour lookup in a compact memory -
+  runs entirely on CPU, requires no gradient computation, and can be
+  parallelised per camera without shared state.
+\end{enumerate}
+
+Among the four pipelines, P3 is the most data-efficient: it needs only a single
+normal reference image and a pre-trained backbone, with no annotation effort to
+deploy on a new camera. The trade-off is that it cannot identify \emph{which}
+obstacle is present - it only signals that something is anomalous - and it is, in
+principle, sensitive to any scene change, including non-obstacle changes such as
+lighting variations, shadows, or background movement. Managing these
+false-positive sources is the central methodological challenge of this chapter.
+
+\subsubsection{Key intuition}
+
+The core intuition is that the intermediate representations of a deep
+convolutional network pre-trained on a large natural-image corpus are broadly
+transferable: they capture generic visual patterns (textures, edges, object
+parts) that remain discriminative across domains, including surveillance footage
+of building interiors. A patch belonging to a normal scene of a fire-exit door
+yields a feature vector close to other normal patches in this embedding space,
+whereas a patch belonging to an unexpected obstacle - the wheel of a cart, the
+fabric of a stretcher, the surface of a box - yields a feature vector distant
+from all stored normal representations, hence a high anomaly score.
+
+The memory is built from augmented variants of a single reference image rather
+than from a large dataset, exploiting the fixed-camera assumption: the camera
+does not move, so the background is stable across days and the only source of
+variation is illumination. Photometric augmentation at build time teaches the
+memory to tolerate this variation, making the decision threshold robust to
+normal fluctuations without requiring multiple observation days.
+
+It is worth stressing why the alternative - populating the memory with a
+collection of \emph{similar} exit scenes (many different corridors, many
+different doors) - would be both infeasible and counterproductive. Such scenes are
+visually too heterogeneous: a memory mixing dozens of unrelated corridors and
+doorways would model the generic appearance of ``a corridor'' or ``a door'',
+which is precisely the wrong target. Its feature manifold would be so broad that
+an obstacle in any specific scene could fall close to some unrelated normal scene
+in the bank and be scored as normal, destroying the detector's sensitivity. The
+task is not to recognise corridors and doors in general, but to recognise
+\emph{this} particular exit as it normally looks. This is the natural consequence
+of the deployment model, in which each camera monitors exactly one exit route:
+the normal class for that camera is its own fixed scene, and the only relevant
+variability is the illumination and the background change of that scene over time. A per-camera memory
+built from one reference image is therefore not a limitation imposed by scarce
+data, but the correct modelling choice for the objective.
+
+\subsubsection{Feature extraction}
+
+Let $I_{\mathrm{ref}}$ denote the normal reference image of a monitored location.
+Every image is resized to a fixed resolution and passed through a frozen
+convolutional backbone $f$. Following the original PatchCore formulation,
+features are read from two intermediate blocks, $\ell_2$ and $\ell_3$: the
+shallower block preserves local detail while the deeper block carries semantic
+context, and their combination balances the two. The shallowest block encodes
+mostly low-level texture with little semantic content, and the deepest block is
+too abstract and biased toward the pre-training classes; both are therefore
+excluded.
+
+The deeper feature map is upsampled bilinearly to the spatial resolution of the
+shallower one and concatenated along the channel axis, yielding a joint tensor of
+patch vectors arranged on a $h \times w$ grid. A local average pooling over a
+$3 \times 3$ neighbourhood (the neighbourhood aggregation of
+\cite{Roth2022}) is then applied: each patch vector is replaced by the mean of
+its $3 \times 3$ spatial neighbourhood,
+
+\begin{equation}
+  \phi(x) \;=\; \frac{1}{|\mathcal{N}_3(x)|} \sum_{x' \in \mathcal{N}_3(x)} \tilde\phi(x'),
+  \label{eq:nbagg}
+\end{equation}
+
+where $\tilde\phi(x')$ is the raw concatenated feature at grid location $x'$ and
+$\mathcal{N}_3(x)$ is the $3 \times 3$ window centred at $x$. This enlarges the
+receptive field of each vector and reduces sensitivity to pixel-level noise. The
+result is a set of $N_p = h \cdot w$ patch feature vectors per image.
+
+\subsubsection{Build phase}
+
+The build phase constructs the \emph{memory bank} $\mathcal{M}$, the finite set of
+normal patch features against which every test patch will later be compared. It
+proceeds in three steps - augmentation, feature accumulation, and coreset
+reduction - each of which is detailed below. The guiding principle is that
+$\mathcal{M}$ must represent the full appearance of the normal scene under its
+expected illumination variation, yet remain small enough for a real-time
+nearest-neighbour search on an edge device.
+
+The build phase is a \emph{one-off, offline} operation, performed once when the
+camera is installed and its reference frame $I_{\mathrm{ref}}$ is captured. The
+resulting memory bank is then stored and reused unchanged for every subsequent
+inference; nothing in the build phase runs at monitoring time. A rebuild is
+required only when the \emph{normal} reference scene itself changes in a way that
+is not a transient occlusion - for example a permanent rearrangement of the
+furniture in view, a repainting, or a change of the camera's mounting - so that
+the old $I_{\mathrm{ref}}$ no longer describes the normal state. Routine
+illumination changes and background variation over time are deliberately
+\emph{not} a reason to rebuild: they are exactly what the augmentation and the
+calibration are designed to absorb. This separation between a rare, offline build
+and a continuous, lightweight inference is what makes the method practical on an
+edge device.
+
+\paragraph{Step 1 - Augmentation.} A single reference frame is too
+narrow a description of the normal scene: it captures one instant of illumination,
+whereas the same fixed camera will, over days, see the scene under brighter or
+dimmer light, warmer or cooler colour temperature, and varying sensor noise. To
+let the memory tolerate this variation, $n_{\mathrm{aug}}$ augmented variants are
+generated from $I_{\mathrm{ref}}$, where $n_{\mathrm{aug}}$ is the number of bank
+variants. The augmentations are predominantly photometric - brightness, contrast,
+saturation, colour-temperature shifts, additive noise, and a mild blur - each
+motivated by a physical source of normal variation (time of day, light type,
+sensor noise, slight defocus). \emph{Large} geometric transforms (flips, wide
+rotations, crops) are deliberately avoided: the camera is physically fixed, so
+orientation is semantically meaningful and must not be treated as a source of
+invariance, otherwise the memory would also accept an obstacle appearing in a
+flipped or arbitrarily relocated position as normal.
+
+A controlled exception is a \emph{small} geometric perturbation, off by default
+and enabled only for cameras subject to micro-vibration. When active, each
+variant is additionally shifted by a random translation of at most
+$\delta_{\max}$ pixels on each axis and rotated by a random angle of at most
+$\rho_{\max}$ degrees, with $\delta_{\max}$ of a few pixels and $\rho_{\max}$ of a
+couple of degrees. Its purpose is opposite to that of the forbidden large
+transforms: rather than making the memory invariant to where an obstacle sits, it
+makes the memory tolerant to a slight global displacement of the \emph{whole}
+fixed scene, as produced by mechanical vibration or a small mounting drift. Such a
+displacement moves every patch by the same tiny amount, so a few-pixel jitter
+keeps a normal scene normal without ever spanning the distance an obstacle would
+cover. This is the cheapest of the available robustness measures, since it acts
+entirely at build time and adds no inference-time cost. 
+
+\paragraph{Step 2 - Feature accumulation.} Each of the $n_{\mathrm{aug}}$ variants
+is passed through the feature pipeline of equation~\eqref{eq:nbagg}, producing
+$N_p$ patch vectors per variant. Stacking the patches of all variants gives the
+\emph{raw memory}
+
+\begin{equation}
+  \mathcal{M}_{\mathrm{raw}} \;=\;
+  \bigcup_{v=1}^{n_{\mathrm{aug}}} \big\{\, \phi^{(v)}(x) \;:\; x \in \text{grid} \,\big\},
+  \qquad
+  |\mathcal{M}_{\mathrm{raw}}| = n_{\mathrm{aug}} \cdot N_p ,
+  \label{eq:rawmemory}
+\end{equation}
+
+where $\phi^{(v)}(x)$ is the aggregated feature at grid location $x$ of variant
+$v$. This mirrors the memory construction of \cite{Roth2022},
+$\mathcal{M} = \bigcup_{x_i \in \mathcal{X}_N} \mathcal{P}(\phi(x_i))$, with the
+nominal training set $\mathcal{X}_N$ here instantiated by the augmented variants
+of the single reference $I_{\mathrm{ref}}$. Each spatial location of the scene
+thus contributes $n_{\mathrm{aug}}$ nearby vectors - one per illumination variant -
+which together trace out the small region of feature space that a normal patch at
+that location can occupy. This is exactly the tolerance the detector needs: at
+test time a normal patch, under any illumination within the augmented range, will
+fall close to at least one of these vectors and receive a low anomaly score.
+
+\paragraph{Step 3 - Coreset reduction.} The raw memory is highly redundant:
+adjacent grid locations on flat surfaces (a wall, a floor, a door panel) and the
+$n_{\mathrm{aug}}$ illumination copies of each location produce many near-duplicate
+vectors. Storing all of them would inflate both the memory footprint and the
+nearest-neighbour cost without improving coverage. The memory is therefore
+compressed to a coreset $\mathcal{M} \subset \mathcal{M}_{\mathrm{raw}}$ of size a
+fraction $p$ of the original - the \emph{coreset ratio} - that minimises the worst
+case distance of any raw vector to its closest retained vector
+\cite{SenerSavarese2018,Roth2022}:
+
+\begin{equation}
+  \mathcal{M}^{\ast} \;=\;
+  \arg\min_{\mathcal{M} \subset \mathcal{M}_{\mathrm{raw}}}
+  \; \max_{m \in \mathcal{M}_{\mathrm{raw}}}
+  \; \min_{m' \in \mathcal{M}} \lVert m - m' \rVert_2 .
+  \label{eq:coreset-obj}
+\end{equation}
+
+This minimax (facility-location) objective is NP-hard, so it is approximated by a
+greedy farthest-point procedure: starting from one random point, the algorithm
+repeatedly adds the still unselected vector that is \emph{farthest} from the
+current selection,
+
+\begin{equation}
+  m_{t} \;=\; \arg\max_{m \in \mathcal{M}_{\mathrm{raw}} \setminus \mathcal{M}_t}
+  \; \min_{m' \in \mathcal{M}_t} \lVert m - m' \rVert_2 ,
+  \qquad
+  \mathcal{M}_{t+1} = \mathcal{M}_t \cup \{m_t\} .
+  \label{eq:coreset}
+\end{equation}
+
+Choosing, at each step, the point that maximises its minimum distance to the
+already-selected set spreads the retained vectors as evenly as possible over the
+occupied region of feature space: dense clusters of near-duplicates are summarised
+by a few representatives, while isolated points - which carry unique information
+about the normal scene - are kept. The procedure stops when
+$|\mathcal{M}| = \lceil p \cdot |\mathcal{M}_{\mathrm{raw}}| \rceil$, subject to a
+small floor on the number of retained points so that even a very low $p$ leaves a
+usable bank. Because evaluating equation~\eqref{eq:coreset} directly in the full
+feature dimension is expensive, the distance comparisons are performed on a
+low-dimensional random projection $\psi$ that approximately preserves pairwise
+Euclidean distances (a Johnson-Lindenstrauss embedding \cite{enwiki:1357719950}), exactly as in
+\cite{Roth2022}, while the selected vectors are stored at their original
+dimension. The result is a compact bank that
+fits in a few megabytes and enables sub-millisecond nearest-neighbour lookups, a
+prerequisite for edge deployment, while retaining near-uniform coverage of the
+normal-feature manifold.
+
+\subsubsection{Threshold calibration}
+
+\paragraph{Design space.} Several threshold strategies are possible for a
+one-class detector: a fixed global value, a per-camera percentile, a
+ROC-optimal cut calibrated on labelled anomalies, or a parametric rule derived
+from the distribution of normal scores. A fixed global threshold requires that
+the absolute scale of anomaly scores be consistent across cameras, which does
+not hold in practice - a plain opaque door scores structurally lower than a glass
+door with a visible outdoor background, so a threshold tuned on one would
+misfire on the other. A ROC-optimal threshold requires labelled anomalies,
+violating the one-class premise and risking overfitting to the appearance of the
+synthetic anomalies used for tuning. A per-camera percentile is more sensitive to
+outliers in the small calibration sample. The chosen strategy is a parametric
+rule that adapts to each scene using only normal data.
+
+\paragraph{Parametric rule.} For each of $n_{\mathrm{cal}}$ additional augmented
+variants of $I_{\mathrm{ref}}$ (the \emph{calibration variants}, disjoint from the
+bank variants and generated with an independent random seed), the maximum patch
+anomaly score over the image is computed. These $n_{\mathrm{cal}}$ scores form the
+empirical distribution of the maximum anomaly score of a normal scene, with mean
+$\mu$ and standard deviation $\sigma$. The decision threshold is
+
+\begin{equation}
+  \theta \;=\; \mu + k\,\sigma ,
+  \label{eq:threshold}
+\end{equation}
+
+where $k$ is a sensitivity hyperparameter. This is the rule of statistical
+process control (Shewhart charts): an event is flagged when it lies $k$ standard
+deviations above the normal mean. Under a Gaussian assumption, $k=3$ corresponds
+to a theoretical false-positive rate of about $0.13\%$ and $k=4$ to about
+$0.003\%$; the calibration scores are not exactly Gaussian (they are maxima of
+correlated patch scores), but $k$ still provides a monotone, interpretable
+control over the false-positive/recall trade-off. It is the sole
+deployment-time hyperparameter and encodes the asymmetric cost of a missed
+obstruction relative to a false alarm: for safety-critical exits $k$ is set low
+($2.5$ to $3.0$) to favour recall, and higher ($4.0$ to $5.0$) where false
+alarms are operationally costly.
+
+The original $I_{\mathrm{ref}}$ is excluded from calibration as well: being the
+closest possible image to the memory (which is built from its augmentations),
+its score is structurally the minimum of the distribution rather than a
+representative sample, and including it would bias $\mu$ downward. Reserving
+$I_{\mathrm{ref}}$ as the actual normal test point - unseen by both the memory and
+the calibration - yields an honest estimate of the false-positive rate.
+
+\paragraph{Coverage dependency.} Because $\mu$ and $\sigma$ are estimated on
+augmented variants, they reflect only the score variability those augmentations
+induce. If a real source of variation (cast shadows, light beams, outdoor
+background changes through glass) is absent from the augmentation scheme,
+$\sigma$ is underestimated and real test scores under that variation exceed
+$\theta$ more often than expected. This dependency is the root cause of the
+shadow false-positive problem (Section~\ref{sec:p3-results}) and motivates the
+shadow and light augmentation introduced below.
+
+\subsubsection{Test phase and anomaly map}
+
+At inference, the query image is processed by the same feature pipeline to
+produce its patch vectors. Each patch vector $\phi$ is compared to the memory
+bank through nearest-neighbour search; let $m^{\ast}$ be its nearest bank
+neighbour, so that the raw patch distance is
+$s^{\ast}(\phi) = \lVert \phi - m^{\ast} \rVert_2$. Let
+$\mathcal{N}_b(m^{\ast})$ be the set of $b$ nearest neighbours of $m^{\ast}$ within
+the bank. Following equation~7 of \cite{Roth2022}, the patch score is re-weighted
+as
+
+\begin{equation}
+  s(\phi) \;=\; w(\phi)\, s^{\ast}(\phi) , \qquad
+  w(\phi) \;=\;
+  1 - \frac{\exp \lVert \phi - m^{\ast} \rVert}
+  {\sum_{m \in \mathcal{N}_b(m^{\ast})} \exp \lVert \phi - m \rVert} .
+  \label{eq:reweight}
+\end{equation}
+
+Two points deserve care. First, the distances in the denominator are between the
+test patch $\phi$ and the members of $\mathcal{N}_b(m^{\ast})$, \emph{not} between
+$m^{\ast}$ and its own neighbours - a detail required for fidelity to the original
+formulation. Second, because $m^{\ast}$ is the nearest neighbour, every distance
+in the denominator is at least $\lVert \phi - m^{\ast} \rVert$, so the fraction is
+at most $1/b$ and the weight is bounded as $w(\phi) \in [\,1 - 1/b,\, 1)$. The
+re-weighting therefore never inflates a patch score above its raw distance
+$s^{\ast}$: it leaves $s(\phi)$ close to $s^{\ast}$ when $m^{\ast}$ is isolated
+(its neighbours are far, the denominator is large, $w \to 1$), and discounts it
+by up to a factor $1 - 1/b$ when $m^{\ast}$ sits in a dense region of common
+normal patterns (its neighbours are close, $w \to 1 - 1/b$). In relative terms
+this promotes patches matched to rare normal prototypes - the configuration most
+likely to indicate a genuine anomaly.
+
+The original paper assigns the \emph{image}-level score to the single most
+anomalous patch, $\arg\max_{\phi} s^{\ast}(\phi)$, re-weighting only that one
+(equations 6-7 of \cite{Roth2022}). The present work instead evaluates
+equation~\eqref{eq:reweight} for \emph{every} patch, arranges the scores on the
+spatial grid to form an anomaly map, upsamples it bilinearly, and smooths it with a
+Gaussian filter; the scalar image score is then the maximum of this smoothed map,
+$s_{\max}$, and the binary decision is $s_{\max} > \theta$. This is a deliberate
+variant of the paper's single-patch score, adopted for two reasons: the full
+per-patch map is required by the spatial gating of
+Section~\ref{sec:p3-gating}, which operates on connected components of the map;
+and taking the maximum of the smoothed map - rather than of a single raw patch -
+is more robust to an isolated noisy patch, since smoothing broadens genuine
+anomaly blobs (helping small objects that span few patches) while attenuating
+one-pixel spikes. The two formulations coincide when no smoothing is applied and
+the maximiser of $w(\phi)\,s^{\ast}(\phi)$ is also the maximiser of $s^{\ast}$.
+
+\subsubsection{Shadow and light augmentation}
+
+The photometric-only memory contains no variants with cast shadows or localised
+light excess. This leaves a coverage gap: at test time, a shadow projected on the
+floor by a passer-by outside the field of view, or a light beam from a skylight
+or a glass door, produces patch features distant from all bank entries and trips
+the threshold even though no obstruction is present. The two disturbances are
+symmetric - darkening versus brightening - and are addressed symmetrically by
+adding synthetic variants of each kind to the augmentation scheme. Three
+modalities are modelled for each (elliptical, directional, stripe), covering the
+physically plausible patterns in corridor and doorway scenes; all borders are
+blurred to avoid unrealistic high-frequency edges.
+
+A disturbance is added to a build variant with probability $p_{\mathrm{sh}}$
+(shadow) or $p_{\mathrm{li}}$ (light), and to a calibration variant with
+probability $p_{\mathrm{sh}}^{\mathrm{cal}}$ and $p_{\mathrm{li}}^{\mathrm{cal}}$
+respectively. A central design choice is to \emph{decouple} the build and
+calibration probabilities, because the two phases have opposing requirements:
+
+\begin{itemize}
+  \item the \textbf{memory} needs maximum disturbance coverage so that test-time
+  shadow/light patches find near neighbours and produce low distances - hence a
+  high build probability ($p_{\mathrm{sh}} = p_{\mathrm{li}} = 0.4$);
+  \item the \textbf{calibration} needs a stable score distribution to yield a
+  reliable $\mu$ and $\sigma$ - hence a low calibration probability
+  ($p_{\mathrm{sh}}^{\mathrm{cal}} = p_{\mathrm{li}}^{\mathrm{cal}} = 0.1$).
+\end{itemize}
+
+Setting the calibration probability equal to the build probability makes $\sigma$
+high-variance: a few unlucky calibration variants with heavy disturbances inflate
+$\sigma$, and the $k\sigma$ amplification produces per-camera thresholds that are
+either too high (false negatives) or too low (false positives). Decoupling
+removes this instability. The two families are independent: a variant may receive
+a shadow, a light, both, or neither. The disturbances are deliberately kept out
+of the test images used to measure robustness, so that the reported
+false-positive rates reflect generalisation to disturbances never seen at build
+time.
+
+\subsubsection{Spatial gating via annotated polygons}
+\label{sec:p3-gating}
+
+Glass doors introduce a distinct failure mode: the transparent panel makes the
+external background visible, and any movement or lighting change beyond the door
+generates anomaly blobs in the glass region without any physical obstruction. The
+principled remedy exploits a physical-grounding constraint: \emph{any real
+obstruction rests on the floor and therefore intersects the door threshold}.
+
+Door-frame polygons (left jamb, right jamb, central mullion, threshold,
+architrave) are annotated once on the reference image and rasterised into a
+binary \emph{frame mask} $F$. The gating rule operates on the connected components
+of the thresholded anomaly map: the map is binarised at $\theta$, its
+$8$-connected components are labelled, and a component $C$ is accepted only if
+
+\begin{equation}
+  |C \cap F| \;\geq\; \tau ,
+  \label{eq:gating}
+\end{equation}
+
+where $\tau$ is the minimum overlap, in pixels, between a component and the frame
+mask. The final score is the maximum of the continuous anomaly map over the
+accepted components, or zero if none survives. A component confined to the glass
+panel has zero overlap with $F$ and is rejected, whereas a floor-grounded
+obstruction produces a component reaching the threshold or jambs and is accepted.
+The same rule applies to opaque doors when the panel exhibits strong illumination
+variation: specular highlights stay on the panel, while grounded obstructions
+reach the frame.
+
+\paragraph{Structural limitations.} Gating assumes the frame geometry is stable
+and visible at test time. An \emph{open door} violates this: the threshold and
+jambs change radically, producing an out-of-distribution component inside $F$
+(a structural false positive), while an obstacle in the open doorway no longer
+intersects the misplaced mask (a structural false negative). A thin-stemmed
+grounded object (a floor fan, a sign on a pole) has only a narrow contact with
+the frame that may fail the overlap criterion $\tau$. These cases share one root:
+reachability of the frame mask by a genuine anomaly component depends on frame
+visibility, a property of the scene rather than of the model. They are declared
+as limitations of the method; the system is designed and validated for the
+nominal closed-door condition, dominant in continuous surveillance.
+
+\subsubsection{Calibration stabilisation: pooled sigma}
+
+The per-camera rule $\theta_i = \mu_i + k\,\sigma_i$ has a structural instability.
+The per-camera standard deviation $\sigma_i$ is estimated from a small calibration
+sample and carries a relative error on the order of $18\%$; this error propagates
+one-to-one into the $k\sigma_i$ term, and across many cameras it produces a
+long-tailed distribution of thresholds - a few cameras receive thresholds high
+enough to miss all obstructions, others low enough to generate shadow false
+positives, even though the underlying scenes are not fundamentally different. The
+extreme $\sigma_i$ values are stochastic calibration outliers, not scene outliers:
+the same camera re-calibrated with a different seed would receive a normal
+threshold.
+
+The fix replaces the per-camera $\sigma_i$ with a single population estimate while
+keeping $\mu_i$ local:
+
+\begin{equation}
+  \theta_i \;=\; \mu_i + k\,\sigma_{\mathrm{pop}} ,
+  \qquad
+  \sigma_{\mathrm{pop}} = \operatorname{median}(\sigma_1, \dots, \sigma_N) ,
+  \label{eq:pooled}
+\end{equation}
+
+where $N$ is the number of cameras. The median is robust to the outlier $\sigma_i$
+that caused the tail. Keeping $\mu_i$ per-camera preserves scene-specific
+adaptation (the absolute score level of each scene), while pooling $\sigma$
+removes the noisy multiplicative term. Under the per-camera rule
+$\operatorname{Var}(\theta_i) = \operatorname{Var}(\mu_i) + k^2
+\operatorname{Var}(\sigma_i) + 2k\operatorname{Cov}(\mu_i,\sigma_i)$, whereas under
+the pooled rule it collapses to $\operatorname{Var}(\theta_i) =
+\operatorname{Var}(\mu_i)$, i.e. to the intrinsic scene variability alone.
+
+Pooled sigma is, by construction, a shrinkage (regularisation) estimator: it
+trades a small bias - forcing each camera toward the population median - for a
+large variance reduction. In the data-starved regime of this thesis (a one-shot
+memory from a single image with sparse synthetic calibration) the per-camera
+$\sigma_i$ is noise-dominated and the true cross-camera heterogeneity is near
+zero, so full pooling is the correct corner. The principled generalisation is
+\emph{partial pooling}, $\sigma_i^{\ast} = (1-w_i)\,\sigma_{\mathrm{pop}} +
+w_i\,\sigma_i$, with the weight $w_i$ rising as a camera accumulates real normal
+frames; full pooling ($w_i = 0$) is the cold-start corner and remains valuable
+for newly installed cameras.
+
+\section{Dataset Description}
+
+[Description of the dataset used to build, calibrate, and evaluate the pipeline -
+to be completed.]
