@@ -1,9 +1,404 @@
 \chapter{State of the Art}
+\label{chap:sota}
 
-\section{Literature Overview}
+% Chapter roadmap:
+% 2.1 application context (vision-based safety monitoring, edge constraint)
+% 2.2 supervised object detection on edge devices  -> P1
+% 2.3 reference-based change detection             -> P2, P4
+% 2.4 unsupervised anomaly detection               -> P3
+% 2.5 robustness to illumination nuisances / false alarms
+% 2.6 positioning and gap analysis
 
-[Frame the work with respect to existing literature]
+\section{Vision-Based Safety Monitoring in Built Environments}
+\label{sec:sota-safety}
 
-\section{Research Question Reinforcement}
+Safety inspections of buildings and workplaces have traditionally been carried
+out by human operators who periodically walk the premises, identify hazards, and
+verify compliance with safety regulations. The literature consistently
+identifies the same limitations of this manual process: it is costly, it scales
+poorly with the size of the monitored facility, and its low frequency leaves
+long blind intervals during which a hazard can persist undetected
+\cite{Ercan2024,Chen2025}. Computer vision offers a natural path to
+automation, since most safety-relevant conditions - a blocked corridor, a
+missing helmet, a misplaced object - are directly observable in images, and
+camera infrastructure is comparatively cheap to deploy and maintain.
 
-[Highlight and reinforce the research question]
+The condition of evacuation routes is a recurring subject in this literature.
+Ercan and Mathyalakan \cite{Ercan2024} address clutter in the common areas of
+Singapore public housing, where residents' belongings - bicycles, laundry racks,
+shoe racks, plants - accumulate along corridors and may hinder emergency
+response; safety guidelines mandate a clear escape passage, but enforcement
+through on-site inspection is infrequent and labour-intensive. Their system
+detects clutter with YOLO-family object detectors mounted on an autonomous
+mobile robot and reports violations, with location and type of obstruction, to
+a remote database. Along the same line, fire-safety regulations are the
+explicit target of Chen et al.~\cite{Chen2025}, who observe that automated
+compliance checking has historically been confined to the \emph{design} phase,
+operating on structured building models, and therefore cannot capture hazards
+that arise only during building \emph{operation} - obstructed exits, relocated
+equipment, informal modifications of the space. Their proposed remedy combines
+deep-learning perception modules with a knowledge graph encoding spatial
+relationships and regulatory rules, so that raw on-site imagery can be turned
+into structured, regulation-aware compliance reports.
+
+A third strand concerns construction sites, arguably the most mature
+application domain for vision-based safety monitoring. Beyond detecting unsafe
+configurations of equipment and personnel, recent work has concentrated on the
+\emph{reliability} of the monitoring signal itself: Zaidi et
+al.~\cite{Zaidi2024} note that systems classifying each video frame in
+isolation inevitably produce false alarms whenever a single frame is
+misdetected, and introduce a temporal-analysis module that aggregates evidence
+over a window of frames before raising an alarm. The concern they articulate -
+that a monitoring system crying wolf is quickly ignored by its operators - is
+general, and returns in Section~\ref{sec:sota-robustness} as a central design
+constraint for the present work.
+
+Across these systems three common traits emerge. First, the sensing
+infrastructure consists of fixed or slowly-moving cameras observing a known
+scene, which makes the scene layout itself prior knowledge that the algorithms
+can exploit. Second, the monitoring must run continuously and in (near)
+real-time, which constrains the admissible computational budget. Third, imagery
+of building interiors is privacy-sensitive, and streaming it to a remote server
+is often undesirable or prohibited; together with bandwidth and per-camera cost
+considerations, this pushes the computation toward the network edge, a
+constraint examined in the next section.
+
+\section{Object Detection on Edge Devices}
+\label{sec:sota-detection}
+
+The most direct way to recognise an obstruction in an image is to detect the
+obstructing object explicitly. Deep-learning object detectors are commonly
+divided into two-stage models, which first propose candidate regions and then
+classify them, and one-stage models, which predict classes and bounding boxes in
+a single forward pass \cite{Mittal2024}. The YOLO family \cite{Redmon2016} is
+the prototypical one-stage design and has become the de-facto standard for
+real-time applications: it processes the whole image with one convolutional
+network, trading a modest amount of accuracy for an order-of-magnitude gain in
+speed over two-stage models. Successive YOLO generations, together with
+dedicated lightweight architectures, quantisation, and inference engines such as
+TensorRT and OpenVINO, have progressively lowered the computational cost of
+detection to the point where it fits the resource envelope of single-board
+computers; Mittal \cite{Mittal2024} surveys this landscape and the reasons
+driving it - bandwidth reduction, latency, energy, and the privacy advantage of
+keeping image data on the device that captured it.
+
+How far this paradigm can be pushed on low-cost hardware is well documented by
+the line of work on personal protective equipment (PPE) monitoring, a safety
+application whose deployment constraints closely mirror those of exit
+monitoring. Gallo et al.~\cite{Gallo2022} argue against the prevailing
+cloud-based architectures - which require sustained bandwidth, a reliable
+connection, and the off-site transfer of workers' images - and deploy
+PPE detection entirely on a Raspberry Pi~4 with a USB neural accelerator,
+selecting YOLOv4-Tiny as the best accuracy/throughput compromise at about
+$6.8$ frames per second. On the same dataset, Miglionico et
+al.~\cite{Miglionico2024} evaluate the YOLOv5 size spectrum on identical
+hardware, with the nano variant reaching $7.9$ frames per second at
+$81.7\%$ mAP@50, and later extend the comparison to YOLOv11 and the
+transformer-based RT-DETR on an NVIDIA Jetson Nano \cite{Miglionico2025}: the
+nano model with TensorRT optimisation achieves $10.6$ frames per second within
+a $3$\,W power budget, whereas transformer detectors, although competitive in
+accuracy, prove too slow for real-time edge inference. Taken together, these
+studies establish that modern compact detectors deliver usable accuracy at
+interactive frame rates on hardware costing tens to a few hundred euros - a
+premise this thesis builds upon.
+
+Closer to the problem addressed here, object detectors have been applied to the
+monitoring of evacuation routes themselves. Besides the corridor-clutter robot
+of Ercan and Mathyalakan \cite{Ercan2024} discussed above, Shin et
+al.~\cite{Shin2025} use a YOLOv8 model on frames from pre-existing CCTV
+cameras to detect loads and obstacles in the corridors of complex buildings,
+and convert the detections, through a homography-based perspective correction,
+into an estimate of the \emph{effective evacuation width} that remains
+available; after augmenting and re-labelling a custom dataset they report
+near-saturated metrics (precision $0.99$, recall $1.0$) in their static test
+setting. This confirms the feasibility of detector-based egress monitoring on
+existing camera infrastructure, the same deployment model assumed in this
+thesis.
+
+The limits of the paradigm, however, are structural rather than incidental.
+First, a detector can only find what it was trained to find: the obstacle
+vocabulary is fixed at training time, while the space of objects that can block
+an exit is open-ended, so any closed-set detector leaves coverage gaps by
+construction. Second, the supervised regime requires a labelled dataset whose
+collection and annotation dominate the deployment cost, and whose biases bound
+the model's generalisation - Shin et al.~\cite{Shin2025} themselves must
+re-label and augment their data to cope with classes absent from public
+datasets. Third, detection accuracy degrades when objects are partially
+occluded or truncated, a pervasive condition in cluttered corridors; an entire
+research thread surveyed by Ouardirhi et al.~\cite{Ouardirhi2024} is devoted
+to occlusion-handling strategies, and its very existence signals that the
+problem is far from solved. Within this thesis, the YOLO-based pipeline (P1)
+inherits both the strengths and these limitations; the approaches reviewed in
+the next two sections trade the ability to \emph{name} the obstacle for
+independence from a predefined obstacle vocabulary.
+
+\section{Reference-Based Change Detection}
+\label{sec:sota-change}
+PARLARE ANCHE DEL FATTO CHE AUTOENCODER
+E GAN NON SONO TROPPO ADATTI PER CHANGE DETECTION
+
+When the camera is fixed, an alternative to recognising obstacles is to detect
+that the scene has \emph{changed} with respect to a stored reference of its
+clear state. This idea descends from classical background subtraction, where a
+statistical background model is maintained over time and pixels deviating from
+it are labelled foreground. As Santana et al.~\cite{Santana2020} point out,
+however, conventional background models adapt continuously and eventually
+absorb long-standing foreground objects into the background - precisely the
+wrong behaviour for obstruction monitoring, where a cart abandoned in front of
+an exit must keep raising an alarm for as long as it stays there. Route
+obstruction therefore calls for comparison against a \emph{fixed} reference of
+the known-clear scene rather than against an adaptive background estimate.
+
+Two recent works apply this reference-based paradigm directly to evacuation
+routes. Talebi et al.~\cite{Talebi2026} propose a door-centric formulation of
+exit-blockage detection: instead of enumerating possible obstacles, the system
+monitors only the visual state of the door itself. A lightweight YOLOv11
+network is trained on a single class, the door, and the bounding box it
+predicts at run time is compared - in geometry and overlap - against the box
+recorded in the unobstructed reference state; a blockage is inferred whenever
+the visible portion of the door deviates persistently from the reference. The
+authors argue that this bypasses the structural weakness of obstacle catalogues
+identified in Section~\ref{sec:sota-detection}, since any object large enough
+to obstruct the doorway alters the door's visible geometry regardless of its
+category, and they demonstrate real-time operation on a Raspberry Pi. The
+trade-off is the coarseness of the signal: the method observes a single
+bounding box, so it cannot localise the obstruction, and changes that do not
+alter the door's visible extent - or doors that the detector fails to find under
+unusual lighting - fall outside its reach. The door-centric baseline (P2)
+developed in this thesis follows this design.
+
+Santana et al.~\cite{Santana2020} push the comparison to the pixel level with
+a Siamese architecture. Two weight-sharing U-Net encoders process the reference
+frame and the current frame, their representations are compared at multiple
+levels of abstraction, and a decoder produces a binary segmentation mask of the
+changed regions; training on the generic change-detection corpus CDNet2014
+teaches the network what constitutes a meaningful change, without committing to
+any object vocabulary. Applied to PetrobrasROUTES, a dataset of obstructed and
+abandoned objects on escape routes of industrial plants, the approach proves
+markedly more robust to noise and illumination variation than classical
+background-modelling baselines, because the comparison happens in a learned
+feature space rather than in pixel intensities. This is the design the Siamese
+change-detection pipeline (P4) of this thesis builds upon.
+
+Reference-based methods occupy an attractive middle ground for the problem at
+hand: they are object-agnostic, produce a spatial localisation of the change
+(in the Siamese variant), and exploit the fixed-camera deployment model
+naturally. Their residual requirements are nonetheless non-trivial: the
+Siamese comparator must still be \emph{trained} to distinguish meaningful
+change from nuisance variation, which presupposes a labelled change-detection
+corpus, and every method in this family remains exposed to reference staleness
+- the stored clear-state image must be re-acquired whenever the normal
+appearance of the scene legitimately changes. The family of methods reviewed
+next pushes label-independence one step further, dispensing with change
+supervision altogether.
+
+\section{Unsupervised Anomaly Detection}
+\label{sec:sota-anomaly}
+
+The third family of approaches abandons supervision entirely: the system learns
+a model of \emph{normality} from unlabelled normal data and flags, at test time,
+whatever deviates from it. This one-class formulation matches the data
+asymmetry of safety monitoring - normal observations are abundant and free,
+anomalous ones are rare, heterogeneous, and expensive to stage - and it is the
+formulation adopted by the third pipeline of this thesis.
+
+In video surveillance, anomaly detection is a mature research area, surveyed
+among others by Duong et al.~\cite{Duong2023}. The dominant problem setting is
+the detection of abnormal \emph{human} behaviour - fighting, intrusions,
+abandoned luggage - with models trained on normal footage and evaluated on
+benchmarks such as UCSD Ped, CUHK Avenue, and ShanghaiTech. Two observations
+from this literature carry over directly to exit monitoring. First, anomaly is
+\emph{context-dependent}: an event normal in one scene may be anomalous in
+another \cite{Duong2023,Patrikar2022}, which implies that normality is best
+modelled per camera rather than globally - the design choice at the heart of
+the per-camera memory of Chapter~\ref{chap:method}. Second, the recurrent
+failure sources reported across methods - occlusion, low illumination, dynamic
+backgrounds and sensor noise \cite{Duong2023} - are environmental rather than
+algorithmic, and any deployable system must budget for them explicitly.
+Patrikar and Parate \cite{Patrikar2022} review the same field from the
+deployment side, observing that anomaly detection is a delay-sensitive
+application for which round-trips to a cloud back-end are ill-suited, and that
+the natural convergence point is anomaly detection executed on edge devices
+co-located with the cameras - the architecture assumed throughout this thesis.
+
+A parallel and, for the present work, more directly relevant line of research
+developed in \emph{industrial} visual inspection, where products photographed
+under a fixed viewpoint must be screened for defects never seen during
+training. The release of the MVTec~AD benchmark \cite{Bergmann2019}
+crystallised the modern formulation: only defect-free images are available for
+training, and methods are judged on both image-level detection and pixel-level
+localisation. The best-performing family of methods sidesteps representation
+learning altogether, describing normality directly in the feature space of a
+network pre-trained on natural images: SPADE \cite{Cohen2020} retrieves
+nearest neighbours of multi-scale features from a gallery of normal images,
+and PaDiM \cite{Defard2021} fits a per-position Gaussian to the features of
+aligned normal samples. PatchCore \cite{Roth2022} refined this embedding-based
+approach into the de-facto standard: locally aggregated patch features from a
+frozen backbone are stored in a memory bank, compressed by greedy coreset
+subsampling to a small fraction of its original size with negligible
+performance loss, and queried at test time by a re-weighted nearest-neighbour
+rule that yields both a scalar anomaly score and a spatial anomaly map. On
+MVTec~AD, PatchCore achieves an image-level AUROC above $99\%$, while its
+training-free construction and compact memory make it computationally frugal at
+inference - properties that motivated its adoption, in adapted form, as the
+core of pipeline P3 (Chapter~\ref{chap:method}).
+
+The transfer from industrial inspection to evacuation-route monitoring is
+conceptually natural: a fixed camera observing a doorway plays the role of the
+fixed inspection viewpoint, the clear exit is the defect-free product, and an
+obstruction is a structural defect of arbitrary, unforeseen appearance. The
+correspondence is not perfect, however. Industrial imagery is acquired under
+controlled, repeatable illumination, whereas a corridor is subject to daylight
+cycles, cast shadows, and reflections; the nuisance variability that industrial
+benchmarks deliberately suppress becomes, in this domain, the principal source
+of false alarms. Techniques for managing precisely this gap are the subject of
+the next section.
+
+\section[Robustness to Illumination Nuisances]{Robustness to Illumination Nuisances and False Alarms}
+\label{sec:sota-robustness}
+
+For a monitoring system that runs unattended, the false-positive rate is not a
+secondary metric but the property that decides whether the system is usable at
+all: operators quickly learn to ignore an alarm that fires on harmless events,
+at which point the system provides negative value. The literature attacks the
+problem from two complementary directions - making the \emph{decision} more
+conservative, and making the \emph{model} more robust to the nuisance factors
+that trigger spurious detections.
+
+The first direction is exemplified by Zaidi et al.~\cite{Zaidi2024}, already
+encountered in Section~\ref{sec:sota-safety}: since per-frame classification
+amplifies every transient misdetection into an alarm, they accumulate evidence
+over a temporal window and raise an alarm only when the fraction of hazardous
+frames exceeds a threshold, measurably reducing false alarms during live
+monitoring. Temporal aggregation of this kind is largely orthogonal to the
+underlying detector and could be layered onto any of the pipelines considered
+in this thesis; it does not, however, help against nuisance factors that are
+\emph{persistent} rather than transient - a cast shadow that sits on the floor
+for hours defeats any voting window.
+
+Persistent nuisances dominate in the fixed-camera one-class setting, and
+illumination is by far the most important among them. Cao et
+al.~\cite{Cao2025} provide the systematic evidence: their M\textsuperscript{2}AD
+benchmark images about a thousand objects under 120 combinations of viewpoint
+and illumination and shows that state-of-the-art visual anomaly detection
+methods, PatchCore included, degrade severely when test-time illumination
+deviates from the training condition. This quantifies the observation that
+closed Section~\ref{sec:sota-anomaly}: the implicit assumption of photometric
+consistency between the normal reference data and the test stream, harmless on
+industrial inspection benches, is the weak point of embedding-based anomaly
+detection in uncontrolled environments.
+
+Among illumination effects, cast shadows are the most structured and the most
+deceptive, since they introduce sharp, object-like contours that low-level
+features cannot distinguish from physical objects. The classical remedy is to
+detect and remove shadows before analysis, a research line with a long history
+in traffic and outdoor surveillance; but removal adds a processing stage,
+and its own failures propagate downstream. An alternative, recently explored
+by Ju and Reibman \cite{JuReibman2024} for camera-based action recognition, is
+to make the model itself shadow-tolerant by \emph{injecting synthetic shadows
+into the training data}. Their study offers two findings of direct relevance
+here. First, shadow augmentation applied to shadow-free training data
+substantially improves accuracy on out-of-distribution test sets containing
+real, heavy shadows - the exact configuration of a one-shot memory built from a
+clean reference image and tested on frames with environmental shadows. Second,
+generic photometric augmentation is not a substitute: globally darkening the
+training images \emph{worsens} performance, confirming that robustness to
+localised, structured darkening requires explicitly structured augmentation
+rather than wider brightness ranges. The shadow and light augmentation scheme
+adopted in pipeline P3 (Chapter~\ref{chap:method}) follows this principle,
+extending it symmetrically to localised light beams and combining it with a
+spatial gating rule that exploits the scene geometry.
+
+\section{Positioning of This Work}
+\label{sec:sota-positioning}
+
+The deployment scenario of this thesis - a fixed camera per emergency exit,
+processing on a low-cost edge device, alarms for arbitrary obstructions -
+induces five requirements against which the reviewed families can be measured:
+
+\begin{enumerate}
+  \item \textbf{Open-set coverage}: any object blocking the route must be
+  detectable, including categories never seen before;
+  \item \textbf{Label independence}: deploying on a new camera should require
+  no labelled examples of obstructions;
+  \item \textbf{Spatial localisation}: the system should indicate \emph{where}
+  the anomaly lies, both for operator verification and for spatial filtering
+  of known nuisance regions;
+  \item \textbf{Edge compatibility}: inference must run continuously on
+  resource-constrained hardware;
+  \item \textbf{Nuisance robustness}: illumination changes, shadows, and
+  activity behind glass doors must not raise alarms.
+\end{enumerate}
+
+Table~\ref{tab:sota-comparison} summarises how the four approach families
+reviewed in this chapter - each instantiated by one of the pipelines compared
+in this thesis - relate to these requirements.
+
+\begin{table}[ht]
+  \centering
+  \small
+  \begin{tabular}{|p{3.4cm}|p{2.6cm}|p{2.2cm}|p{2.2cm}|p{2.6cm}|}
+    \hline
+    \textbf{Approach} & \textbf{Training data} & \textbf{Obstacle coverage} & \textbf{Localisation} & \textbf{Per-camera deployment} \\
+    \hline
+    Object detection (P1) \cite{Gallo2022,Miglionico2025,Shin2025} &
+    labelled boxes for each obstacle class &
+    closed-set &
+    bounding boxes &
+    none (shared model) \\
+    \hline
+    Door-centric monitoring (P2) \cite{Talebi2026} &
+    door-class labels only &
+    open-set (indirect) &
+    door box only &
+    reference state of the door \\
+    \hline
+    Siamese change detection (P4) \cite{Santana2020} &
+    generic change-segmentation corpus &
+    open-set &
+    pixel mask &
+    reference frame \\
+    \hline
+    One-class anomaly detection (P3) \cite{Roth2022} &
+    none (normal images only) &
+    open-set &
+    anomaly map &
+    single reference image \\
+    \hline
+  \end{tabular}
+  \caption{Approach families for exit-obstruction detection, each instantiated
+  by one of the four pipelines of this thesis, against the requirements of the
+  target deployment.}
+  \label{tab:sota-comparison}
+\end{table}
+
+No single family dominates. Supervised detection offers semantic
+interpretability - it names the obstacle - and benefits from a mature
+edge-deployment toolchain \cite{Mittal2024,Miglionico2025}, but its closed
+vocabulary and labelling cost conflict with requirements~1 and~2. Door-centric
+monitoring \cite{Talebi2026} is open-set and extremely cheap, but its signal
+is binary and frame-level, sacrificing requirement~3. Siamese change detection
+\cite{Santana2020} satisfies requirements~1 and~3, yet still depends on a
+labelled change corpus and on the maintenance of an up-to-date reference frame.
+One-class anomaly detection in the PatchCore style \cite{Roth2022} is the only
+family that is simultaneously label-free, open-set, and spatially resolved,
+with a training-free build that suits edge deployment; its known weakness is
+requirement~5, since embedding-based methods presume photometric consistency
+between reference and test conditions \cite{Cao2025}.
+
+Two gaps in the literature emerge from this review. First, the methods closest
+to the target task have not met in prior work: industrial-style one-class
+anomaly detection has, to the best of our knowledge, not been applied to
+emergency-exit obstruction monitoring, where its data efficiency is most
+valuable but its illumination sensitivity is most exposed; conversely, the
+exit-monitoring systems in the literature either presuppose obstacle
+catalogues \cite{Ercan2024,Shin2025} or renounce spatial localisation
+\cite{Talebi2026}. Second, no prior study compares representatives of the
+detection, change-detection, and anomaly-detection families on a common
+evacuation-route dataset under common edge constraints. This thesis addresses
+both gaps: it adapts PatchCore to per-camera, one-shot exit monitoring -
+augmenting it with shadow and light augmentation and geometry-aware spatial
+gating to confront requirement~5 head-on (Chapter~\ref{chap:method}) - and
+evaluates it against the detection-based (P1), door-centric (P2), and Siamese
+(P4) alternatives on a shared dataset and experimental protocol
+(Chapter~\ref{chap:analysis}).

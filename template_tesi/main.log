@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex 2025.10.26)  10 JUN 2026 18:15
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex 2025.10.26)  11 JUN 2026 15:13
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -515,7 +515,7 @@ Package epstopdf Info: Source file: <images/Frontespizio/cherubinFrontespizio.ep
 (epstopdf)             Command: <miktex-epstopdf --outfile=images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf images/Frontespizio/cherubinFrontespizio.eps>
 (epstopdf)             \includegraphics on input line 4.
 Package epstopdf Info: Output file is already uptodate.
-<images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf, id=95, 288.07625pt x 294.09875pt>
+<images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf, id=111, 288.07625pt x 294.09875pt>
 File: images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf Graphic file (type pdf)
 <use images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf>
 Package pdftex.def Info: images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf  used on input line 4.
@@ -649,43 +649,152 @@ LaTeX Font Warning: Font shape `T1/cmr/bx/n' in size <18.72003> not available
 
 ]
 Chapter 2.
-) [11]
-\openout2 = `chapters/Chapter3_Method.aux'.
-
- (chapters/Chapter3_Method.tex [12
-
-
-
-
-
-]
-Chapter 3.
 
 LaTeX Font Warning: Font shape `T1/cmr/m/it' in size <13> not available
-(Font)              size <12> substituted on input line 9.
+(Font)              size <12> substituted on input line 36.
 
-[13] [14] [15]
+[11] [12] [13] [14] [15] [16]
+LaTeX Font Info:    Calculating math sizes for size <11.86258> on input line 340.
+
+Underfull \hbox (badness 10000) in paragraph at lines 342--342
+[]\T1/cmr/bx/n/12 Training
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 342--342
+[]\T1/cmr/bx/n/12 Obstacle
+ []
+
+
+Overfull \hbox (7.82295pt too wide) in paragraph at lines 342--342
+[]\T1/cmr/bx/n/12 Localisation| 
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 342--343
+[]\T1/cmr/bx/n/12 Per-camera
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 344--344
+[]\T1/cmr/m/n/12 Object de-tec-tion
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 347--347
+[]\T1/cmr/m/n/12 bounding
+ []
+
+
+Underfull \hbox (badness 6808) in paragraph at lines 348--349
+[]\T1/cmr/m/n/12 none (shared
+ []
+
+
+Underfull \hbox (badness 3323) in paragraph at lines 351--351
+[]\T1/cmr/m/n/12 door-class la-
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 352--352
+[]\T1/cmr/m/n/12 open-set
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 353--353
+[]\T1/cmr/m/n/12 door box
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 357--357
+[]\T1/cmr/m/n/12 generic
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 357--357
+\T1/cmr/m/n/12 change-
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 357--357
+\T1/cmr/m/n/12 segmentation
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 360--361
+[]\T1/cmr/m/n/12 reference
+ []
+
+
+Underfull \hbox (badness 2158) in paragraph at lines 363--363
+[]\T1/cmr/m/n/12 none (nor-mal
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 365--365
+[]\T1/cmr/m/n/12 anomaly
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 366--367
+[]\T1/cmr/m/n/12 single ref-er-
+ []
+
+
+Overfull \hbox (3.0944pt too wide) in paragraph at lines 340--371
+ [][] 
+ []
+
+) [17] [18]
+\openout2 = `chapters/Chapter3_Method.aux'.
+
+ (chapters/Chapter3_Method.tex
+Chapter 3.
+[19
+
+
+
+
+
+] [20]
+
+pdfTeX warning: pdflatex.exe (file ./images/patchCore/patchCore_diagramma.pdf): PDF inclusion: found PDF version <1.7>, but at most version <1.5> allowed
+<images/patchCore/patchCore_diagramma.pdf, id=340, 479.19025pt x 745.28438pt>
+File: images/patchCore/patchCore_diagramma.pdf Graphic file (type pdf)
+<use images/patchCore/patchCore_diagramma.pdf>
+Package pdftex.def Info: images/patchCore/patchCore_diagramma.pdf  used on input line 102.
+(pdftex.def)             Requested size: 277.41176pt x 431.45782pt.
+
+LaTeX Warning: `!h' float specifier changed to `!ht'.
+
+[21] [22 <./images/patchCore/patchCore_diagramma.pdf>]
 
 LaTeX Font Warning: Font shape `T1/cmr/m/n' in size <6.5> not available
-(Font)              size <6> substituted on input line 188.
+(Font)              size <6> substituted on input line 199.
 
-[16] [17] [18] [19]
+[23] [24] [25]
 
 LaTeX Font Warning: Font shape `TS1/cmr/m/n' in size <13> not available
-(Font)              size <12> substituted on input line 377.
+(Font)              size <12> substituted on input line 381.
 
-[20] [21]) [22]
+[26]
+<images/patchCore/esempio_stipiti.png, id=553, 287.6346pt x 375.0813pt>
+File: images/patchCore/esempio_stipiti.png Graphic file (type png)
+<use images/patchCore/esempio_stipiti.png>
+Package pdftex.def Info: images/patchCore/esempio_stipiti.png  used on input line 416.
+(pdftex.def)             Requested size: 213.39568pt x 278.27695pt.
+ [27] [28 <./images/patchCore/esempio_stipiti.png>]) [29]
 \openout2 = `chapters/Chapter4_ExperimentalSetup.aux'.
 
- (chapters/Chapter4_ExperimentalSetup.tex
-Chapter 4.
-[23
+ (chapters/Chapter4_ExperimentalSetup.tex [30
 
 
 
 
 
 ]
+Chapter 4.
+[31]
 Overfull \hbox (21.15103pt too wide) in paragraph at lines 107--117
  [][] 
  []
@@ -693,12 +802,12 @@ Overfull \hbox (21.15103pt too wide) in paragraph at lines 107--117
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-[24]
+[32]
 Overfull \hbox (5.21733pt too wide) in paragraph at lines 135--147
  [][] 
  []
 
-[25]) [26]
+[33]) [34]
 \openout2 = `chapters/Chapter5_ExperimentalAnalysis.aux'.
 
  (chapters/Chapter5_ExperimentalAnalysis.tex
@@ -708,13 +817,13 @@ Overfull \hbox (76.95403pt too wide) in paragraph at lines 29--40
  [][] 
  []
 
-[27
+[35
 
 
 
 
 
-] [28]
+] [36]
 
 LaTeX Font Warning: Font shape `OT1/cmr/bx/n' in size <13> not available
 (Font)              size <12> substituted on input line 126.
@@ -731,17 +840,17 @@ Overfull \hbox (6.17288pt too wide) in paragraph at lines 178--197
 []\T1/cmr/m/n/12 Comparing the two runs sep-a-rates the false neg-a-tives by cause. Two are \T1/cmr/m/it/12 calibration-
  []
 
-[29] [30]
+[37] [38]
 Overfull \hbox (56.44347pt too wide) in paragraph at lines 259--271
  [][] 
  []
 
-[31]) [32]
+[39]) [40]
 \openout2 = `chapters/Chapter6_Conclusions.aux'.
 
  (chapters/Chapter6_Conclusions.tex
 Chapter 6.
-) [33
+) [41
 
 
 
@@ -750,7 +859,7 @@ Chapter 6.
 ]
 \openout2 = `chapters/AppendiceA.aux'.
 
- (chapters/AppendiceA.tex [34
+ (chapters/AppendiceA.tex [42
 
 
 
@@ -763,21 +872,26 @@ Overfull \hbox (38.96568pt too wide) in paragraph at lines 5--5
 [][]\T1/cmr/bx/n/17.28 Questa è un'altra sezione, ma non viene in-serita nell'indice 
  []
 
-) [35] (main.bbl [36
+) [43] (main.bbl [44
 
 
 
 
 ]
-LaTeX Font Info:    Trying to load font information for T1+cmtt on input line 22.
+LaTeX Font Info:    Trying to load font information for T1+cmtt on input line 23.
  (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/base\t1cmtt.fd
 File: t1cmtt.fd 2023/04/13 v2.5m Standard LaTeX font definitions
 )
 
 LaTeX Font Warning: Font shape `T1/cmtt/m/n' in size <13> not available
-(Font)              size <12> substituted on input line 22.
+(Font)              size <12> substituted on input line 23.
 
-) [37] (main.aux (chapters/Frontespizio.aux) (chapters/Abstract.aux) (chapters/Chapter1_Introduction.aux) (chapters/Chapter2_StateOfTheArt.aux) (chapters/Chapter3_Method.aux) (chapters/Chapter4_ExperimentalSetup.aux) (chapters/Chapter5_ExperimentalAnalysis.aux) (chapters/Chapter6_Conclusions.aux) (chapters/AppendiceA.aux))
+[45] [46]
+Underfull \hbox (badness 1675) in paragraph at lines 139--146
+\T1/cmr/m/n/12 en-cy-clo-pe-dia.  [][]$\T1/cmtt/m/n/12 https : / / en . wikipedia . org / w / index . php ? title = Johnson %
+ []
+
+) [47] (main.aux (chapters/Frontespizio.aux) (chapters/Abstract.aux) (chapters/Chapter1_Introduction.aux) (chapters/Chapter2_StateOfTheArt.aux) (chapters/Chapter3_Method.aux) (chapters/Chapter4_ExperimentalSetup.aux) (chapters/Chapter5_ExperimentalAnalysis.aux) (chapters/Chapter6_Conclusions.aux) (chapters/AppendiceA.aux))
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-04>
@@ -788,20 +902,20 @@ LaTeX Font Warning: Size substitutions with differences
 (Font)              up to 2.48409pt have occurred.
 
 Package rerunfilecheck Info: File `main.out' has not changed.
-(rerunfilecheck)             Checksum: C6AD1BCD0F73A3237DC294B67BE89931;3648.
+(rerunfilecheck)             Checksum: 9C73DED8C1928C52EFAB2F227C86CF6B;4696.
  ) 
 Here is how much of TeX's memory you used:
- 16116 strings out of 474485
- 266919 string characters out of 5743261
- 1941542 words of memory out of 5000000
- 37963 multiletter control sequences out of 15000+600000
- 575887 words of font info for 75 fonts, out of 8000000 for 9000
+ 16234 strings out of 474485
+ 268966 string characters out of 5743261
+ 1942542 words of memory out of 5000000
+ 38034 multiletter control sequences out of 15000+600000
+ 578707 words of font info for 87 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 108i,12n,107p,629b,521s stack positions out of 10000i,1000n,20000p,200000b,200000s
- <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ectt1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecti1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1728.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx2488.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx2986.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1440.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx2074.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm1440.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm2074.pk><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmbx12.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmex10.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi12.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi6.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi9.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr12.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr6.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr9.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy6.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy9.pfb>
-Output written on main.pdf (37 pages, 447221 bytes).
+ 108i,12n,107p,629b,582s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ectt1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm0900.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecti1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1728.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx2488.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx2986.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1440.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx2074.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm1440.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm2074.pk><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmbx12.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmex10.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi12.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi6.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi9.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr12.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr6.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr9.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy6.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy9.pfb>
+Output written on main.pdf (47 pages, 1883799 bytes).
 PDF statistics:
- 939 PDF objects out of 1000 (max. 8388607)
- 121 named destinations out of 1000 (max. 500000)
- 190 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 1292 PDF objects out of 1440 (max. 8388607)
+ 162 named destinations out of 1000 (max. 500000)
+ 232 words of extra memory for PDF output out of 10000 (max. 10000000)
 

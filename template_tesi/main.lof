@@ -3,6 +3,8 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Schematic of the P3 pipeline. The memory bank is built from augmented variants of a single reference image, and test patches are scored by their distance to the nearest bank entry. The decision threshold is calibrated on additional augmented variants.}}{22}{figure.3.1}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Schematic of the spatial gating rule. A component $C$ is accepted if it overlaps the frame mask $F$ by at least $\tau $ pixels, otherwise it is rejected.}}{28}{figure.3.2}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }

@@ -1,4 +1,104 @@
-\begin{thebibliography}{1}
+\begin{thebibliography}{10}
+
+\bibitem{Bergmann2019}
+Paul Bergmann, Michael Fauser, David Sattlegger, and Carsten Steger.
+\newblock {MVTec AD} -- a comprehensive real-world dataset for unsupervised
+  anomaly detection.
+\newblock In {\em Proceedings of the IEEE/CVF Conference on Computer Vision and
+  Pattern Recognition (CVPR)}, pages 9592--9600, 2019.
+
+\bibitem{Cao2025}
+Yunkang Cao, Yuqi Cheng, Xiaohao Xu, Yiheng Zhang, Yihan Sun, Yuxiang Tan,
+  Yuxin Zhang, Xiaonan Huang, and Weiming Shen.
+\newblock Visual anomaly detection under complex view-illumination interplay: A
+  large-scale benchmark.
+\newblock arXiv preprint arXiv:2505.10996, 2025.
+
+\bibitem{Chen2025}
+Dayou Chen, Long Chen, Yi~Yang, Qiuchen Lu, Craig Hancock, Russell Lock, and
+  Simon S{\o}lvsten.
+\newblock A knowledge-driven vision-language reasoning approach for automated
+  fire safety compliance checking in operational buildings.
+\newblock SSRN preprint, 2025.
+\newblock \url{https://ssrn.com/abstract=5387267}.
+
+\bibitem{Cohen2020}
+Niv Cohen and Yedid Hoshen.
+\newblock Sub-image anomaly detection with deep pyramid correspondences.
+\newblock arXiv preprint arXiv:2005.02357, 2020.
+
+\bibitem{Defard2021}
+Thomas Defard, Aleksandr Setkov, Ang{\'e}lique Loesch, and Romaric Audigier.
+\newblock {PaDiM}: a patch distribution modeling framework for anomaly
+  detection and localization.
+\newblock In {\em Pattern Recognition. ICPR International Workshops and
+  Challenges}, pages 475--489, 2021.
+
+\bibitem{Duong2023}
+Huu-Thanh Duong, Viet-Tuan Le, and Vinh~Truong Hoang.
+\newblock Deep learning-based anomaly detection in video surveillance: A
+  survey.
+\newblock {\em Sensors}, 23(11):5024, 2023.
+
+\bibitem{Ercan2024}
+M.~Fikret Ercan and Asha Mathyalakan.
+\newblock Computer vision based safety inspection in public housing.
+\newblock In {\em TENCON 2024 -- IEEE Region 10 Conference}, pages 1398--1401,
+  2024.
+
+\bibitem{Gallo2022}
+Gionatan Gallo, Francesco Di~Rienzo, Federico Garzelli, Pietro Ducange, and
+  Carlo Vallati.
+\newblock A smart system for personal protective equipment detection in
+  industrial environments based on deep learning at the edge.
+\newblock {\em IEEE Access}, 10:110862--110878, 2022.
+
+\bibitem{JuReibman2024}
+Shengtai Ju and Amy~R. Reibman.
+\newblock Shadow augmentation for handwashing action recognition: from
+  synthetic to real datasets.
+\newblock arXiv preprint arXiv:2410.03984, 2024.
+
+\bibitem{Miglionico2025}
+Giustino~Claudio Miglionico, Francesco Di~Rienzo, Pietro Ducange, Francesco
+  Marcelloni, and Carlo Vallati.
+\newblock A comparative analysis of models for real-time personal protective
+  equipment detection on edge devices.
+\newblock In {\em 2025 International Joint Conference on Neural Networks
+  (IJCNN)}, 2025.
+
+\bibitem{Miglionico2024}
+Giustino~Claudio Miglionico, Pietro Ducange, Francesco Marcelloni, Carlo
+  Vallati, and Francesco di~Rienzo.
+\newblock Performance evaluation of {YOLOv5} on edge devices for personal
+  protective equipment detection.
+\newblock In {\em 2024 International Joint Conference on Neural Networks
+  (IJCNN)}, 2024.
+
+\bibitem{Mittal2024}
+Payal Mittal.
+\newblock A comprehensive survey of deep learning-based lightweight object
+  detection models for edge devices.
+\newblock {\em Artificial Intelligence Review}, 57:242, 2024.
+
+\bibitem{Ouardirhi2024}
+Zainab Ouardirhi, Sidi~Ahmed Mahmoudi, and Mostapha Zbakh.
+\newblock Enhancing object detection in smart video surveillance: A survey of
+  occlusion-handling approaches.
+\newblock {\em Electronics}, 13(3):541, 2024.
+
+\bibitem{Patrikar2022}
+Devashree~R. Patrikar and Mayur~Rajaram Parate.
+\newblock Anomaly detection using edge computing in video surveillance system:
+  review.
+\newblock {\em International Journal of Multimedia Information Retrieval},
+  11:85--110, 2022.
+
+\bibitem{Redmon2016}
+Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi.
+\newblock You only look once: Unified, real-time object detection.
+\newblock In {\em Proceedings of the IEEE Conference on Computer Vision and
+  Pattern Recognition (CVPR)}, pages 779--788, 2016.
 
 \bibitem{Roth2022}
 Karsten Roth, Latha Pemula, Joaquin Zepeda, Bernhard Sch{\"o}lkopf, Thomas
@@ -7,12 +107,33 @@ Karsten Roth, Latha Pemula, Joaquin Zepeda, Bernhard Sch{\"o}lkopf, Thomas
 \newblock In {\em Proceedings of the IEEE/CVF Conference on Computer Vision and
   Pattern Recognition (CVPR)}, pages 14318--14328, 2022.
 
+\bibitem{Santana2020}
+Marcos C.~S. Santana, Leandro~Aparecido Passos, Thierry~P. Moreira, Danilo
+  Colombo, Victor Hugo~C. de~Albuquerque, and Jo{\~a}o~Paulo Papa.
+\newblock A novel siamese-based approach for scene change detection with
+  applications to obstructed routes in hazardous environments.
+\newblock {\em IEEE Intelligent Systems}, 35(1):44--53, 2020.
+
 \bibitem{SenerSavarese2018}
 Ozan Sener and Silvio Savarese.
 \newblock Active learning for convolutional neural networks: A core-set
   approach.
 \newblock In {\em International Conference on Learning Representations (ICLR)},
   2018.
+
+\bibitem{Shin2025}
+Hyo-Ju Shin, Sang-Pil Jung, and Jin-Wook Kim.
+\newblock Improving object classification accuracy for detecting obstacles on
+  indoor evacuation paths using {YOLOv8}.
+\newblock {\em KIEAE Journal}, 25(6):5--14, 2025.
+
+\bibitem{Talebi2026}
+Hamed Talebi, Nahid~Khoshk Angabini, Arezoo Sarkheyli-H{\"a}gele, and Erdal
+  Akin.
+\newblock Real time exit blockage detection via door-centric change monitoring
+  for emergency evacuation.
+\newblock In {\em Proceedings of the 18th International Conference on Agents
+  and Artificial Intelligence (ICAART)}, volume~3, pages 2648--2657, 2026.
 
 \bibitem{enwiki:1357719950}
 {Wikipedia contributors}.
@@ -28,5 +149,12 @@ Sergey Zagoruyko and Nikos Komodakis.
 \newblock Wide residual networks.
 \newblock In {\em Proceedings of the British Machine Vision Conference (BMVC)},
   2016.
+
+\bibitem{Zaidi2024}
+Syed Farhan~Alam Zaidi, Jaehun Yang, Muhammad~Sibtain Abbas, Rahat Hussain,
+  Doyeop Lee, and Chansik Park.
+\newblock Vision-based construction safety monitoring utilizing temporal
+  analysis to reduce false alarms.
+\newblock {\em Buildings}, 14(6):1878, 2024.
 
 \end{thebibliography}

@@ -94,7 +94,18 @@ of the deployment model, in which each camera monitors exactly one exit route:
 the normal class for that camera is its own fixed scene, and the only relevant
 variability is the illumination and the background change of that scene over time. A per-camera memory
 built from one reference image is therefore not a limitation imposed by scarce
-data, but the correct modelling choice for the objective.
+data, but the correct modelling choice for the objective. The figure \ref{fig:p3-pipeline}
+shows all the pipeline steps.
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=0.65\textwidth]{images/patchCore/patchCore_diagramma.pdf}
+  \caption{Schematic of the P3 pipeline. The memory bank is built from augmented
+  variants of a single reference image, and test patches are scored by their
+  distance to the nearest bank entry. The decision threshold is calibrated on
+  additional augmented variants.}
+  \label{fig:p3-pipeline}
+\end{figure}
 
 \subsubsection{Feature extraction}
 
@@ -289,13 +300,6 @@ obstruction relative to a false alarm: for safety-critical exits $k$ is set low
 ($2.5$ to $3.0$) to favour recall, and higher ($4.0$ to $5.0$) where false
 alarms are operationally costly.
 
-The original $I_{\mathrm{ref}}$ is excluded from calibration as well: being the
-closest possible image to the memory (which is built from its augmentations),
-its score is structurally the minimum of the distribution rather than a
-representative sample, and including it would bias $\mu$ downward. Reserving
-$I_{\mathrm{ref}}$ as the actual normal test point - unseen by both the memory and
-the calibration - yields an honest estimate of the false-positive rate.
-
 \paragraph{Coverage dependency.} Because $\mu$ and $\sigma$ are estimated on
 augmented variants, they reflect only the score variability those augmentations
 induce. If a real source of variation (cast shadows, light beams, outdoor
@@ -401,11 +405,19 @@ generates anomaly blobs in the glass region without any physical obstruction. Th
 principled remedy exploits a physical-grounding constraint: \emph{any real
 obstruction rests on the floor and therefore intersects the door threshold}.
 
-Door-frame polygons (left jamb, right jamb, central mullion, threshold,
+Door-frame polygons (left jamb, right jamb, threshold,
 architrave) are annotated once on the reference image and rasterised into a
-binary \emph{frame mask} $F$. The gating rule operates on the connected components
+binary \emph{frame mask} $F$ (Figure \ref{fig:p3-gating}). The gating rule operates on the connected components
 of the thresholded anomaly map: the map is binarised at $\theta$, its
 $8$-connected components are labelled, and a component $C$ is accepted only if
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.5\textwidth]{images/patchCore/esempio_stipiti.png}
+  \caption{Schematic of the spatial gating rule. A component $C$ is accepted if it
+  overlaps the frame mask $F$ by at least $\tau$ pixels, otherwise it is rejected.}
+  \label{fig:p3-gating}
+\end{figure}
 
 \begin{equation}
   |C \cap F| \;\geq\; \tau ,
