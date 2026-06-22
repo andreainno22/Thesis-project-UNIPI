@@ -1,6 +1,6 @@
 \babel@toc {english}{}\relax 
 \babel@toc {english}{}\relax 
-\contentsline {chapter}{Abstract}{3}{chapter*.1}%
+\contentsline {chapter}{Abstract}{3}{chapter*.2}%
 \contentsline {chapter}{\numberline {1}Introduction}{9}{chapter.1}%
 \contentsline {section}{\numberline {1.1}Motivation}{9}{section.1.1}%
 \contentsline {section}{\numberline {1.2}Research Question}{9}{section.1.2}%
@@ -9,51 +9,63 @@
 \contentsline {section}{\numberline {2.1}Vision-Based Safety Monitoring in Built Environments}{11}{section.2.1}%
 \contentsline {section}{\numberline {2.2}Object Detection on Edge Devices}{12}{section.2.2}%
 \contentsline {section}{\numberline {2.3}Reference-Based Change Detection}{13}{section.2.3}%
-\contentsline {section}{\numberline {2.4}Unsupervised Anomaly Detection}{14}{section.2.4}%
+\contentsline {section}{\numberline {2.4}Unsupervised Anomaly Detection}{15}{section.2.4}%
 \contentsline {section}{\numberline {2.5}Robustness to Illumination Nuisances}{16}{section.2.5}%
 \contentsline {section}{\numberline {2.6}Positioning of This Work}{17}{section.2.6}%
-\contentsline {chapter}{\numberline {3}Method}{19}{chapter.3}%
-\contentsline {section}{\numberline {3.1}Objective}{19}{section.3.1}%
-\contentsline {section}{\numberline {3.2}Pipeline Overview}{19}{section.3.2}%
-\contentsline {subsection}{\numberline {3.2.1}Unsupervised Anomaly Detection with PatchCore (P3)}{19}{subsection.3.2.1}%
-\contentsline {subsubsection}{Motivation and design rationale}{19}{section*.4}%
-\contentsline {subsubsection}{Key intuition}{20}{section*.5}%
-\contentsline {subsubsection}{Feature extraction}{21}{section*.6}%
-\contentsline {subsubsection}{Build phase}{21}{section*.7}%
-\contentsline {paragraph}{Step 1 - Augmentation.}{23}{section*.8}%
-\contentsline {paragraph}{Step 2 - Feature accumulation.}{23}{section*.9}%
-\contentsline {paragraph}{Step 3 - Coreset reduction.}{24}{section*.10}%
-\contentsline {subsubsection}{Threshold calibration}{24}{section*.11}%
-\contentsline {paragraph}{Design space.}{24}{section*.12}%
-\contentsline {paragraph}{Parametric rule.}{25}{section*.13}%
-\contentsline {paragraph}{Coverage dependency.}{25}{section*.14}%
-\contentsline {subsubsection}{Test phase and anomaly map}{25}{section*.15}%
-\contentsline {subsubsection}{Shadow and light augmentation}{26}{section*.16}%
-\contentsline {subsubsection}{Spatial gating via annotated polygons}{27}{section*.17}%
-\contentsline {paragraph}{Structural limitations.}{27}{section*.18}%
-\contentsline {subsubsection}{Calibration stabilisation: pooled sigma}{28}{section*.19}%
-\contentsline {section}{\numberline {3.3}Dataset Description}{29}{section.3.3}%
-\contentsline {chapter}{\numberline {4}Experimental Setup}{31}{chapter.4}%
-\contentsline {section}{\numberline {4.1}Pipeline Implementation}{31}{section.4.1}%
-\contentsline {subsection}{\numberline {4.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{31}{subsection.4.1.1}%
-\contentsline {subsubsection}{Backbone and feature extraction}{31}{section*.20}%
-\contentsline {subsubsection}{Build and calibration settings}{31}{section*.21}%
-\contentsline {subsubsection}{Anti-leakage separation}{32}{section*.22}%
-\contentsline {subsubsection}{Shadow and light augmentation}{33}{section*.23}%
-\contentsline {subsubsection}{ROI annotation and connected-component gating}{33}{section*.24}%
-\contentsline {subsubsection}{Pooled-sigma evaluation}{34}{section*.25}%
-\contentsline {section}{\numberline {4.2}Application}{34}{section.4.2}%
-\contentsline {chapter}{\numberline {5}Experimental Analysis}{35}{chapter.5}%
-\contentsline {section}{\numberline {5.1}Pipeline Results}{35}{section.5.1}%
-\contentsline {subsection}{\numberline {5.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{35}{subsection.5.1.1}%
-\contentsline {subsubsection}{Evaluation protocol}{35}{section*.26}%
-\contentsline {subsubsection}{Phase A: baseline on the copy-paste dataset}{36}{section*.27}%
-\contentsline {subsubsection}{Phase B: shadow vulnerability}{36}{section*.28}%
-\contentsline {subsubsection}{Phase C: shadow augmentation and pooled sigma}{36}{section*.29}%
-\contentsline {subsubsection}{Phase D: real-world validation on real doors}{37}{section*.30}%
-\contentsline {subsubsection}{Phase E: light augmentation ablation}{38}{section*.31}%
-\contentsline {subsubsection}{Discrimination versus calibration}{39}{section*.32}%
-\contentsline {subsubsection}{Discussion}{40}{section*.33}%
-\contentsline {section}{\numberline {5.2}Application Results}{40}{section.5.2}%
-\contentsline {chapter}{\numberline {6}Conclusions}{41}{chapter.6}%
-\contentsline {chapter}{\numberline {A}Questa è un'appendice}{43}{appendix.A}%
+\contentsline {chapter}{\numberline {3}Method}{21}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Objective}{21}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Pipeline Overview}{21}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Unsupervised Anomaly Detection with PatchCore (P3)}{21}{subsection.3.2.1}%
+\contentsline {subsubsection}{Motivation and design rationale}{21}{section*.6}%
+\contentsline {subsubsection}{Key intuition}{22}{section*.7}%
+\contentsline {subsubsection}{Feature extraction}{23}{section*.9}%
+\contentsline {subsubsection}{Build phase}{23}{section*.10}%
+\contentsline {paragraph}{Step 1 - Augmentation.}{25}{section*.11}%
+\contentsline {paragraph}{Step 2 - Feature accumulation.}{25}{section*.12}%
+\contentsline {paragraph}{Step 3 - Coreset reduction.}{26}{section*.13}%
+\contentsline {subsubsection}{Threshold calibration}{26}{section*.14}%
+\contentsline {paragraph}{Design space.}{26}{section*.15}%
+\contentsline {paragraph}{Parametric rule.}{27}{section*.16}%
+\contentsline {paragraph}{Coverage dependency.}{27}{section*.17}%
+\contentsline {subsubsection}{Test phase and anomaly map}{27}{section*.18}%
+\contentsline {subsubsection}{Shadow and light augmentation}{28}{section*.19}%
+\contentsline {subsubsection}{Spatial gating via annotated polygons}{29}{section*.20}%
+\contentsline {paragraph}{Structural limitations.}{29}{section*.22}%
+\contentsline {subsubsection}{Calibration stabilisation: pooled sigma}{30}{section*.23}%
+\contentsline {section}{\numberline {3.3}Dataset Description}{31}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Sources of raw material}{31}{subsection.3.3.1}%
+\contentsline {subsubsection}{Normal background scenes}{31}{section*.24}%
+\contentsline {subsubsection}{Obstacle objects}{32}{section*.26}%
+\contentsline {subsection}{\numberline {3.3.2}Synthetic occlusion corpus (D1)}{32}{subsection.3.3.2}%
+\contentsline {subsubsection}{Object extraction}{32}{section*.27}%
+\contentsline {subsubsection}{Copy-paste composition}{32}{section*.28}%
+\contentsline {subsubsection}{Limitations of the synthetic corpus}{33}{section*.30}%
+\contentsline {subsection}{\numberline {3.3.3}Real on-site test set (D2)}{33}{subsection.3.3.3}%
+\contentsline {subsubsection}{Acquisition and structure}{34}{section*.32}%
+\contentsline {subsubsection}{Scope and obstruction criterion}{35}{section*.34}%
+\contentsline {subsubsection}{Hard negatives and real obstructions}{35}{section*.35}%
+\contentsline {subsection}{\numberline {3.3.4}Database organisation and anti-leakage}{35}{subsection.3.3.4}%
+\contentsline {chapter}{\numberline {4}Experimental Setup}{39}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Pipeline Implementation}{39}{section.4.1}%
+\contentsline {subsection}{\numberline {4.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{39}{subsection.4.1.1}%
+\contentsline {subsubsection}{Backbone and feature extraction}{39}{section*.38}%
+\contentsline {subsubsection}{Build and calibration settings}{39}{section*.40}%
+\contentsline {subsubsection}{Anti-leakage separation}{40}{section*.42}%
+\contentsline {subsubsection}{Shadow and light augmentation}{41}{section*.44}%
+\contentsline {subsubsection}{ROI annotation and connected-component gating}{41}{section*.46}%
+\contentsline {subsubsection}{Pooled-sigma evaluation}{42}{section*.47}%
+\contentsline {section}{\numberline {4.2}Application}{42}{section.4.2}%
+\contentsline {chapter}{\numberline {5}Experimental Analysis}{43}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Pipeline Results}{43}{section.5.1}%
+\contentsline {subsection}{\numberline {5.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{43}{subsection.5.1.1}%
+\contentsline {subsubsection}{Evaluation protocol}{43}{section*.48}%
+\contentsline {subsubsection}{Phase A: baseline on the copy-paste dataset}{44}{section*.50}%
+\contentsline {subsubsection}{Phase B: shadow vulnerability}{44}{section*.52}%
+\contentsline {subsubsection}{Phase C: shadow augmentation and pooled sigma}{44}{section*.54}%
+\contentsline {subsubsection}{Phase D: real-world validation on real doors}{45}{section*.56}%
+\contentsline {subsubsection}{Phase E: light augmentation ablation}{46}{section*.58}%
+\contentsline {subsubsection}{Discrimination versus calibration}{47}{section*.60}%
+\contentsline {subsubsection}{Discussion}{48}{section*.62}%
+\contentsline {section}{\numberline {5.2}Application Results}{48}{section.5.2}%
+\contentsline {chapter}{\numberline {6}Conclusions}{49}{chapter.6}%
+\contentsline {chapter}{\numberline {A}Questa è un'appendice}{51}{appendix.A}%

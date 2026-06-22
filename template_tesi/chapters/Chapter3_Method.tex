@@ -402,8 +402,9 @@ time.
 Glass doors introduce a distinct failure mode: the transparent panel makes the
 external background visible, and any movement or lighting change beyond the door
 generates anomaly blobs in the glass region without any physical obstruction. The
-principled remedy exploits a physical-grounding constraint: \emph{any real
-obstruction rests on the floor and therefore intersects the door threshold}.
+principled remedy operationalises the obstruction criterion defined for the test
+set (an obstruction reaches the door frame, Section~\ref{sssec:ds-criterion}) as a
+spatial constraint on the anomaly map.
 
 Door-frame polygons (left jamb, right jamb, threshold,
 architrave) are annotated once on the reference image and rasterised into a
@@ -489,6 +490,345 @@ frames; full pooling ($w_i = 0$) is the cold-start corner and remains valuable
 for newly installed cameras.
 
 \section{Dataset Description}
+\label{sec:dataset}
 
-[Description of the dataset used to build, calibrate, and evaluate the pipeline -
-to be completed.]
+The problem addressed in this thesis - deciding whether an evacuation route is
+obstructed - has no public benchmark. The anomaly-detection literature relies on
+industrial corpora such as MVTec-AD \cite{Bergmann2019} or VisA, which contain
+neither safety doors nor real corridors, while the available object-detection
+datasets for the obstacles typical of a hospital setting - wheelchairs, carts,
+waste bins, or stretchers - target the recognition of the object \emph{in
+itself}, not its presence as an obstacle in a specific scene. The
+data used here was therefore assembled from scratch, along two complementary
+regimes:
+
+\begin{itemize}
+  \item a \emph{synthetic construction corpus}, built by copy-paste composition,
+  which provides a large and fully controlled body of normal and obstructed
+  scenes for development and for the preliminary, controlled validation of the
+  models;
+  \item a \emph{real on-site test set}, photographed in the field, which is the
+  only genuine measure of operational performance and is shared, as a common
+  benchmark, by all the pipelines compared in this thesis.
+\end{itemize}
+
+This section describes how the two corpora are constructed and from which sources;
+how each pipeline \emph{consumes} the data (which split feeds the bank, the
+calibration, or the detector training) is detailed in the corresponding pipeline
+section.
+
+\subsection{Sources of raw material}
+
+\subsubsection{Normal background scenes}
+
+The normal scenes - unobstructed safety doors and corridors - were collected by
+scraping Pinterest, one of the few sources offering a large variety of real
+indoor scenes with heterogeneous lighting and viewpoints. The harvested images
+were filtered by hand to discard close-ups of handles or knobs, scenes already
+containing obstructions, photorealistic renders and obviously AI-generated
+pictures, and near-duplicates. The result is organised by \emph{venue}
+(Table~\ref{tab:ds-normals}). Files are renamed to a canonical form
+(\texttt{porta\_NNN}, \texttt{corridoio\_NNN}); the file stem doubles as the
+\emph{group key} later used by the database to tie a clean scene to all of its
+synthetic variants (Section~\ref{ssec:ds-db}). A small conversion utility
+normalises the encoding to JPEG, flattening any alpha channel onto a white
+background.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{llc}
+    \hline
+    Venue & Images \\
+    \hline
+    Door & $550$ \\
+    Corridor & $550$ \\
+    \hline
+    Total & $1100$ \\
+    \hline
+  \end{tabular}
+  \caption{Normal background scenes scraped from Pinterest after manual
+  filtering.}
+  \label{tab:ds-normals}
+\end{table}
+
+\subsubsection{Obstacle objects}
+
+The obstacle categories most relevant to the evacuation scenario were obtained as
+five independent YOLO-format datasets from Roboflow: cart, wheelchair, box,
+stretcher, and waste bin. Each comes with images and bounding-box labels. The
+original per-dataset class identifiers are retained on disk, but at composition
+time all categories collapse onto a single class \texttt{obstacle}: for the task
+at hand the obstacle \emph{type} is irrelevant, only its presence inside the area
+of interest matters.
+
+\subsection{Synthetic occlusion corpus (D1)}
+
+\subsubsection{Object extraction}
+
+To paste an object onto an arbitrary background its original background must first
+be removed. Each labelled bounding box is cropped from its source image and passed
+to \texttt{rembg}, a matting tool based on the U$^2$-Net salient-object
+segmentation network \cite{Qin2020}, which returns a four-channel PNG with the
+subject isolated on a transparent canvas. The output is one transparent cut-out
+per instance. The step is imperfect on thin borders (cart wheels, stretcher
+straps), where a faint white halo can remain, and floor reflections are
+occasionally included in the crop; the extracted set was therefore filtered by
+hand to remove poorly segmented cut-outs.
+
+\subsubsection{Copy-paste composition}
+
+The obstructed images are produced by compositing, onto each background, one to
+three cut-outs sampled uniformly across the five categories. For every object a
+valid position and scale are searched (up to a fixed number of attempts), the
+object is alpha-blended onto the scene, and the resulting bounding box is recorded
+in normalised YOLO coordinates. The placement constraints
+(Table~\ref{tab:ds-copypaste}) encode semantic assumptions about the problem: an
+object rests on the floor (its top edge cannot rise above mid-frame), occupies a
+plausible fraction of the frame height, and overlaps other objects only
+marginally, so that each instance remains distinguishable. A fixed share of
+backgrounds is deliberately left clean, to emit negative samples in the same
+output format.
+
+A further subset of variants deliberately relaxes the placement constraints of
+Table~\ref{tab:ds-copypaste} to introduce \emph{partial occlusion}: objects are
+cropped by the frame edge or made to occlude one another substantially,
+reproducing the incomplete, fragmentary views common in a cluttered corridor.
+These variants target the detector-based pipeline (P1), which must localise
+obstacles from partial evidence; they leave P3 unaffected, as its reference-based
+scoring reacts to any departure from the normal scene irrespective of whether a
+single object is fully visible.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lll}
+    \hline
+    Parameter & Value & Rationale \\
+    \hline
+    Scale range & $[0.15, 0.50]$ & Object height as a fraction of frame height \\
+    Min.\ top edge & $0.50$ & Object grounded on the floor, no floating \\
+    Max.\ pairwise IoU & $0.10$ & Each instance clearly separable \\
+    Placement attempts & $30$ & Empirical cap before giving up \\
+    Clean-background ratio & $0.10$ & Explicit negative samples \\
+    \hline
+  \end{tabular}
+  \caption{Constraints of the copy-paste composition.}
+  \label{tab:ds-copypaste}
+\end{table}
+
+The output filename encodes the venue, the background index, and the variation
+(\texttt{porte\_0042\_porta\_042\_v01}); a regular expression in the loader
+recovers the source stem (\texttt{porta\_042}) and uses it as the group key, so
+each synthetic image is provably linked to its originating background. The corpus
+comprises $990$ composited images with their YOLO label files
+($495$ per venue).
+
+\subsubsection{Limitations of the synthetic corpus}
+
+Copy-paste composition introduces, by construction, two simplifications that
+must be kept in mind when interpreting results. First, \emph{illumination and
+colour are not coherent}: a cut-out carries the lighting of its source scene,
+which rarely matches the target background, so a method relying on edge
+micro-discontinuities may find the object easier than a real obstruction.
+Second, \emph{cast shadows are absent}: the pasted object projects no shadow onto
+the new scene, removing a cue while a residual shadow from the
+source crop may sit in a semantically wrong place. Both effects are visible in the
+example of Figure~\ref{fig:ds-d1}. These
+limitations are precisely what motivates evaluating the pipelines on the real
+test set described in Section~\ref{ssec:ds-poli}.
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{images/dataset/d1_reference.jpg}
+    \caption{Normal background}
+    \label{fig:ds-d1-ref}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{images/dataset/d1_obstructed.jpg}
+    \caption{Copy-paste obstruction}
+    \label{fig:ds-d1-obs}
+  \end{subfigure}
+  \caption{A pair from the synthetic copy-paste corpus (D1): (a) a normal door
+  background and (b) the same scene with two cut-outs - a waste bin and a
+  wheelchair - alpha-blended in front of it. The pasted objects carry the lighting
+  of their source images and cast no shadow on the floor, the two simplifications
+  discussed in the text.}
+  \label{fig:ds-d1}
+\end{figure}
+
+\subsection{Real on-site test set (D2)}
+\label{ssec:ds-poli}
+
+All the material above is either synthetic or web-sourced: it is suited to
+\emph{building} and \emph{validating} the models, but it does not represent a true
+operating condition. The final evaluation is therefore carried out on a second
+dataset, photographed directly in the field at the engineering campus of the University of Pisa. This set is the only real
+test of the thesis and is common to all pipelines: every method is compared on
+exactly the same real frames.
+
+\subsubsection{Acquisition and structure}
+
+Six distinct exits doors were photographed,
+all of venue type \emph{door}, at a resolution of $960 \times 1280$. For each
+scene the acquisition protocol provides three kinds of frame: a single
+\emph{reference} image - the expected normal scene, free of obstructions, which is
+the baseline consumed by the reference-based pipelines and the anchor for the door-frame
+annotation; several \emph{unobstructed variants} of the same scene; and several
+\emph{obstructed variants}, in which a real object is physically placed in front of
+the exit. The set is balanced - $30$ normal against $30$ obstructed frames -
+with the six references serving as baselines rather than test queries.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lccc}
+    \hline
+    Scene & References & Unobstructed (hard neg.) & Obstructed (real) \\
+    \hline
+    \texttt{door\_1} & $1$ & $3$ & $3$ \\
+    \texttt{door\_2} & $1$ & $3$ & $3$ \\
+    \texttt{door\_3} & $1$ & $9$ & $9$ \\
+    \texttt{door\_4} & $1$ & $9$ & $9$ \\
+    \texttt{door\_5} & $1$ & $3$ & $3$ \\
+    \texttt{door\_6} & $1$ & $3$ & $3$ \\
+    \hline
+    Total & $6$ & $30$ & $30$ \\
+    \hline
+  \end{tabular}
+  \caption{Composition of the real D2 test set, per scene.}
+  \label{tab:ds-poli}
+\end{table}
+
+\subsubsection{Scope and obstruction criterion}
+\label{sssec:ds-criterion}
+
+Two of the pipelines compared in this thesis are \emph{door-centric} by
+construction: the door-baseline (P2) and PatchCore (P3) both reason about a
+stable, annotated door frame, and therefore apply in practice only to doors - a
+corridor offers no comparably stable geometric reference. The real test set is
+restricted to doors for this reason, so that every pipeline is evaluated on the
+same frames and under the conditions for which the door-centric methods are
+defined.
+
+This scope also fixes the operational definition of an obstruction used to label
+D2, a definition shared by all pipelines and grounded on a physical constraint:
+\emph{any real obstacle that blocks the passage rests on the floor and therefore
+intersects the door frame}. A frame is consequently labelled \emph{obstructed}
+when an object reaches the door opening - that is, when it overlaps at least one
+jamb or the threshold; an object that is present in the scene but does not reach
+the frame (a bag on a distant bench, a person walking past) does not obstruct
+\emph{that} exit, and the frame stays \emph{normal}. The pipelines differ only in
+how they \emph{operationalise} this criterion - P3, for example, enforces it as a
+connected-component gating rule against the rasterised frame mask
+(Section~\ref{sec:p3-gating}) - but the underlying ground-truth notion of
+obstruction is common to all.
+
+\subsubsection{Hard negatives and real obstructions}
+
+The distinction between the two classes is designed to be realistic and
+non-trivial. The unobstructed frames are not mere re-shots of the reference: they
+are \emph{hard negatives}, the same door captured under nuisance variations that
+change the scene \emph{without} reaching the door opening, and therefore must not
+be flagged - an object visible behind the glass panel, a strong shadow cast on the
+leaf, a notice taped to the door, a person
+transiting. Their purpose is to measure the false-positive rate in the regime
+where the scene changes but the route stays clear. The obstructed frames,
+conversely, contain a real obstacle resting in front of the exit and touching the
+frame (a waste bin moved against the door, a chair, and so on), with lighting and
+cast shadows naturally coherent with the scene; they are far more representative
+of a real obstruction than the copy-paste composites. The set thus stresses both
+tails of the problem: the detection of genuine obstructions (recall) and the
+robustness to false alarms under legitimate scene variation (specificity).
+Figure~\ref{fig:ds-d2} illustrates the three frame types on a single glass door,
+where the \emph{same} waste bin appears first behind the glass - not reaching the
+opening, hence a hard negative - and then on the near side, touching the frame and
+blocking the passage.
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{images/dataset/d2_reference.jpg}
+    \caption{Reference (normal)}
+    \label{fig:ds-d2-ref}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{images/dataset/d2_behind_glass.jpg}
+    \caption{Hard negative}
+    \label{fig:ds-d2-neg}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{images/dataset/d2_obstructed.jpg}
+    \caption{Real obstruction}
+    \label{fig:ds-d2-obs}
+  \end{subfigure}
+  \caption{The three frame types of the real test set (D2) on one glass door:
+  (a) the clean reference; (b) a hard negative, where the waste bin is visible
+  behind the glass on the walkway along with a poster on the right side; (c) a real obstruction, the same bin placed on the near side,
+  touching the frame and blocking the passage. The contrast between (b) and (c) is
+  exactly the obstruction criterion of Section~\ref{sssec:ds-criterion}.}
+  \label{fig:ds-d2}
+\end{figure}
+
+
+
+\subsection{Database organisation and anti-leakage}
+\label{ssec:ds-db}
+
+The images on disk are organised by type and venue, but the pipelines need to
+query the data along other axes - by split, by obstacle category, by reference
+frame, by source group. These relations are kept in a single SQLite database that
+acts as the canonical index: every training and evaluation query goes through it,
+and the files on disk are referenced by relative path. Each physical image is one
+row in a \texttt{frames} table recording, among other fields, its venue, whether
+it is normal, the occlusion type (\texttt{none}, \texttt{synthetic\_copypaste}, or
+\texttt{real}), its split, its provenance (\texttt{source}), the group key
+(\texttt{source\_group}), and, for derived images, the reference frame they
+originate from. Bounding boxes (normalised YOLO coordinates, single
+\texttt{obstacle} class) live in a companion table and are populated only by the
+copy-paste composites; the real obstructions carry frame-level ground truth only.
+
+The chief risk in a synthetic corpus is \emph{leakage}: if the same background
+appears as a normal image in training and as an obstructed image in test, a
+reference-based pipeline would meet at test time information it already saw while
+building. The loader prevents this through the group key: every variant of a
+scene (its clean image and all its synthetic composites) inherits the same
+\texttt{source\_group}, and the split is decided by hashing that key, so a whole
+group always lands in a single split regardless of load order or of how many
+variants are added later. In the current operating point the entire construction
+corpus (Pinterest backgrounds and copy-paste composites) is assigned to
+\texttt{train} and the real \emph{poli ingegneria} set is the only \texttt{test}
+split; the
+\emph{poli ingegneria} frames all share a single group, which keeps the real set
+permanently disjoint from the construction material. No fixed \texttt{val} split
+is materialised, since validation is performed by cross-validation over the
+training pool. Table~\ref{tab:ds-stats} summarises the resulting inventory.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{llccr}
+    \hline
+    Source & Venue & Normal & Occlusion & Count \\
+    \hline
+    Pinterest (backgrounds) & door + corridor & yes & none & $1100$ \\
+    Copy-paste composites (D1) & door + corridor & no & copy-paste & $990$ \\
+    D2 (references) & door & yes & none & $6$ \\
+    D2 (hard neg.) & door & yes & none & $30$ \\
+    D2 (obstructed) & door & no & real & $30$ \\
+    \hline
+    Total & & & & $2156$ \\
+    \hline
+  \end{tabular}
+  \caption{Inventory of the dataset shared across the pipelines. The construction
+  corpus ($2090$ frames) forms the \texttt{train} pool; the real \emph{poli
+  ingegneria} set ($66$ frames) is the held-out \texttt{test} split. The
+  P3-specific shadow and light robustness variants are described in
+  Chapter~\ref{chap:setup} and are not listed here.}
+  \label{tab:ds-stats}
+\end{table}

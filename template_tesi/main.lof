@@ -3,8 +3,10 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {3.1}{\ignorespaces Schematic of the P3 pipeline. The memory bank is built from augmented variants of a single reference image, and test patches are scored by their distance to the nearest bank entry. The decision threshold is calibrated on additional augmented variants.}}{22}{figure.3.1}%
-\contentsline {figure}{\numberline {3.2}{\ignorespaces Schematic of the spatial gating rule. A component $C$ is accepted if it overlaps the frame mask $F$ by at least $\tau $ pixels, otherwise it is rejected.}}{28}{figure.3.2}%
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Schematic of the P3 pipeline. The memory bank is built from augmented variants of a single reference image, and test patches are scored by their distance to the nearest bank entry. The decision threshold is calibrated on additional augmented variants.}}{24}{figure.caption.8}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Schematic of the spatial gating rule. A component $C$ is accepted if it overlaps the frame mask $F$ by at least $\tau $ pixels, otherwise it is rejected.}}{30}{figure.caption.21}%
+\contentsline {figure}{\numberline {3.3}{\ignorespaces A pair from the synthetic copy-paste corpus (D1): (a) a normal door background and (b) the same scene with two cut-outs - a waste bin and a wheelchair - alpha-blended in front of it. The pasted objects carry the lighting of their source images and cast no shadow on the floor, the two simplifications discussed in the text.}}{34}{figure.caption.31}%
+\contentsline {figure}{\numberline {3.4}{\ignorespaces The three frame types of the real test set (D2) on one glass door: (a) the clean reference; (b) a hard negative, where the waste bin is visible behind the glass on the walkway along with a poster on the right side; (c) a real obstruction, the same bin placed on the near side, touching the frame and blocking the passage. The contrast between (b) and (c) is exactly the obstruction criterion of Section~\ref {sssec:ds-criterion}.}}{36}{figure.caption.36}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }

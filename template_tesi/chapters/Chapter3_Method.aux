@@ -1,53 +1,93 @@
 \relax 
 \providecommand\hyper@newdestlabel[2]{}
 \citation{Roth2022}
-\@writefile{toc}{\contentsline {chapter}{\numberline {3}Method}{19}{chapter.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {3}Method}{21}{chapter.3}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{chap:method}{{3}{19}{Method}{chapter.3}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {3.1}Objective}{19}{section.3.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {3.2}Pipeline Overview}{19}{section.3.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.1}Unsupervised Anomaly Detection with PatchCore (P3)}{19}{subsection.3.2.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Motivation and design rationale}{19}{section*.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Key intuition}{20}{section*.5}\protected@file@percent }
+\newlabel{chap:method}{{3}{21}{Method}{chapter.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.1}Objective}{21}{section.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.2}Pipeline Overview}{21}{section.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.1}Unsupervised Anomaly Detection with PatchCore (P3)}{21}{subsection.3.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Motivation and design rationale}{21}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Key intuition}{22}{section*.7}\protected@file@percent }
 \citation{Roth2022}
-\@writefile{toc}{\contentsline {subsubsection}{Feature extraction}{21}{section*.6}\protected@file@percent }
-\newlabel{eq:nbagg}{{3.1}{21}{Feature extraction}{equation.3.2.1}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Build phase}{21}{section*.7}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {3.1}{\ignorespaces Schematic of the P3 pipeline. The memory bank is built from augmented variants of a single reference image, and test patches are scored by their distance to the nearest bank entry. The decision threshold is calibrated on additional augmented variants.}}{22}{figure.3.1}\protected@file@percent }
-\newlabel{fig:p3-pipeline}{{3.1}{22}{Schematic of the P3 pipeline. The memory bank is built from augmented variants of a single reference image, and test patches are scored by their distance to the nearest bank entry. The decision threshold is calibrated on additional augmented variants}{figure.3.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Feature extraction}{23}{section*.9}\protected@file@percent }
+\newlabel{eq:nbagg}{{3.1}{23}{Feature extraction}{equation.3.2.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Build phase}{23}{section*.10}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.1}{\ignorespaces Schematic of the P3 pipeline. The memory bank is built from augmented variants of a single reference image, and test patches are scored by their distance to the nearest bank entry. The decision threshold is calibrated on additional augmented variants.}}{24}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:p3-pipeline}{{3.1}{24}{Schematic of the P3 pipeline. The memory bank is built from augmented variants of a single reference image, and test patches are scored by their distance to the nearest bank entry. The decision threshold is calibrated on additional augmented variants}{figure.caption.8}{}}
 \citation{Roth2022}
-\@writefile{toc}{\contentsline {paragraph}{Step 1 - Augmentation.}{23}{section*.8}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Step 2 - Feature accumulation.}{23}{section*.9}\protected@file@percent }
-\newlabel{eq:rawmemory}{{3.2}{23}{Step 2 - Feature accumulation}{equation.3.2.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{Step 1 - Augmentation.}{25}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Step 2 - Feature accumulation.}{25}{section*.12}\protected@file@percent }
+\newlabel{eq:rawmemory}{{3.2}{25}{Step 2 - Feature accumulation}{equation.3.2.2}{}}
 \citation{SenerSavarese2018}
 \citation{Roth2022}
 \citation{enwiki:1357719950}
 \citation{Roth2022}
-\@writefile{toc}{\contentsline {paragraph}{Step 3 - Coreset reduction.}{24}{section*.10}\protected@file@percent }
-\newlabel{eq:coreset-obj}{{3.3}{24}{Step 3 - Coreset reduction}{equation.3.2.3}{}}
-\newlabel{eq:coreset}{{3.4}{24}{Step 3 - Coreset reduction}{equation.3.2.4}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Threshold calibration}{24}{section*.11}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Design space.}{24}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Step 3 - Coreset reduction.}{26}{section*.13}\protected@file@percent }
+\newlabel{eq:coreset-obj}{{3.3}{26}{Step 3 - Coreset reduction}{equation.3.2.3}{}}
+\newlabel{eq:coreset}{{3.4}{26}{Step 3 - Coreset reduction}{equation.3.2.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Threshold calibration}{26}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Design space.}{26}{section*.15}\protected@file@percent }
 \citation{Roth2022}
-\@writefile{toc}{\contentsline {paragraph}{Parametric rule.}{25}{section*.13}\protected@file@percent }
-\newlabel{eq:threshold}{{3.5}{25}{Parametric rule}{equation.3.2.5}{}}
-\@writefile{toc}{\contentsline {paragraph}{Coverage dependency.}{25}{section*.14}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Test phase and anomaly map}{25}{section*.15}\protected@file@percent }
-\newlabel{eq:reweight}{{3.6}{25}{Test phase and anomaly map}{equation.3.2.6}{}}
+\@writefile{toc}{\contentsline {paragraph}{Parametric rule.}{27}{section*.16}\protected@file@percent }
+\newlabel{eq:threshold}{{3.5}{27}{Parametric rule}{equation.3.2.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{Coverage dependency.}{27}{section*.17}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Test phase and anomaly map}{27}{section*.18}\protected@file@percent }
+\newlabel{eq:reweight}{{3.6}{27}{Test phase and anomaly map}{equation.3.2.6}{}}
 \citation{Roth2022}
-\@writefile{toc}{\contentsline {subsubsection}{Shadow and light augmentation}{26}{section*.16}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Spatial gating via annotated polygons}{27}{section*.17}\protected@file@percent }
-\newlabel{sec:p3-gating}{{3.2.1}{27}{Spatial gating via annotated polygons}{section*.17}{}}
-\newlabel{eq:gating}{{3.7}{27}{Spatial gating via annotated polygons}{equation.3.2.7}{}}
-\@writefile{toc}{\contentsline {paragraph}{Structural limitations.}{27}{section*.18}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {3.2}{\ignorespaces Schematic of the spatial gating rule. A component $C$ is accepted if it overlaps the frame mask $F$ by at least $\tau $ pixels, otherwise it is rejected.}}{28}{figure.3.2}\protected@file@percent }
-\newlabel{fig:p3-gating}{{3.2}{28}{Schematic of the spatial gating rule. A component $C$ is accepted if it overlaps the frame mask $F$ by at least $\tau $ pixels, otherwise it is rejected}{figure.3.2}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Calibration stabilisation: pooled sigma}{28}{section*.19}\protected@file@percent }
-\newlabel{eq:pooled}{{3.8}{28}{Calibration stabilisation: pooled sigma}{equation.3.2.8}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {3.3}Dataset Description}{29}{section.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Shadow and light augmentation}{28}{section*.19}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Spatial gating via annotated polygons}{29}{section*.20}\protected@file@percent }
+\newlabel{sec:p3-gating}{{3.2.1}{29}{Spatial gating via annotated polygons}{section*.20}{}}
+\newlabel{eq:gating}{{3.7}{29}{Spatial gating via annotated polygons}{equation.3.2.7}{}}
+\@writefile{toc}{\contentsline {paragraph}{Structural limitations.}{29}{section*.22}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.2}{\ignorespaces Schematic of the spatial gating rule. A component $C$ is accepted if it overlaps the frame mask $F$ by at least $\tau $ pixels, otherwise it is rejected.}}{30}{figure.caption.21}\protected@file@percent }
+\newlabel{fig:p3-gating}{{3.2}{30}{Schematic of the spatial gating rule. A component $C$ is accepted if it overlaps the frame mask $F$ by at least $\tau $ pixels, otherwise it is rejected}{figure.caption.21}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Calibration stabilisation: pooled sigma}{30}{section*.23}\protected@file@percent }
+\newlabel{eq:pooled}{{3.8}{30}{Calibration stabilisation: pooled sigma}{equation.3.2.8}{}}
+\citation{Bergmann2019}
+\@writefile{toc}{\contentsline {section}{\numberline {3.3}Dataset Description}{31}{section.3.3}\protected@file@percent }
+\newlabel{sec:dataset}{{3.3}{31}{Dataset Description}{section.3.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.1}Sources of raw material}{31}{subsection.3.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Normal background scenes}{31}{section*.24}\protected@file@percent }
+\citation{Qin2020}
+\@writefile{lot}{\contentsline {table}{\numberline {3.1}{\ignorespaces Normal background scenes scraped from Pinterest after manual filtering.}}{32}{table.caption.25}\protected@file@percent }
+\newlabel{tab:ds-normals}{{3.1}{32}{Normal background scenes scraped from Pinterest after manual filtering}{table.caption.25}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Obstacle objects}{32}{section*.26}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.2}Synthetic occlusion corpus (D1)}{32}{subsection.3.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Object extraction}{32}{section*.27}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Copy-paste composition}{32}{section*.28}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3.2}{\ignorespaces Constraints of the copy-paste composition.}}{33}{table.caption.29}\protected@file@percent }
+\newlabel{tab:ds-copypaste}{{3.2}{33}{Constraints of the copy-paste composition}{table.caption.29}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Limitations of the synthetic corpus}{33}{section*.30}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.3}Real on-site test set (D2)}{33}{subsection.3.3.3}\protected@file@percent }
+\newlabel{ssec:ds-poli}{{3.3.3}{33}{Real on-site test set (D2)}{subsection.3.3.3}{}}
+\newlabel{fig:ds-d1-ref}{{3.3a}{34}{Normal background}{figure.caption.31}{}}
+\newlabel{sub@fig:ds-d1-ref}{{a}{34}{Normal background}{figure.caption.31}{}}
+\newlabel{fig:ds-d1-obs}{{3.3b}{34}{Copy-paste obstruction}{figure.caption.31}{}}
+\newlabel{sub@fig:ds-d1-obs}{{b}{34}{Copy-paste obstruction}{figure.caption.31}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.3}{\ignorespaces A pair from the synthetic copy-paste corpus (D1): (a) a normal door background and (b) the same scene with two cut-outs - a waste bin and a wheelchair - alpha-blended in front of it. The pasted objects carry the lighting of their source images and cast no shadow on the floor, the two simplifications discussed in the text.}}{34}{figure.caption.31}\protected@file@percent }
+\newlabel{fig:ds-d1}{{3.3}{34}{A pair from the synthetic copy-paste corpus (D1): (a) a normal door background and (b) the same scene with two cut-outs - a waste bin and a wheelchair - alpha-blended in front of it. The pasted objects carry the lighting of their source images and cast no shadow on the floor, the two simplifications discussed in the text}{figure.caption.31}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Acquisition and structure}{34}{section*.32}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3.3}{\ignorespaces Composition of the real D2 test set, per scene.}}{34}{table.caption.33}\protected@file@percent }
+\newlabel{tab:ds-poli}{{3.3}{34}{Composition of the real D2 test set, per scene}{table.caption.33}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Scope and obstruction criterion}{35}{section*.34}\protected@file@percent }
+\newlabel{sssec:ds-criterion}{{3.3.3}{35}{Scope and obstruction criterion}{section*.34}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Hard negatives and real obstructions}{35}{section*.35}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.4}Database organisation and anti-leakage}{35}{subsection.3.3.4}\protected@file@percent }
+\newlabel{ssec:ds-db}{{3.3.4}{35}{Database organisation and anti-leakage}{subsection.3.3.4}{}}
+\newlabel{fig:ds-d2-ref}{{3.4a}{36}{Reference (normal)}{figure.caption.36}{}}
+\newlabel{sub@fig:ds-d2-ref}{{a}{36}{Reference (normal)}{figure.caption.36}{}}
+\newlabel{fig:ds-d2-neg}{{3.4b}{36}{Hard negative}{figure.caption.36}{}}
+\newlabel{sub@fig:ds-d2-neg}{{b}{36}{Hard negative}{figure.caption.36}{}}
+\newlabel{fig:ds-d2-obs}{{3.4c}{36}{Real obstruction}{figure.caption.36}{}}
+\newlabel{sub@fig:ds-d2-obs}{{c}{36}{Real obstruction}{figure.caption.36}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.4}{\ignorespaces The three frame types of the real test set (D2) on one glass door: (a) the clean reference; (b) a hard negative, where the waste bin is visible behind the glass on the walkway along with a poster on the right side; (c) a real obstruction, the same bin placed on the near side, touching the frame and blocking the passage. The contrast between (b) and (c) is exactly the obstruction criterion of Section~\ref {sssec:ds-criterion}.}}{36}{figure.caption.36}\protected@file@percent }
+\newlabel{fig:ds-d2}{{3.4}{36}{The three frame types of the real test set (D2) on one glass door: (a) the clean reference; (b) a hard negative, where the waste bin is visible behind the glass on the walkway along with a poster on the right side; (c) a real obstruction, the same bin placed on the near side, touching the frame and blocking the passage. The contrast between (b) and (c) is exactly the obstruction criterion of Section~\ref {sssec:ds-criterion}}{figure.caption.36}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3.4}{\ignorespaces Inventory of the dataset shared across the pipelines. The construction corpus ($2090$ frames) forms the \texttt  {train} pool; the real \emph  {poli ingegneria} set ($66$ frames) is the held-out \texttt  {test} split. The P3-specific shadow and light robustness variants are described in Chapter~\ref {chap:setup} and are not listed here.}}{37}{table.caption.37}\protected@file@percent }
+\newlabel{tab:ds-stats}{{3.4}{37}{Inventory of the dataset shared across the pipelines. The construction corpus ($2090$ frames) forms the \texttt {train} pool; the real \emph {poli ingegneria} set ($66$ frames) is the held-out \texttt {test} split. The P3-specific shadow and light robustness variants are described in Chapter~\ref {chap:setup} and are not listed here}{table.caption.37}{}}
 \@setckpt{chapters/Chapter3_Method}{
-\setcounter{page}{30}
+\setcounter{page}{38}
 \setcounter{equation}{8}
 \setcounter{enumi}{3}
 \setcounter{enumii}{0}
@@ -58,20 +98,24 @@
 \setcounter{part}{0}
 \setcounter{chapter}{3}
 \setcounter{section}{3}
-\setcounter{subsection}{0}
+\setcounter{subsection}{4}
 \setcounter{subsubsection}{0}
 \setcounter{paragraph}{0}
 \setcounter{subparagraph}{0}
-\setcounter{figure}{2}
-\setcounter{table}{0}
+\setcounter{figure}{4}
+\setcounter{table}{4}
 \setcounter{btxromaniannumeral}{0}
 \setcounter{r@tfl@t}{0}
 \setcounter{parentequation}{0}
+\setcounter{caption@flags}{2}
+\setcounter{continuedfloat}{0}
+\setcounter{subfigure}{3}
+\setcounter{subtable}{0}
 \setcounter{lstnumber}{1}
-\setcounter{section@level}{1}
-\setcounter{Item}{8}
+\setcounter{section@level}{2}
+\setcounter{Item}{7}
 \setcounter{Hfootnote}{0}
-\setcounter{bookmark@seq@number}{17}
+\setcounter{bookmark@seq@number}{21}
 \setcounter{definition}{0}
 \setcounter{theorem}{0}
 \setcounter{lstlisting}{0}

@@ -7,6 +7,10 @@ Paul Bergmann, Michael Fauser, David Sattlegger, and Carsten Steger.
 \newblock In {\em Proceedings of the IEEE/CVF Conference on Computer Vision and
   Pattern Recognition (CVPR)}, pages 9592--9600, 2019.
 
+\bibitem{bouman2025autoencodersanomalydetectionunreliable}
+Roel Bouman and Tom Heskes.
+\newblock Autoencoders for anomaly detection are unreliable, 2025.
+
 \bibitem{Cao2025}
 Yunkang Cao, Yuqi Cheng, Xiaohao Xu, Yiheng Zhang, Yihan Sun, Yuxiang Tan,
   Yuxin Zhang, Xiaonan Huang, and Weiming Shen.
@@ -53,11 +57,24 @@ Gionatan Gallo, Francesco Di~Rienzo, Federico Garzelli, Pietro Ducange, and
   industrial environments based on deep learning at the edge.
 \newblock {\em IEEE Access}, 10:110862--110878, 2022.
 
+\bibitem{Iglesias2023}
+Guillermo Iglesias, Edgar Talavera, and Alberto D{\'i}az-{\'A}lvarez.
+\newblock A survey on {GAN}s for computer vision: Recent research, analysis and
+  taxonomy.
+\newblock {\em Computer Science Review}, 48:100553, 2023.
+
 \bibitem{JuReibman2024}
 Shengtai Ju and Amy~R. Reibman.
 \newblock Shadow augmentation for handwashing action recognition: from
   synthetic to real datasets.
 \newblock arXiv preprint arXiv:2410.03984, 2024.
+
+\bibitem{Lin2024}
+Yuxuan Lin, Yang Chang, Xuan Tong, Jiawen Yu, Antonio Liotta, Guofan Huang, Wei
+  Song, Deyu Zeng, Zongze Wu, Yan Wang, and Wenqiang Zhang.
+\newblock A survey on {RGB}, {3D}, and multimodal approaches for unsupervised
+  industrial image anomaly detection.
+\newblock arXiv preprint arXiv:2410.21982, 2024.
 
 \bibitem{Miglionico2025}
 Giustino~Claudio Miglionico, Francesco Di~Rienzo, Pietro Ducange, Francesco
@@ -94,6 +111,13 @@ Devashree~R. Patrikar and Mayur~Rajaram Parate.
 \newblock {\em International Journal of Multimedia Information Retrieval},
   11:85--110, 2022.
 
+\bibitem{Qin2020}
+Xuebin Qin, Zichen Zhang, Chenyang Huang, Masood Dehghan, Osmar~R. Zaiane, and
+  Martin Jagersand.
+\newblock U$^2$-net: Going deeper with nested u-structure for salient object
+  detection.
+\newblock {\em Pattern Recognition}, 106:107404, 2020.
+
 \bibitem{Redmon2016}
 Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi.
 \newblock You only look once: Unified, real-time object detection.
@@ -106,6 +130,12 @@ Karsten Roth, Latha Pemula, Joaquin Zepeda, Bernhard Sch{\"o}lkopf, Thomas
 \newblock Towards total recall in industrial anomaly detection.
 \newblock In {\em Proceedings of the IEEE/CVF Conference on Computer Vision and
   Pattern Recognition (CVPR)}, pages 14318--14328, 2022.
+
+\bibitem{Sanin2012}
+Andres Sanin, Conrad Sanderson, and Brian~C. Lovell.
+\newblock Shadow detection: A survey and comparative evaluation of recent
+  methods.
+\newblock {\em Pattern Recognition}, 45(4):1684--1695, 2012.
 
 \bibitem{Santana2020}
 Marcos C.~S. Santana, Leandro~Aparecido Passos, Thierry~P. Moreira, Danilo

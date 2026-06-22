@@ -1,8 +1,7 @@
 #TODO:
-* continuare ad annotare le ROI sulle porte a vetri del nuovo test set (annotate_door_roi.py) + import nel DB (import_roi_to_db.py) + run evaluate-db con gating
-* PER P3: Prendere un minidataset reale , capire come gestire le persone davanti la porta (mini yolo leggero). Per oggetti piccoli basta il calcolo della percentuale di occupazione rispetto alla roi
 * Capire se la deviazione standard per la calibrazione calcolata globalmente ha senso nel caso reale oppure è inutile (serve solo per pompare le metriche)
 * testare fps
 * aggiungere ostacoli fake per pipeline 2
 * fare bounding box sia a immagine baseline che a immagine con ostacolo (per pipeline 2)
 * Per P1: testare yolo 26, yolo 11 e rcnn
+* Aggiungere al dataset copypaste varianti con oggetti tagliati dalla scena per metà
