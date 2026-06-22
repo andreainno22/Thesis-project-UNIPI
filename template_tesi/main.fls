@@ -402,6 +402,12 @@ INPUT chapters\Chapter5_ExperimentalAnalysis.tex
 INPUT C:\Users\andrea\AppData\Local\Programs\MiKTeX\fonts\tfm\public\cm\cmbx12.tfm
 INPUT C:\Users\andrea\AppData\Local\Programs\MiKTeX\fonts\tfm\public\cm\cmbx9.tfm
 INPUT C:\Users\andrea\AppData\Local\Programs\MiKTeX\fonts\tfm\public\cm\cmbx6.tfm
+INPUT .\images\patchCore\p3_calibration_shift.pdf
+INPUT .\images\patchCore\p3_calibration_shift.pdf
+INPUT .\images\patchCore\p3_calibration_shift.pdf
+INPUT .\images\patchCore\p3_calibration_shift.pdf
+INPUT .\images\patchCore\p3_calibration_shift.pdf
+INPUT .\images\patchCore\p3_calibration_shift.pdf
 INPUT .\chapters\Chapter6_Conclusions.tex
 INPUT .\chapters\Chapter6_Conclusions.tex
 OUTPUT chapters\Chapter6_Conclusions.aux

@@ -9,5 +9,6 @@
 \contentsline {figure}{\numberline {3.4}{\ignorespaces The three frame types of the real test set (D2) on one glass door: (a) the clean reference; (b) a hard negative, where the waste bin is visible behind the glass on the walkway along with a poster on the right side; (c) a real obstruction, the same bin placed on the near side, touching the frame and blocking the passage. The contrast between (b) and (c) is exactly the obstruction criterion of Section~\ref {sssec:ds-criterion}.}}{36}{figure.caption.36}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
+\contentsline {figure}{\numberline {5.1}{\ignorespaces Calibration, not discrimination. The raw score distributions of normal, shadowed-normal, and obstructed scenes are essentially unchanged by augmentation, so their overlap - and the per-camera ranking (AUROC $0.996$) - is fixed. Only the decision threshold moves: calibrated on clean variants it sits at $\approx 2.47$ (dotted), inside the shadow band, flagging $90\%$ of shadows; with disturbance-augmented, pooled calibration it rises to $\approx 3.74$ (dashed), above the shadow band but still below the obstructions, cutting the shadow FPR to $\approx 12\%$. The thresholds shown are means of the per-camera values.}}{47}{figure.caption.61}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }

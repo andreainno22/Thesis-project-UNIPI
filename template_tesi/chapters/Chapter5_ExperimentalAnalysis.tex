@@ -7,10 +7,6 @@
 \subsection{Unsupervised Anomaly Detection with PatchCore (P3)}
 
 \subsubsection{Evaluation protocol}
-SISTEMARE LA SEZIONE, AGGIUNGERE I GRAFICI E 
-RIFORMULARE LE FASI (FASE 1 - D1 (SENZA FOCUS
-SU ACCURACY MA SULLA CALIBRAZIONE), FASE 2 - D2 
-CON FOCUS SU ACCURAACY/F1)
 
 All results are obtained through a database-driven evaluation that, for each
 normal reference frame, (i) builds the memory bank from augmented variants of the
@@ -20,40 +16,54 @@ variants, (iii) scores the original reference as the normal test sample, and
 normalised per camera as $(s - \mu_i)/\sigma_i$ before aggregating the AUROC,
 while threshold-based metrics (false-positive rate FPR, true-positive rate TPR,
 and $F_1$) use the per-camera threshold $\theta_i$ so that each binary decision
-reflects its own calibration. Unless stated otherwise, experiments run on the
-copy-paste synthetic dataset (split \emph{test}, doors and corridors together),
-about $990$ reference frames each with one or more synthetic obstructed variants.
+reflects its own calibration.
 
-The evaluation is organised as a progressive ablation, in which each component is
-introduced in response to a failure mode identified empirically
-(Table~\ref{tab:p3-phases}).
+The evaluation is organised in two macro-phases (Table~\ref{tab:p3-phases}),
+reflecting the two roles of the datasets introduced in
+Chapter~\ref{chap:method}. \textbf{Phase~1} runs on the synthetic copy-paste
+corpus (D1, split \emph{test}, doors and corridors together; about $990$ reference
+frames, each with one or more obstructed variants). Because a copy-paste
+obstruction leaves the background unchanged, only the pasted object is anomalous
+and the discrimination problem is near-saturated (AUROC $\approx 1$); Phase~1 is
+therefore not a measure of headline accuracy but a \emph{calibration study} - how
+to build the memory bank, place the decision threshold, and add shadow and light
+augmentation so that a single operating point stays robust to non-obstacle
+disturbances. Its internal structure is a progressive ablation, each component
+introduced in response to a failure mode identified empirically. \textbf{Phase~2}
+runs on the real on-site test set (D2): it measures operational accuracy on real
+doors with manually annotated gating, and here the reported metrics - recall,
+precision, $F_1$, accuracy - are the ones that matter.
 
 \begin{table}[h]
   \centering
-  \begin{tabular}{cll}
+  \begin{tabular}{c l p{4.3cm} p{3.2cm}}
     \hline
-    Phase & Configuration & Purpose \\
+    Phase & Dataset & Focus & Key metrics \\
     \hline
-    A & Baseline (no disturbances, no ROI) & Characterise base behaviour \\
-    B & Baseline + shadow test set & Quantify shadow FPR \\
-    C & Shadow augmentation + pooled $\sigma$ & Fix shadow FPR, stabilise $\theta$ \\
-    D & Real doors + polygon gating & Validate full pipeline, recalibrate $k$ \\
-    E & Light augmentation ablation & Reduce light FPR; separate coverage from budget \\
+    1 & D1 (synthetic copy-paste) & Calibration: memory bank, decision threshold, shadow/light augmentation & FPR, threshold stability \\
+    2 & D2 (real, on-site) & Real-world accuracy with manual polygon gating & Recall, precision, $F_1$, accuracy \\
     \hline
   \end{tabular}
-  \caption{Progressive-ablation structure of the evaluation.}
+  \caption{The two macro-phases of the P3 evaluation.}
   \label{tab:p3-phases}
 \end{table}
 
-\subsubsection{Phase A: baseline on the copy-paste dataset}
+\subsubsection{Phase 1: calibration on the synthetic corpus (D1)}
 
+On D1 the discriminative problem is essentially solved before any tuning, so the
+goal of this phase is to convert the latent separability into a single, robust
+operating point. The ablation introduces one component at a time, each in
+response to a failure mode observed in the previous step.
+
+\paragraph{Baseline.}
 The baseline ($n_{\mathrm{aug}}=15$, $n_{\mathrm{cal}}=10$, no disturbance
 augmentation, $k=3$) cleanly separates normal from obstructed scenes
 (Table~\ref{tab:p3-phaseA}). The near-perfect AUROC and the gap of several
 standard deviations between the class means confirm that obstacle patches fall
 well outside the distribution of normal door and corridor patches. The residual
-$0.5\%$ FPR corresponds to about five false alarms over $990$ frames. This
-establishes the detector as viable and validates the evaluation methodology.
+$0.5\%$ FPR corresponds to about five false alarms over $990$ frames.
+Discrimination is thus not the bottleneck; what remains is to keep this operating
+point stable once realistic disturbances enter the scene.
 
 \begin{table}[h]
   \centering
@@ -66,19 +76,18 @@ establishes the detector as viable and validates the evaluation methodology.
     AUROC & \multicolumn{3}{c}{$\approx 1.000$} \\
     \hline
   \end{tabular}
-  \caption{Phase A baseline on the synthetic test set.}
+  \caption{Phase 1 baseline on the synthetic test set.}
   \label{tab:p3-phaseA}
 \end{table}
 
-\subsubsection{Phase B: shadow vulnerability}
-
+\paragraph{Shadow vulnerability.}
 A test set of shadow-augmented normal scenes (one synthetic variant per
 reference, $k_s\in[1,3]$ stacked shadows) is scored against the baseline model.
 These are normal scenes with no obstruction, yet $90.1\%$ are flagged as anomalous
 (Table~\ref{tab:p3-phaseB}). Shadow patches - dark, smoothly-bordered regions -
-produce features unlike any bank entry, which contains only shadow-free
-photometric variants; the baseline cannot distinguish a cast shadow from a
-physical obstruction at the feature level.
+are out of distribution for a bank built from shadow-free photometric variants, so
+they receive high anomaly scores, high enough to exceed a threshold calibrated on
+clean scenes.
 
 \begin{table}[h]
   \centering
@@ -91,20 +100,20 @@ physical obstruction at the feature level.
     Obstructed & $4.648$ & $0.348$ & $[3.54, 5.87]$ & TPR $100\%$ \\
     \hline
   \end{tabular}
-  \caption{Phase B: shadow-normal scores overlap the obstructed range
-  $[3.54, 4.51]$.}
+  \caption{Phase 1, shadow vulnerability: shadow-normal scores overlap the
+  obstructed range $[3.54, 4.51]$.}
   \label{tab:p3-phaseB}
 \end{table}
 
-The distributions overlap in $[3.54, 4.51]$, so no fixed global threshold
-achieves acceptable shadow FPR and TPR simultaneously: at a cut of $4.00$ the
-shadow FPR is $4.8\%$ but TPR has already dropped to $97.3\%$, and pushing the cut
-to $4.50$ to reach $0.1\%$ shadow FPR collapses TPR to $67.4\%$. The problem is not
-threshold calibration but a distribution mismatch between the shadow-free memory
-and the shadow-bearing test set.
+The shadow scores (mean $3.19$) land above the clean normals (mean $2.31$) but
+still below the obstructions (mean $4.65$): a shadow is more anomalous than a clean
+scene, yet clearly less than a real obstruction. The $90\%$ FPR therefore comes
+from the decision threshold - calibrated on clean variants alone, it sits at
+$\approx 2.47$, below the entire shadow band - and not from any inability to tell
+shadows from obstructions, a distinction made precise later
+(Section ``Discrimination versus calibration'').
 
-\subsubsection{Phase C: shadow augmentation and pooled sigma}
-
+\paragraph{Shadow augmentation and calibration stabilisation.}
 Introducing shadow augmentation in the build phase, then decoupling and pooling
 the calibration, traces a clear path (Table~\ref{tab:p3-phaseC}). Coupling the
 build and calibration probabilities ($p_{\mathrm{sh}} =
@@ -130,7 +139,7 @@ residual threshold variance and reaches the best operating point.
     \textbf{Pooled $\sigma$ ($k=4$)} & $\mathbf{0.0\%}$ & $\mathbf{12.2\%}$ & $\mathbf{99.8\%}$ & $\mathbf{0.941}$ & $\mathbf{0.137}$ \\
     \hline
   \end{tabular}
-  \caption{Phase C: shadow augmentation and calibration stabilisation.
+  \caption{Phase 1, shadow augmentation and calibration stabilisation.
   $\sigma_\theta$ is the standard deviation of the per-camera thresholds.}
   \label{tab:p3-phaseC}
 \end{table}
@@ -144,66 +153,10 @@ $0.998$. The choice $k=4$ follows a conservative four-sigma rule and was not
 tuned on the test set: the $F_1$-optimal value is about $3.9$, but reporting it
 would constitute test-set tuning.
 
-\subsubsection{Phase D: real-world validation on real doors}
-
-Phase D is the first evaluation on real photographs rather than copy-paste
-composites. The test set consists of six real doors photographed on site (a mix
-of opaque and glass doors), each with one annotated reference frame, comprising
-$30$ real obstructed images, $30$ unobstructed images, and the six references.
-Consistent with the fixed-camera assumption, all shots of a door share the same
-framing, so the negatives measure the FPR under normal content and illumination
-variability at fixed geometry. The full pipeline is active: pooled $\sigma$ plus
-connected-component gating ($\tau = 10$).
-
-Validated on the synthetic suites, $k=4$ proved too conservative on real scenes;
-lowering it to $k=3$ raises recall at no FPR cost
-(Table~\ref{tab:p3-phaseD}). Because the pooled $\operatorname{median}(\sigma) =
-0.213$ is a shared constant, lowering $k$ shifts every threshold down by the same
-amount without widening the distribution - the per-camera variance amplification
-of the naive rule does not reappear.
-
-\begin{table}[h]
-  \centering
-  \begin{tabular}{lccc}
-    \hline
-    Metric & $k=4$ & $k=3$ & $\Delta$ \\
-    \hline
-    Recall (TPR) & $83.3\%$ & $\mathbf{90.0\%}$ & $+6.7$ pp \\
-    FPR & $3.3\%$ & $3.3\%$ & invariant \\
-    Precision & $96.2\%$ & $96.4\%$ & $+0.2$ pp \\
-    $F_1$ & $0.893$ & $\mathbf{0.931}$ & $+0.038$ \\
-    Accuracy & $90.0\%$ & $93.3\%$ & $+3.3$ pp \\
-    \hline
-  \end{tabular}
-  \caption{Phase D: recalibration of $k$ on the real test set.}
-  \label{tab:p3-phaseD}
-\end{table}
-
-Comparing the two runs separates the false negatives by cause. Two are
-\emph{calibration-limited} and are recovered at $k=3$ through the two distinct
-stages where $k$ acts: one is a decision-stage miss (a valid gated component
-scored just below the decision threshold at $k=4$), the other a
-binarisation-stage miss (the obstruction's anomaly peak fell just below the local
-binarisation threshold at $k=4$, leaving an empty binary map). The latter shows
-that $\theta$ controls not only the decision but which pixels exist for gating to
-evaluate, so an overly high $k$ can erase a low-contrast obstruction before
-gating sees it. Three remain zeroed even at $k=3$ and are \emph{gating-limited}:
-the prototypical case is a free-standing floor fan whose wide head sits on the
-door panel (excluded from the frame mask by design) and whose only frame contact,
-the thin pole, narrows to $1$-$2$ px after resizing and fails the $\tau=10$
-overlap. PatchCore detects the fan correctly; the failure is purely geometric,
-confirming the structural limitation anticipated in Chapter~\ref{chap:method}:
-the grounded-obstacle assumption holds for wide-profile objects (carts,
-wheelchairs, bins) but not for thin-stemmed ones (fans, coat racks, sign posts).
-A single FP is a glass door whose background changed behind the panel. With
-order-of-tens samples, these numbers are a qualitative validation of the complete
-pipeline, not a production benchmark.
-
-\subsubsection{Phase E: light augmentation ablation}
-
-Phase E addresses the symmetric counterpart of the shadow failure mode -
-localised brightness excess - evaluated on a light-augmented test set
-($\approx 1100$ normal scenes) at $k=4$, pooled $\sigma$, $n_{\mathrm{cal}}=30$.
+\paragraph{Light augmentation ablation.}
+The symmetric counterpart of the shadow failure mode - localised brightness
+excess - is evaluated on a light-augmented test set ($\approx 1100$ normal
+scenes) at $k=4$, pooled $\sigma$, $n_{\mathrm{cal}}=30$.
 Five configurations are compared (Table~\ref{tab:p3-phaseE}), where the
 \emph{budget} $p_{\mathrm{sh}} + p_{\mathrm{li}}$ is the expected disturbance
 probability per variant, a proxy for total augmentation intensity. A fifth
@@ -223,7 +176,7 @@ coverage (adding the light type) and increased total intensity.
     L4 fair-budget & $0.23$ & $0.23$ & $0.46$ & $11.2\%$ & $4.6\%$ & $0.929$ \\
     \hline
   \end{tabular}
-  \caption{Phase E light-augmentation ablation. TPR is $\geq 97.7\%$ throughout.
+  \caption{Phase 1 light-augmentation ablation. TPR is $\geq 97.7\%$ throughout.
   L0/L2 use $n_{\mathrm{aug}}=15$, L3 uses $n_{\mathrm{aug}}=25$.}
   \label{tab:p3-phaseE}
 \end{table}
@@ -247,8 +200,7 @@ longer build time, justified only when minimal FP is required. As established in
 Chapter~\ref{chap:setup}, light and shadow FPR are not directly comparable; only
 within-category readings are valid.
 
-\subsubsection{Discrimination versus calibration}
-
+\paragraph{Discrimination versus calibration.}
 A cross-cutting question determines what the pipeline can legitimately claim: do
 the interventions improve the model's \emph{discriminative capacity} or only the
 \emph{placement of the threshold}? The clean metric is the per-camera AUROC -
@@ -279,43 +231,118 @@ both threshold and normalisation and isolates intrinsic discrimination.
 The per-camera AUROC is saturated and nearly invariant to augmentation
 (Table~\ref{tab:p3-disc}): clean separation is perfect everywhere, the shadow
 value stays at $0.996$ across the whole path - even with no shadow augmentation -
-and light improves only from $0.997$ to $1.000$. The shadow FPR meanwhile swings
+and the light value is likewise saturated ($0.997$ to $1.000$). The shadow FPR
+meanwhile swings
 from $2.1\%$ to $90\%$ to $12\%$ while the raw AUROC is fixed at $0.9981$. The
-mechanism is a \emph{distributional shift, not a re-ordering}: without shadows in
-the memory, shadow patches have no neighbours and score high, staying below the
-obstructed scores (ranking preserved) but above a threshold calibrated on clean
-scenes (FPR $90\%$); with shadows in the memory, their scores drop below the
-threshold without changing order relative to obstructions. Augmentation shifts
-the disturbed-normal distribution downward relative to a fixed threshold; pooled
-$\sigma$ then stabilises where that threshold lands across cameras. Neither adds
-discriminative power - they convert an already-excellent latent discrimination
-into a usable single operating point.
+mechanism is a \emph{threshold shift, not a re-ordering}: the score distributions
+themselves barely move (shadowed-normal mean $3.19 \to 3.14$, obstructed
+$4.65 \to 4.66$), so within each scene an obstruction still outscores a shadow
+exactly as before and the per-camera AUROC is unchanged. What moves is the
+decision threshold $\theta_i = \mu_i + k\sigma$: calibrated on clean variants
+alone it sits low (mean $\approx 2.47$), \emph{below} the shadow band, so $90\%$ of
+shadows exceed it; once disturbance variants enter the calibration set (raising
+$\mu$ and $\sigma$) and $\sigma$ is pooled, $\theta$ rises (mean $\approx 3.74$)
+\emph{above} the shadow band but still below the obstructions, cutting the shadow
+FPR to $\approx 12\%$ (Figure~\ref{fig:p3-calib}). None of this adds discriminative
+power - it places a single threshold so that the already-excellent latent
+discrimination becomes usable.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.85\textwidth]{images/patchCore/p3_calibration_shift.pdf}
+  \caption{Calibration, not discrimination. The raw score distributions of normal,
+  shadowed-normal, and obstructed scenes are essentially unchanged by augmentation,
+  so their overlap - and the per-camera ranking (AUROC $0.996$) - is fixed. Only
+  the decision threshold moves: calibrated on clean variants it sits at
+  $\approx 2.47$ (dotted), inside the shadow band, flagging $90\%$ of shadows; with
+  disturbance-augmented, pooled calibration it rises to $\approx 3.74$ (dashed),
+  above the shadow band but still below the obstructions, cutting the shadow FPR to
+  $\approx 12\%$. The thresholds shown are means of the per-camera values.}
+  \label{fig:p3-calib}
+\end{figure}
 
 This conclusion holds on a test set where discrimination is near-saturated by
 design (copy-paste obstructions on the same background: only the object is
 anomalous, a strong signal, AUROC $\approx 1$). On harder data - real
-obstructions, variable backgrounds - discrimination would have headroom and
-augmentation might contribute to separability as well; the per-camera AUROC
-argument is a claim about this dataset's regime and is stated as such.
+obstructions, variable backgrounds - the absolute AUROC values could differ; the
+per-camera AUROC argument is a claim about this dataset's regime and is stated as
+such.
+
+\subsubsection{Phase 2: real-world accuracy with manual gating (D2)}
+
+Phase~2 is the first evaluation on real photographs rather than copy-paste
+composites, and the first to report operational accuracy. The test set is D2: six
+real doors photographed on site (a mix of opaque and glass doors), each with one
+manually annotated reference frame, comprising $30$ real obstructed images, $30$
+unobstructed images, and the six references. Consistent with the fixed-camera
+assumption, all shots of a door share the same framing, so the negatives measure
+the FPR under normal content and illumination variability at fixed geometry. The
+full pipeline is active: pooled $\sigma$ plus connected-component gating
+($\tau = 10$) against the hand-annotated door-frame polygons.
+
+Validated on the synthetic suites, $k=4$ proved too conservative on real scenes;
+lowering it to $k=3$ raises recall at no FPR cost
+(Table~\ref{tab:p3-phaseD}). Because the pooled $\operatorname{median}(\sigma) =
+0.213$ is a shared constant, lowering $k$ shifts every threshold down by the same
+amount without widening the distribution - the per-camera variance amplification
+of the naive rule does not reappear.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lccc}
+    \hline
+    Metric & $k=4$ & $k=3$ & $\Delta$ \\
+    \hline
+    Recall (TPR) & $83.3\%$ & $\mathbf{90.0\%}$ & $+6.7$ pp \\
+    FPR & $3.3\%$ & $3.3\%$ & invariant \\
+    Precision & $96.2\%$ & $96.4\%$ & $+0.2$ pp \\
+    $F_1$ & $0.893$ & $\mathbf{0.931}$ & $+0.038$ \\
+    Accuracy & $90.0\%$ & $93.3\%$ & $+3.3$ pp \\
+    \hline
+  \end{tabular}
+  \caption{Phase 2: recalibration of $k$ on the real test set.}
+  \label{tab:p3-phaseD}
+\end{table}
+
+Comparing the two runs separates the false negatives by cause. Two are
+\emph{calibration-limited} and are recovered at $k=3$ through the two distinct
+stages where $k$ acts: one is a decision-stage miss (a valid gated component
+scored just below the decision threshold at $k=4$), the other a
+binarisation-stage miss (the obstruction's anomaly peak fell just below the local
+binarisation threshold at $k=4$, leaving an empty binary map). The latter shows
+that $\theta$ controls not only the decision but which pixels exist for gating to
+evaluate, so an overly high $k$ can erase a low-contrast obstruction before
+gating sees it. Three remain zeroed even at $k=3$ and are \emph{gating-limited}:
+the prototypical case is a free-standing floor fan whose wide head sits on the
+door panel (excluded from the frame mask by design) and whose only frame contact,
+the thin pole, narrows to $1$-$2$ px after resizing and fails the $\tau=10$
+overlap. PatchCore detects the fan correctly; the failure is purely geometric,
+confirming the structural limitation anticipated in Chapter~\ref{chap:method}:
+the grounded-obstacle assumption holds for wide-profile objects (carts,
+wheelchairs, bins) but not for thin-stemmed ones (fans, coat racks, sign posts).
+A single FP is a glass door whose background changed behind the panel. With
+order-of-tens samples, these numbers are a qualitative validation of the complete
+pipeline, not a production benchmark.
 
 \subsubsection{Discussion}
 
-The progressive ablation shows that the failure modes of the method are
-diagnosable and fixable within the PatchCore framework without architectural
-changes. Cast shadows are addressed by synthetic shadow variants in the memory
-with decoupled calibration (shadow FPR $90.1\% \to 2.2\%$ at SL-15); localised
-brightness excess is addressed symmetrically by light variants; glass-door
-backgrounds are addressed by connected-component gating exploiting the
-floor-grounding constraint; and threshold instability across cameras is addressed
-by pooling the $\sigma$ estimate. The unifying finding is that none of these fixes
+Across the two phases, the failure modes of the method are diagnosable and
+fixable within the PatchCore framework without architectural changes. Cast
+shadows are addressed by disturbance-augmented, decoupled calibration that lifts
+the per-camera threshold above the shadow band (shadow FPR $90.1\% \to 2.2\%$ at
+SL-15); localised brightness excess is addressed symmetrically with light
+variants; glass-door backgrounds are addressed by connected-component gating
+exploiting the floor-grounding constraint; and threshold instability across
+cameras is addressed by pooling the $\sigma$ estimate. The unifying finding is that none of these fixes
 change the backbone's discriminative capacity, which is saturated; the bottleneck
 is placing a single threshold robust to disturbances.
 
-The conclusions carry two tiers of statistical weight. The synthetic phases
-($N \approx 1000$) are quantitative validations with adequate power: the measured
-deltas of shadow augmentation, decoupling, and pooled $\sigma$ are stable and
-generalisable to similar synthetic scenes. The real-door phase ($N \approx$ tens)
-is a qualitative validation of the complete pipeline: it confirms the expected
+The conclusions carry two tiers of statistical weight. The synthetic calibration
+phase (Phase~1, $N \approx 1000$) gives quantitative validations with adequate
+power: the measured deltas of shadow augmentation, decoupling, and pooled
+$\sigma$ are stable and generalisable to similar synthetic scenes. The real-world
+phase (Phase~2, $N \approx$ tens) is a qualitative validation of the complete
+pipeline: it confirms the expected
 behaviour of gating plus pooled $\sigma$ and motivates the $k$ recalibration, but
 the absolute numbers are illustrative, not a production benchmark. The structural
 results - augmentation effectiveness, decoupling rationale, pooled-sigma variance

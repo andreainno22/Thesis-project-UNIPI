@@ -363,8 +363,8 @@ the maximiser of $w(\phi)\,s^{\ast}(\phi)$ is also the maximiser of $s^{\ast}$.
 The photometric-only memory contains no variants with cast shadows or localised
 light excess. This leaves a coverage gap: at test time, a shadow projected on the
 floor by a passer-by outside the field of view, or a light beam from a skylight
-or a glass door, produces patch features distant from all bank entries and trips
-the threshold even though no obstruction is present. The two disturbances are
+or a glass door, produces patch features distant from all bank entries and can
+trip the threshold even though no obstruction is present. The two disturbances are
 symmetric - darkening versus brightening - and are addressed symmetrically by
 adding synthetic variants of each kind to the augmentation scheme. Three
 modalities are modelled for each (elliptical, directional, stripe), covering the
@@ -375,23 +375,26 @@ A disturbance is added to a build variant with probability $p_{\mathrm{sh}}$
 (shadow) or $p_{\mathrm{li}}$ (light), and to a calibration variant with
 probability $p_{\mathrm{sh}}^{\mathrm{cal}}$ and $p_{\mathrm{li}}^{\mathrm{cal}}$
 respectively. A central design choice is to \emph{decouple} the build and
-calibration probabilities, because the two phases have opposing requirements:
+calibration probabilities, motivated by the different roles of the two phases:
 
 \begin{itemize}
-  \item the \textbf{memory} needs maximum disturbance coverage so that test-time
-  shadow/light patches find near neighbours and produce low distances - hence a
-  high build probability ($p_{\mathrm{sh}} = p_{\mathrm{li}} = 0.4$);
-  \item the \textbf{calibration} needs a stable score distribution to yield a
-  reliable $\mu$ and $\sigma$ - hence a low calibration probability
-  ($p_{\mathrm{sh}}^{\mathrm{cal}} = p_{\mathrm{li}}^{\mathrm{cal}} = 0.1$).
+  \item the \textbf{memory} is given a high disturbance probability
+  ($p_{\mathrm{sh}} = p_{\mathrm{li}} = 0.4$), with the intent of covering
+  disturbed patterns so that, at test time, shadow and light patches lie closer to
+  bank entries;
+  \item the \textbf{calibration} is given a low disturbance probability
+  ($p_{\mathrm{sh}}^{\mathrm{cal}} = p_{\mathrm{li}}^{\mathrm{cal}} = 0.1$), to keep
+  the score distribution used to estimate $\mu$ and $\sigma$ stable.
 \end{itemize}
 
-Setting the calibration probability equal to the build probability makes $\sigma$
-high-variance: a few unlucky calibration variants with heavy disturbances inflate
-$\sigma$, and the $k\sigma$ amplification produces per-camera thresholds that are
-either too high (false negatives) or too low (false positives). Decoupling
-removes this instability. The two families are independent: a variant may receive
-a shadow, a light, both, or neither. The disturbances are deliberately kept out
+The reason for the asymmetry is that raising the calibration probability to the
+build level would make $\sigma$ high-variance - a few calibration variants with
+heavy disturbances would inflate $\sigma$, and the $k\sigma$ amplification would
+yield per-camera thresholds either too high (false negatives) or too low (false
+positives). The effectiveness of this design, and the relative contribution of the
+build and calibration phases, is assessed in Chapter~\ref{chap:analysis}. The two
+families are independent: a variant may receive a shadow, a light, both, or
+neither. The disturbances are deliberately kept out
 of the test images used to measure robustness, so that the reported
 false-positive rates reflect generalisation to disturbances never seen at build
 time.

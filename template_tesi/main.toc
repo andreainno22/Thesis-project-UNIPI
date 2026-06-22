@@ -59,13 +59,14 @@
 \contentsline {section}{\numberline {5.1}Pipeline Results}{43}{section.5.1}%
 \contentsline {subsection}{\numberline {5.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{43}{subsection.5.1.1}%
 \contentsline {subsubsection}{Evaluation protocol}{43}{section*.48}%
-\contentsline {subsubsection}{Phase A: baseline on the copy-paste dataset}{44}{section*.50}%
-\contentsline {subsubsection}{Phase B: shadow vulnerability}{44}{section*.52}%
-\contentsline {subsubsection}{Phase C: shadow augmentation and pooled sigma}{44}{section*.54}%
-\contentsline {subsubsection}{Phase D: real-world validation on real doors}{45}{section*.56}%
-\contentsline {subsubsection}{Phase E: light augmentation ablation}{46}{section*.58}%
-\contentsline {subsubsection}{Discrimination versus calibration}{47}{section*.60}%
-\contentsline {subsubsection}{Discussion}{48}{section*.62}%
-\contentsline {section}{\numberline {5.2}Application Results}{48}{section.5.2}%
-\contentsline {chapter}{\numberline {6}Conclusions}{49}{chapter.6}%
-\contentsline {chapter}{\numberline {A}Questa è un'appendice}{51}{appendix.A}%
+\contentsline {subsubsection}{Phase 1: calibration on the synthetic corpus (D1)}{43}{section*.50}%
+\contentsline {paragraph}{Baseline.}{44}{section*.51}%
+\contentsline {paragraph}{Shadow vulnerability.}{44}{section*.53}%
+\contentsline {paragraph}{Shadow augmentation and calibration stabilisation.}{45}{section*.55}%
+\contentsline {paragraph}{Light augmentation ablation.}{45}{section*.57}%
+\contentsline {paragraph}{Discrimination versus calibration.}{46}{section*.59}%
+\contentsline {subsubsection}{Phase 2: real-world accuracy with manual gating (D2)}{48}{section*.62}%
+\contentsline {subsubsection}{Discussion}{49}{section*.64}%
+\contentsline {section}{\numberline {5.2}Application Results}{49}{section.5.2}%
+\contentsline {chapter}{\numberline {6}Conclusions}{51}{chapter.6}%
+\contentsline {chapter}{\numberline {A}Questa è un'appendice}{53}{appendix.A}%

@@ -8,30 +8,33 @@
 \newlabel{sec:p3-results}{{5.1}{43}{Pipeline Results}{section.5.1}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{43}{subsection.5.1.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{Evaluation protocol}{43}{section*.48}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.1}{\ignorespaces Progressive-ablation structure of the evaluation.}}{43}{table.caption.49}\protected@file@percent }
-\newlabel{tab:p3-phases}{{5.1}{43}{Progressive-ablation structure of the evaluation}{table.caption.49}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Phase A: baseline on the copy-paste dataset}{44}{section*.50}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.2}{\ignorespaces Phase A baseline on the synthetic test set.}}{44}{table.caption.51}\protected@file@percent }
-\newlabel{tab:p3-phaseA}{{5.2}{44}{Phase A baseline on the synthetic test set}{table.caption.51}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Phase B: shadow vulnerability}{44}{section*.52}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.3}{\ignorespaces Phase B: shadow-normal scores overlap the obstructed range $[3.54, 4.51]$.}}{44}{table.caption.53}\protected@file@percent }
-\newlabel{tab:p3-phaseB}{{5.3}{44}{Phase B: shadow-normal scores overlap the obstructed range $[3.54, 4.51]$}{table.caption.53}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Phase C: shadow augmentation and pooled sigma}{44}{section*.54}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.4}{\ignorespaces Phase C: shadow augmentation and calibration stabilisation. $\sigma _\theta $ is the standard deviation of the per-camera thresholds.}}{45}{table.caption.55}\protected@file@percent }
-\newlabel{tab:p3-phaseC}{{5.4}{45}{Phase C: shadow augmentation and calibration stabilisation. $\sigma _\theta $ is the standard deviation of the per-camera thresholds}{table.caption.55}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Phase D: real-world validation on real doors}{45}{section*.56}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.5}{\ignorespaces Phase D: recalibration of $k$ on the real test set.}}{46}{table.caption.57}\protected@file@percent }
-\newlabel{tab:p3-phaseD}{{5.5}{46}{Phase D: recalibration of $k$ on the real test set}{table.caption.57}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Phase E: light augmentation ablation}{46}{section*.58}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.6}{\ignorespaces Phase E light-augmentation ablation. TPR is $\geq 97.7\%$ throughout. L0/L2 use $n_{\mathrm  {aug}}=15$, L3 uses $n_{\mathrm  {aug}}=25$.}}{46}{table.caption.59}\protected@file@percent }
-\newlabel{tab:p3-phaseE}{{5.6}{46}{Phase E light-augmentation ablation. TPR is $\geq 97.7\%$ throughout. L0/L2 use $n_{\mathrm {aug}}=15$, L3 uses $n_{\mathrm {aug}}=25$}{table.caption.59}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Discrimination versus calibration}{47}{section*.60}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.7}{\ignorespaces Controlled comparison: shadow FPR swings $40\times $ while raw and per-camera AUROC stay fixed.}}{47}{table.caption.61}\protected@file@percent }
-\newlabel{tab:p3-disc}{{5.7}{47}{Controlled comparison: shadow FPR swings $40\times $ while raw and per-camera AUROC stay fixed}{table.caption.61}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Discussion}{48}{section*.62}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {5.2}Application Results}{48}{section.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Phase 1: calibration on the synthetic corpus (D1)}{43}{section*.50}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.1}{\ignorespaces The two macro-phases of the P3 evaluation.}}{44}{table.caption.49}\protected@file@percent }
+\newlabel{tab:p3-phases}{{5.1}{44}{The two macro-phases of the P3 evaluation}{table.caption.49}{}}
+\@writefile{toc}{\contentsline {paragraph}{Baseline.}{44}{section*.51}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.2}{\ignorespaces Phase 1 baseline on the synthetic test set.}}{44}{table.caption.52}\protected@file@percent }
+\newlabel{tab:p3-phaseA}{{5.2}{44}{Phase 1 baseline on the synthetic test set}{table.caption.52}{}}
+\@writefile{toc}{\contentsline {paragraph}{Shadow vulnerability.}{44}{section*.53}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.3}{\ignorespaces Phase 1, shadow vulnerability: shadow-normal scores overlap the obstructed range $[3.54, 4.51]$.}}{45}{table.caption.54}\protected@file@percent }
+\newlabel{tab:p3-phaseB}{{5.3}{45}{Phase 1, shadow vulnerability: shadow-normal scores overlap the obstructed range $[3.54, 4.51]$}{table.caption.54}{}}
+\@writefile{toc}{\contentsline {paragraph}{Shadow augmentation and calibration stabilisation.}{45}{section*.55}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.4}{\ignorespaces Phase 1, shadow augmentation and calibration stabilisation. $\sigma _\theta $ is the standard deviation of the per-camera thresholds.}}{45}{table.caption.56}\protected@file@percent }
+\newlabel{tab:p3-phaseC}{{5.4}{45}{Phase 1, shadow augmentation and calibration stabilisation. $\sigma _\theta $ is the standard deviation of the per-camera thresholds}{table.caption.56}{}}
+\@writefile{toc}{\contentsline {paragraph}{Light augmentation ablation.}{45}{section*.57}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.5}{\ignorespaces Phase 1 light-augmentation ablation. TPR is $\geq 97.7\%$ throughout. L0/L2 use $n_{\mathrm  {aug}}=15$, L3 uses $n_{\mathrm  {aug}}=25$.}}{46}{table.caption.58}\protected@file@percent }
+\newlabel{tab:p3-phaseE}{{5.5}{46}{Phase 1 light-augmentation ablation. TPR is $\geq 97.7\%$ throughout. L0/L2 use $n_{\mathrm {aug}}=15$, L3 uses $n_{\mathrm {aug}}=25$}{table.caption.58}{}}
+\@writefile{toc}{\contentsline {paragraph}{Discrimination versus calibration.}{46}{section*.59}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.6}{\ignorespaces Controlled comparison: shadow FPR swings $40\times $ while raw and per-camera AUROC stay fixed.}}{47}{table.caption.60}\protected@file@percent }
+\newlabel{tab:p3-disc}{{5.6}{47}{Controlled comparison: shadow FPR swings $40\times $ while raw and per-camera AUROC stay fixed}{table.caption.60}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.1}{\ignorespaces Calibration, not discrimination. The raw score distributions of normal, shadowed-normal, and obstructed scenes are essentially unchanged by augmentation, so their overlap - and the per-camera ranking (AUROC $0.996$) - is fixed. Only the decision threshold moves: calibrated on clean variants it sits at $\approx 2.47$ (dotted), inside the shadow band, flagging $90\%$ of shadows; with disturbance-augmented, pooled calibration it rises to $\approx 3.74$ (dashed), above the shadow band but still below the obstructions, cutting the shadow FPR to $\approx 12\%$. The thresholds shown are means of the per-camera values.}}{47}{figure.caption.61}\protected@file@percent }
+\newlabel{fig:p3-calib}{{5.1}{47}{Calibration, not discrimination. The raw score distributions of normal, shadowed-normal, and obstructed scenes are essentially unchanged by augmentation, so their overlap - and the per-camera ranking (AUROC $0.996$) - is fixed. Only the decision threshold moves: calibrated on clean variants it sits at $\approx 2.47$ (dotted), inside the shadow band, flagging $90\%$ of shadows; with disturbance-augmented, pooled calibration it rises to $\approx 3.74$ (dashed), above the shadow band but still below the obstructions, cutting the shadow FPR to $\approx 12\%$. The thresholds shown are means of the per-camera values}{figure.caption.61}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Phase 2: real-world accuracy with manual gating (D2)}{48}{section*.62}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.7}{\ignorespaces Phase 2: recalibration of $k$ on the real test set.}}{48}{table.caption.63}\protected@file@percent }
+\newlabel{tab:p3-phaseD}{{5.7}{48}{Phase 2: recalibration of $k$ on the real test set}{table.caption.63}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Discussion}{49}{section*.64}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5.2}Application Results}{49}{section.5.2}\protected@file@percent }
 \@setckpt{chapters/Chapter5_ExperimentalAnalysis}{
-\setcounter{page}{49}
+\setcounter{page}{50}
 \setcounter{equation}{0}
 \setcounter{enumi}{3}
 \setcounter{enumii}{0}
@@ -46,7 +49,7 @@
 \setcounter{subsubsection}{0}
 \setcounter{paragraph}{0}
 \setcounter{subparagraph}{0}
-\setcounter{figure}{0}
+\setcounter{figure}{1}
 \setcounter{table}{7}
 \setcounter{btxromaniannumeral}{0}
 \setcounter{r@tfl@t}{0}

@@ -1,10 +1,9 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex 2025.10.26)  22 JUN 2026 18:59
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (MiKTeX 24.1) (preloaded format=pdflatex 2025.10.26)  22 JUN 2026 23:51
 entering extended mode
  restricted \write18 enabled.
- file:line:error style messages enabled.
  %&-line parsing enabled.
-**"c:/Users/andrea/OneDrive - University of Pisa/Universit√†/Unipi/tesi/template_tesi/main.tex"
-(c:/Users/andrea/OneDrive - University of Pisa/Universit√†/Unipi/tesi/template_tesi/main.tex
+**./main.tex
+(main.tex
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-04>
 (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/base\report.cls
@@ -24,14 +23,18 @@ File: size10.clo 2023/05/17 v1.4n Standard LaTeX file (size option)
 \abovecaptionskip=\skip48
 \belowcaptionskip=\skip49
 \bibindent=\dimen140
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.sty
 Package: geometry 2020/01/02 v5.9 Page Geometry
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\keyval.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\keyval.sty
 Package: keyval 2022/05/29 v1.15 key=value parser (DPC)
 \KV@toks@=\toks17
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/iftex\ifvtex.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/iftex\ifvtex.sty
 Package: ifvtex 2019/10/25 v1.7 ifvtex legacy package. Use iftex instead.
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/iftex\iftex.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/iftex\iftex.sty
 Package: iftex 2022/02/03 v1.0f TeX engine tests
 ))
 \Gm@cnth=\count196
@@ -46,21 +49,40 @@ Package: iftex 2022/02/03 v1.0f TeX engine tests
 \Gm@layouthoffset=\dimen147
 \Gm@layoutvoffset=\dimen148
 \Gm@dimlist=\toks18
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.cfg)) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrextend.sty
-Package: scrextend 2026/02/02 v3.49.2 KOMA-Script package (extend other classes with features of KOMA-Script classes)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrkbase.sty
-Package: scrkbase 2026/02/02 v3.49.2 KOMA-Script package (KOMA-Script-dependent basics and keyval usage)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrbase.sty
-Package: scrbase 2026/02/02 v3.49.2 KOMA-Script package (KOMA-Script-independent basics and keyval usage)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrlfile.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.cfg)
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrextend.
+sty
+Package: scrextend 2026/02/02 v3.49.2 KOMA-Script package (extend other classes
+ with features of KOMA-Script classes)
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrkbase.s
+ty
+Package: scrkbase 2026/02/02 v3.49.2 KOMA-Script package (KOMA-Script-dependent
+ basics and keyval usage)
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrbase.st
+y
+Package: scrbase 2026/02/02 v3.49.2 KOMA-Script package (KOMA-Script-independen
+t basics and keyval usage)
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrlfile.s
+ty
 Package: scrlfile 2026/02/02 v3.49.2 KOMA-Script package (file load hooks)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrlfile-hook.sty
-Package: scrlfile-hook 2026/02/02 v3.49.2 KOMA-Script package (using LaTeX hooks)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrlogo.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrlfile-h
+ook.sty
+Package: scrlfile-hook 2026/02/02 v3.49.2 KOMA-Script package (using LaTeX hook
+s)
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrlogo.st
+y
 Package: scrlogo 2026/02/02 v3.49.2 KOMA-Script package (logo)
 )))
 Applying: [2021/05/01] Usage of raw or classic option list on input line 254.
-Already applied: [0000/00/00] Usage of raw or classic option list on input line 370.
+Already applied: [0000/00/00] Usage of raw or classic option list on input line
+ 370.
 )))
 
 LaTeX Font Warning: Font shape `OT1/cmr/m/n' in size <13> not available
@@ -71,7 +93,8 @@ Package: babel 2024/01/07 v24.1 The Babel package
 \babel@savecnt=\count199
 \U@D=\dimen149
 \l@unhyphenated=\language79
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/babel\txtbabel.def)
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/babel\txtbabel.def)
 \bbl@readstream=\read2
 \bbl@dirlevel=\count266
 
@@ -79,8 +102,11 @@ Package: babel 2024/01/07 v24.1 The Babel package
 * Local config file bblopts.cfg used
 *
 (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/arabi\bblopts.cfg
-File: bblopts.cfg 2005/09/08 v0.1 add Arabic and Farsi to "declared" options of babel
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/babel-english\english.ldf
+File: bblopts.cfg 2005/09/08 v0.1 add Arabic and Farsi to "declared" options of
+ babel
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/babel-english\english.
+ldf
 Language: english 2017/06/06 v3.3r English support from the babel system
 Package babel Info: Hyphen rules for 'canadian' set to \l@english
 (babel)             (\language0). Reported on input line 102.
@@ -88,26 +114,35 @@ Package babel Info: Hyphen rules for 'australian' set to \l@ukenglish
 (babel)             (\language73). Reported on input line 105.
 Package babel Info: Hyphen rules for 'newzealand' set to \l@ukenglish
 (babel)             (\language73). Reported on input line 108.
-)) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/en\babel-english.tex
+))
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/en\babe
+l-english.tex
 Package babel Info: Importing font and identification data for english
 (babel)             from babel-en.ini. Reported on input line 11.
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/babelbib\babelbib.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/babelbib\babelbib.sty
 Package: babelbib 2021/01/06 v1.34 babelbib: multilingual bibliographies
 \c@btxromaniannumeral=\count267
 ) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/base\inputenc.sty
 Package: inputenc 2021/02/14 v1.3d Input encoding file
 \inpenc@prehook=\toks19
 \inpenc@posthook=\toks20
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/base\fontenc.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/base\fontenc.sty
 Package: fontenc 2021/04/29 v2.0v Standard LaTeX package
 
 
 LaTeX Font Warning: Font shape `T1/cmr/m/n' in size <13> not available
 (Font)              size <12> substituted on input line 112.
 
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/lipsum\lipsum.sty (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/l3packages/l3keys2e\l3keys2e.sty (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/l3kernel\expl3.sty
+) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/lipsum\lipsum.sty
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/l3packages/l3keys2e\l3
+keys2e.sty
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/l3kernel\expl3.sty
 Package: expl3 2024-01-04 L3 programming layer (loader) 
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3backend-pdftex.def
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3backend-pd
+ftex.def
 File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count268
 \l__pdf_internal_box=\box51
@@ -118,19 +153,29 @@ Package: lipsum 2021-09-20 v2.7 150 paragraphs of Lorem Ipsum dummy text
 \g__lipsum_par_int=\count269
 \l__lipsum_a_int=\count270
 \l__lipsum_b_int=\count271
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/lipsum\lipsum.ltd.tex)) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\rotating.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/lipsum\lipsum.ltd.tex)
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\rotating.sty
 Package: rotating 2016/08/11 v2.16d rotated objects in LaTeX
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphicx.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphicx.sty
 Package: graphicx 2021/09/16 v1.2d Enhanced LaTeX Graphics (DPC,SPQR)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphics.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphics.sty
 Package: graphics 2022/03/10 v1.4e Standard LaTeX Graphics (DPC,SPQR)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\trig.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\trig.sty
 Package: trig 2021/08/11 v1.11 sin cos tan (DPC)
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\graphics.cfg
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\graphics.
+cfg
 File: graphics.cfg 2016/06/04 v1.11 sample graphics configuration
 )
 Package graphics Info: Driver file: pdftex.def on input line 107.
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics-def\pdftex.def
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics-def\pdftex.de
+f
 File: pdftex.def 2022/09/22 v1.2b Graphics/color driver for pdftex
 ))
 \Gin@req@height=\dimen150
@@ -143,8 +188,10 @@ Package: ifthen 2022/04/13 v1.1d Standard LaTeX ifthen package (DPC)
 \rotFPbot=\skip51
 \rot@float@box=\box52
 \rot@mess@toks=\toks21
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/fancyhdr\fancyhdr.sty
+) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/fancyhdr\fancyhdr.st
+y
 Package: fancyhdr 2025/02/07 v5.2 Extensive control of page headers and footers
+
 \f@nch@headwidth=\skip52
 \f@nch@offset@elh=\skip53
 \f@nch@offset@erh=\skip54
@@ -162,7 +209,7 @@ Package: fancyhdr 2025/02/07 v5.2 Extensive control of page headers and footers
 \@temptokenb=\toks22
 ) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\amssymb.sty
 Package: amssymb 2013/01/14 v3.01 AMS font symbols
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\amsfonts.sty
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\amsfonts.sty
 Package: amsfonts 2013/01/14 v3.01 Basic AMSFonts support
 \@emptytoks=\toks23
 \symAMSa=\mathgroup4
@@ -177,14 +224,17 @@ Package: amsmath 2023/05/13 v2.17o AMS math features
 For additional information on amsmath, use the `?' option.
 (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amstext.sty
 Package: amstext 2021/08/26 v2.01 AMS text
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsgen.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsgen.sty
 File: amsgen.sty 1999/11/30 v2.0 generic functions
 \@emptytoks=\toks24
 \ex@=\dimen152
-)) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsbsy.sty
+))
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsbsy.sty
 Package: amsbsy 1999/11/29 v1.2d Bold Symbols
 \pmbraise@=\dimen153
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsopn.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsopn.sty
 Package: amsopn 2022/04/08 v2.04 operator names
 )
 \inf@bad=\count273
@@ -234,7 +284,8 @@ LaTeX Info: Redefining \Relbar on input line 971.
 \mathdisplay@stack=\toks28
 LaTeX Info: Redefining \[ on input line 2953.
 LaTeX Info: Redefining \] on input line 2954.
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amscls\amsthm.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amscls\amsthm.sty
 Package: amsthm 2020/05/29 v2.20.6
 \thm@style=\toks29
 \thm@bodyfont=\toks30
@@ -245,11 +296,13 @@ Package: amsthm 2020/05/29 v2.20.6
 \thm@postskip=\skip70
 \thm@headsep=\skip71
 \dth@everypar=\toks34
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/caption\subcaption.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/caption\subcaption.sty
 Package: subcaption 2023/07/28 v1.6b Sub-captions (AR)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption.sty
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption.sty
 Package: caption 2023/08/05 v3.6o Customizing captions (AR)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption3.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption3.sty
 Package: caption3 2023/07/31 v2.4d caption3 kernel (AR)
 \caption@tempdima=\dimen161
 \captionmargin=\dimen162
@@ -274,11 +327,14 @@ Package caption Info: New subtype `subtable' on input line 238.
 \c@subtable=\count288
 ) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\xcolor.sty
 Package: xcolor 2023/11/15 v3.01 LaTeX color extensions (UK)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\color.cfg
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\color.cfg
 File: color.cfg 2016/01/02 v1.6 sample color configuration
 )
 Package xcolor Info: Driver file: pdftex.def on input line 274.
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\mathcolor.ltx)
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\mathcolor.ltx
+)
 Package xcolor Info: Model `cmy' substituted by `cmy0' on input line 1350.
 Package xcolor Info: Model `hsb' substituted by `rgb' on input line 1354.
 Package xcolor Info: Model `RGB' extended on input line 1366.
@@ -288,9 +344,11 @@ Package xcolor Info: Model `tHsb' substituted by `hsb' on input line 1370.
 Package xcolor Info: Model `HSB' substituted by `hsb' on input line 1371.
 Package xcolor Info: Model `Gray' substituted by `gray' on input line 1372.
 Package xcolor Info: Model `wave' substituted by `hsb' on input line 1373.
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\dvipsnam.def
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/graphics\dvipsnam.def
 File: dvipsnam.def 2016/06/17 v3.0m Driver-dependent file (DPC,SPQR)
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/listings\listings.sty
+) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/listings\listings.st
+y
 \lst@mode=\count289
 \lst@gtempboxa=\box55
 \lst@token=\toks35
@@ -303,64 +361,90 @@ File: dvipsnam.def 2016/06/17 v3.0m Driver-dependent file (DPC,SPQR)
 \lst@newlines=\count293
 \lst@lineno=\count294
 \lst@maxwidth=\dimen174
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/listings\lstmisc.sty
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/listings\lstmisc.sty
 File: lstmisc.sty 2023/02/27 1.9 (Carsten Heinz)
 \c@lstnumber=\count295
 \lst@skipnumbers=\count296
 \lst@framebox=\box56
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/listings\listings.cfg
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/listings\listings.cfg
 File: listings.cfg 2023/02/27 1.9 listings configuration
 ))
 Package: listings 2023/02/27 1.9 (Carsten Heinz)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hyperref.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hyperref.sty
 Package: hyperref 2023-11-26 v7.01g Hypertext links for LaTeX
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/infwarerr\infwarerr.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/infwarerr\infwarerr.
+sty
 Package: infwarerr 2019/12/03 v1.5 Providing info/warning/error messages (HO)
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/kvsetkeys\kvsetkeys.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/kvsetkeys\kvsetkeys.st
+y
 Package: kvsetkeys 2022-10-05 v1.19 Key value parser (HO)
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/kvdefinekeys\kvdefinekeys.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/kvdefinekeys\kvdefin
+ekeys.sty
 Package: kvdefinekeys 2019-12-19 v1.6 Define keys (HO)
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/pdfescape\pdfescape.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/pdfescape\pdfescape.
+sty
 Package: pdfescape 2019/12/09 v1.15 Implements pdfTeX's escape features (HO)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/ltxcmds\ltxcmds.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/ltxcmds\ltxcmds.sty
 Package: ltxcmds 2023-12-04 v1.26 LaTeX kernel commands for general use (HO)
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/pdftexcmds\pdftexcmds.sty
-Package: pdftexcmds 2020-06-27 v0.33 Utility functions of pdfTeX for LuaTeX (HO)
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/pdftexcmds\pdftexcmd
+s.sty
+Package: pdftexcmds 2020-06-27 v0.33 Utility functions of pdfTeX for LuaTeX (HO
+)
 Package pdftexcmds Info: \pdf@primitive is available.
 Package pdftexcmds Info: \pdf@ifprimitive is available.
 Package pdftexcmds Info: \pdfdraftmode found.
-)) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/hycolor\hycolor.sty
+))
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/hycolor\hycolor.sty
 Package: hycolor 2020-01-27 v1.10 Color options for hyperref/bookmark (HO)
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/letltxmacro\letltxmacro.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/letltxmacro\letltxmacr
+o.sty
 Package: letltxmacro 2019/12/03 v1.6 Let assignment for LaTeX macros (HO)
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/auxhook\auxhook.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/auxhook\auxhook.sty
 Package: auxhook 2019-12-17 v1.6 Hooks for auxiliary files (HO)
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\nameref.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\nameref.sty
 Package: nameref 2023-11-26 v2.56 Cross-referencing by name of section
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/refcount\refcount.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/refcount\refcount.sty
 Package: refcount 2019/12/15 v3.6 Data extraction from label references (HO)
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/gettitlestring\gettitlestring.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/gettitlestring\getti
+tlestring.sty
 Package: gettitlestring 2019/12/15 v1.6 Cleanup title references (HO)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/kvoptions\kvoptions.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/kvoptions\kvoptions.st
+y
 Package: kvoptions 2022-06-15 v3.15 Key value format for package options (HO)
 ))
 \c@section@level=\count297
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/etoolbox\etoolbox.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/etoolbox\etoolbox.sty
 Package: etoolbox 2020/10/05 v2.5k e-TeX tools for LaTeX (JAW)
 \etb@tempcnta=\count298
 )
 \@linkdim=\dimen175
 \Hy@linkcounter=\count299
 \Hy@pagecounter=\count300
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\pd1enc.def
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\pd1enc.def
 File: pd1enc.def 2023-11-26 v7.01g Hyperref: PDFDocEncoding definition (HO)
 Now handling font encoding PD1 ...
 ... no UTF-8 mapping file for font encoding PD1
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/intcalc\intcalc.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/intcalc\intcalc.sty
 Package: intcalc 2019/12/15 v1.3 Expandable calculations with integers (HO)
 )
 \Hy@SavedSpaceFactor=\count301
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puenc.def
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puenc.def
 File: puenc.def 2023-11-26 v7.01g Hyperref: PDF Unicode definition (HO)
 Now handling font encoding PU ...
 ... no UTF-8 mapping file for font encoding PU
@@ -373,16 +457,21 @@ Package hyperref Info: Backreferencing OFF on input line 4201.
 Package hyperref Info: Implicit mode ON; LaTeX internals redefined.
 Package hyperref Info: Bookmarks ON on input line 4448.
 \c@Hy@tempcnt=\count302
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/url\url.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/url\url.sty
 \Urlmuskip=\muskip17
 Package: url 2013/09/16  ver 3.4  Verb mode for urls, etc.
 )
 LaTeX Info: Redefining \url on input line 4786.
 \XeTeXLinkMargin=\dimen176
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/bitset\bitset.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/bitset\bitset.sty
 Package: bitset 2019/12/09 v1.3 Handle bit-vector datatype (HO)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/bigintcalc\bigintcalc.sty
-Package: bigintcalc 2019/12/15 v1.5 Expandable calculations on big integers (HO)
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/bigintcalc\bigintcal
+c.sty
+Package: bigintcalc 2019/12/15 v1.5 Expandable calculations on big integers (HO
+)
 ))
 \Fld@menulength=\count303
 \Field@Width=\dimen177
@@ -394,7 +483,8 @@ Package hyperref Info: backreferencing OFF on input line 6080.
 Package hyperref Info: Link coloring OFF on input line 6085.
 Package hyperref Info: Link coloring with OCG OFF on input line 6090.
 Package hyperref Info: PDF/A mode OFF on input line 6095.
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/base\atbegshi-ltx.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/base\atbegshi-ltx.sty
 Package: atbegshi-ltx 2021/01/10 v1.0c Emulation of the original atbegshi
 package with kernel methods
 )
@@ -405,21 +495,29 @@ package with kernel methods
 Package hyperref Info: Driver (autodetected): hpdftex.
  (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hpdftex.def
 File: hpdftex.def 2023-11-26 v7.01g Hyperref driver for pdfTeX
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/base\atveryend-ltx.sty
-Package: atveryend-ltx 2020/08/19 v1.0a Emulation of the original atveryend package
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/base\atveryend-ltx.sty
+Package: atveryend-ltx 2020/08/19 v1.0a Emulation of the original atveryend pac
+kage
 with kernel methods
 )
 \Fld@listcount=\count307
 \c@bookmark@seq@number=\count308
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/rerunfilecheck\rerunfilecheck.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/rerunfilecheck\rerunfi
+lecheck.sty
 Package: rerunfilecheck 2025-06-21 v1.11 Rerun checks for auxiliary files (HO)
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/uniquecounter\uniquecounter.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/generic/uniquecounter\unique
+counter.sty
 Package: uniquecounter 2019/12/15 v1.4 Provide unlimited unique counter (HO)
 )
-Package uniquecounter Info: New unique counter `rerunfilecheck' on input line 284.
+Package uniquecounter Info: New unique counter `rerunfilecheck' on input line 2
+84.
 )
 \Hy@SectionHShift=\skip72
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/ulem\ulem.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/ulem\ulem.sty
 \UL@box=\box57
 \UL@hyphenbox=\box58
 \UL@skip=\skip73
@@ -434,7 +532,12 @@ Package: ulem 2019/11/18
 Package hyperref Info: Option `colorlinks' set `true' on input line 132.
 \c@definition=\count310
 \c@theorem=\count311
- (main.aux (chapters/Frontespizio.aux) (chapters/Abstract.aux) (chapters/Chapter1_Introduction.aux) (chapters/Chapter2_StateOfTheArt.aux) (chapters/Chapter3_Method.aux) (chapters/Chapter4_ExperimentalSetup.aux) (chapters/Chapter5_ExperimentalAnalysis.aux) (chapters/Chapter6_Conclusions.aux) (chapters/AppendiceA.aux))
+
+(main.aux (chapters/Frontespizio.aux) (chapters/Abstract.aux)
+(chapters/Chapter1_Introduction.aux) (chapters/Chapter2_StateOfTheArt.aux)
+(chapters/Chapter3_Method.aux) (chapters/Chapter4_ExperimentalSetup.aux)
+(chapters/Chapter5_ExperimentalAnalysis.aux) (chapters/Chapter6_Conclusions.aux
+) (chapters/AppendiceA.aux))
 \openout1 = `main.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 150.
@@ -499,7 +602,9 @@ babelbib extension \btxifchangecaseon added to \extrasenglish
 )
 babelbib: Load BibTeX extensions \bibsenglish for english
 babelbib: Set language for keywords in the bibliography fixed to english
-(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\supp-pdf.mkii
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\supp-pdf.m
+kii
 [Loading MPS to PDF converter (version 2006.09.02).]
 \scratchcounter=\count312
 \scratchdimen=\dimen182
@@ -512,16 +617,23 @@ babelbib: Set language for keywords in the bibliography fixed to english
 \MPnumerator=\count316
 \makeMPintoPDFobject=\count317
 \everyMPtoPDFconversion=\toks38
-) (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/epstopdf-pkg\epstopdf-base.sty
+)
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/epstopdf-pkg\epstopdf-
+base.sty
 Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/grfext\grfext.sty
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/grfext\grfext.sty
 Package: grfext 2019/12/03 v1.3 Manage graphics extensions (HO)
 )
-Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 485.
+Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
+85.
 Package grfext Info: Graphics extension search list:
-(grfext)             [.pdf,.png,.jpg,.mps,.jpeg,.jbig2,.jb2,.PDF,.PNG,.JPG,.JPEG,.JBIG2,.JB2,.eps]
+(grfext)             [.pdf,.png,.jpg,.mps,.jpeg,.jbig2,.jb2,.PDF,.PNG,.JPG,.JPE
+G,.JBIG2,.JB2,.eps]
 (grfext)             \AppendGraphicsExtensions on input line 504.
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/00miktex\epstopdf-sys.cfg
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/00miktex\epstopdf-sys.
+cfg
 File: epstopdf-sys.cfg 2021/03/18 v2.0 Configuration of epstopdf for MiKTeX
 ))
 Package caption Info: Begin \AtBeginDocument code.
@@ -530,26 +642,32 @@ Package caption Info: listings package is loaded.
 Package caption Info: End \AtBeginDocument code.
 \c@lstlisting=\count318
 Package hyperref Info: Link coloring ON on input line 150.
- (main.out) (main.out)
 \@outlinefile=\write3
 \openout3 = `main.out'.
 
 \openout2 = `chapters/Frontespizio.aux'.
 
  (chapters/Frontespizio.tex
-Package epstopdf Info: Source file: <images/Frontespizio/cherubinFrontespizio.eps>
+Package epstopdf Info: Source file: <images/Frontespizio/cherubinFrontespizio.e
+ps>
 (epstopdf)                    date: 2026-02-25 11:47:30
 (epstopdf)                    size: 259277 bytes
-(epstopdf)             Output file: <images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf>
+(epstopdf)             Output file: <images/Frontespizio/cherubinFrontespizio-e
+ps-converted-to.pdf>
 (epstopdf)                    date: 2026-02-25 12:51:17
 (epstopdf)                    size: 40023 bytes
-(epstopdf)             Command: <miktex-epstopdf --outfile=images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf images/Frontespizio/cherubinFrontespizio.eps>
+(epstopdf)             Command: <miktex-epstopdf --outfile=images/Frontespizio/
+cherubinFrontespizio-eps-converted-to.pdf images/Frontespizio/cherubinFrontespi
+zio.eps>
 (epstopdf)             \includegraphics on input line 4.
 Package epstopdf Info: Output file is already uptodate.
-<images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf, id=127, 288.07625pt x 294.09875pt>
-File: images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf Graphic file (type pdf)
+<images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf, id=3, 288.07625
+pt x 294.09875pt>
+File: images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf Graphic fil
+e (type pdf)
 <use images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf>
-Package pdftex.def Info: images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf  used on input line 4.
+Package pdftex.def Info: images/Frontespizio/cherubinFrontespizio-eps-converted
+-to.pdf  used on input line 4.
 (pdftex.def)             Requested size: 144.03777pt x 147.04901pt.
 
 
@@ -580,10 +698,11 @@ LaTeX Font Warning: Font shape `T1/cmr/bx/n' in size <15.59996> not available
 [1
 
 
-{C:/Users/andrea/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map} <./images/Frontespizio/cherubinFrontespizio-eps-converted-to.pdf>])
+{C:/Users/andrea/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}])
 \openout2 = `chapters/Abstract.aux'.
 
- (chapters/Abstract.tex [2
+
+(chapters/Abstract.tex [2
 
 
 
@@ -631,13 +750,21 @@ LaTeX Font Info:    Trying to load font information for U+msa on input line 5.
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
 LaTeX Font Info:    Trying to load font information for U+msb on input line 5.
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsb.fd
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
-) [5])
+)
+[5])
 \tf@toc=\write4
 \openout4 = `main.toc'.
 
- [6] (main.lof)
+ [6] (main.lof
+Overfull \hbox (7.98306pt too wide) in paragraph at lines 12--12
+ \T1/cmr/m/n/12 mal, shadowed-normal, and ob-structed scenes are es-sen-tially 
+un-changed 
+ []
+
+)
 \tf@lof=\write5
 \openout5 = `main.lof'.
 
@@ -685,7 +812,8 @@ LaTeX Font Warning: Font shape `T1/cmr/m/it' in size <13> not available
 (Font)              size <12> substituted on input line 36.
 
 [11] [12] [13] [14] [15] [16] [17]
-LaTeX Font Info:    Calculating math sizes for size <11.86258> on input line 367.
+LaTeX Font Info:    Calculating math sizes for size <11.86258> on input line 36
+7.
 
 Underfull \hbox (badness 10000) in paragraph at lines 369--369
 []\T1/cmr/bx/n/12 Training
@@ -799,16 +927,18 @@ Underfull \hbox (badness 10000) in paragraph at lines 393--394
 Chapter 3.
 [21] [22]
 
-pdfTeX warning: pdflatex.exe (file ./images/patchCore/patchCore_diagramma.pdf): PDF inclusion: found PDF version <1.7>, but at most version <1.5> allowed
-<images/patchCore/patchCore_diagramma.pdf, id=387, 479.19025pt x 745.28438pt>
+pdfTeX warning: pdflatex.exe (file ./images/patchCore/patchCore_diagramma.pdf):
+ PDF inclusion: found PDF version <1.7>, but at most version <1.5> allowed
+<images/patchCore/patchCore_diagramma.pdf, id=301, 479.19025pt x 745.28438pt>
 File: images/patchCore/patchCore_diagramma.pdf Graphic file (type pdf)
 <use images/patchCore/patchCore_diagramma.pdf>
-Package pdftex.def Info: images/patchCore/patchCore_diagramma.pdf  used on input line 102.
+Package pdftex.def Info: images/patchCore/patchCore_diagramma.pdf  used on inpu
+t line 102.
 (pdftex.def)             Requested size: 277.41176pt x 431.45782pt.
 
 LaTeX Warning: `!h' float specifier changed to `!ht'.
 
-[23] [24 <./images/patchCore/patchCore_diagramma.pdf>]
+[23] [24]
 
 LaTeX Font Warning: Font shape `T1/cmr/m/n' in size <6.5> not available
 (Font)              size <6> substituted on input line 199.
@@ -819,53 +949,61 @@ LaTeX Font Warning: Font shape `TS1/cmr/m/n' in size <13> not available
 (Font)              size <12> substituted on input line 381.
 
 [28]
-<images/patchCore/esempio_stipiti.png, id=601, 287.6346pt x 375.0813pt>
+<images/patchCore/esempio_stipiti.png, id=371, 287.6346pt x 375.0813pt>
 File: images/patchCore/esempio_stipiti.png Graphic file (type png)
 <use images/patchCore/esempio_stipiti.png>
-Package pdftex.def Info: images/patchCore/esempio_stipiti.png  used on input line 417.
+Package pdftex.def Info: images/patchCore/esempio_stipiti.png  used on input li
+ne 420.
 (pdftex.def)             Requested size: 213.39568pt x 278.27695pt.
- [29] [30 <./images/patchCore/esempio_stipiti.png>]
-LaTeX Font Info:    Trying to load font information for T1+cmtt on input line 531.
- (C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/base\t1cmtt.fd
+ [29] [30]
+LaTeX Font Info:    Trying to load font information for T1+cmtt on input line 5
+34.
+
+(C:\Users\andrea\AppData\Local\Programs\MiKTeX\tex/latex/base\t1cmtt.fd
 File: t1cmtt.fd 2023/04/13 v2.5m Standard LaTeX font definitions
 )
 
 LaTeX Font Warning: Font shape `T1/cmtt/m/n' in size <13> not available
-(Font)              size <12> substituted on input line 531.
+(Font)              size <12> substituted on input line 534.
 
 [31] [32]
-Overfull \hbox (3.50955pt too wide) in paragraph at lines 603--614
+Overfull \hbox (3.50955pt too wide) in paragraph at lines 606--617
  [][] 
  []
 
-<images/dataset/d1_reference.jpg, id=641, 602.25pt x 451.6875pt>
+<images/dataset/d1_reference.jpg, id=410, 602.25pt x 451.6875pt>
 File: images/dataset/d1_reference.jpg Graphic file (type jpg)
 <use images/dataset/d1_reference.jpg>
-Package pdftex.def Info: images/dataset/d1_reference.jpg  used on input line 643.
+Package pdftex.def Info: images/dataset/d1_reference.jpg  used on input line 64
+6.
 (pdftex.def)             Requested size: 204.85802pt x 153.64063pt.
-<images/dataset/d1_obstructed.jpg, id=642, 602.25pt x 451.6875pt>
+<images/dataset/d1_obstructed.jpg, id=411, 602.25pt x 451.6875pt>
 File: images/dataset/d1_obstructed.jpg Graphic file (type jpg)
 <use images/dataset/d1_obstructed.jpg>
-Package pdftex.def Info: images/dataset/d1_obstructed.jpg  used on input line 650.
+Package pdftex.def Info: images/dataset/d1_obstructed.jpg  used on input line 6
+53.
 (pdftex.def)             Requested size: 204.85802pt x 153.64063pt.
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-[33] [34 <./images/dataset/d1_reference.jpg> <./images/dataset/d1_obstructed.jpg>]
-<images/dataset/d2_reference.jpg, id=656, 963.6pt x 1284.8pt>
+[33] [34]
+<images/dataset/d2_reference.jpg, id=425, 963.6pt x 1284.8pt>
 File: images/dataset/d2_reference.jpg Graphic file (type jpg)
 <use images/dataset/d2_reference.jpg>
-Package pdftex.def Info: images/dataset/d2_reference.jpg  used on input line 753.
+Package pdftex.def Info: images/dataset/d2_reference.jpg  used on input line 75
+6.
 (pdftex.def)             Requested size: 132.30428pt x 176.40079pt.
-<images/dataset/d2_behind_glass.jpg, id=657, 963.6pt x 1284.8pt>
+<images/dataset/d2_behind_glass.jpg, id=426, 963.6pt x 1284.8pt>
 File: images/dataset/d2_behind_glass.jpg Graphic file (type jpg)
 <use images/dataset/d2_behind_glass.jpg>
-Package pdftex.def Info: images/dataset/d2_behind_glass.jpg  used on input line 760.
+Package pdftex.def Info: images/dataset/d2_behind_glass.jpg  used on input line
+ 763.
 (pdftex.def)             Requested size: 132.30428pt x 176.40079pt.
-<images/dataset/d2_obstructed.jpg, id=658, 963.6pt x 1284.8pt>
+<images/dataset/d2_obstructed.jpg, id=427, 963.6pt x 1284.8pt>
 File: images/dataset/d2_obstructed.jpg Graphic file (type jpg)
 <use images/dataset/d2_obstructed.jpg>
-Package pdftex.def Info: images/dataset/d2_obstructed.jpg  used on input line 767.
+Package pdftex.def Info: images/dataset/d2_obstructed.jpg  used on input line 7
+70.
 (pdftex.def)             Requested size: 132.30428pt x 176.40079pt.
 
 
@@ -875,7 +1013,7 @@ LaTeX Warning: `h' float specifier changed to `ht'.
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-) [36 <./images/dataset/d2_reference.jpg> <./images/dataset/d2_behind_glass.jpg> <./images/dataset/d2_obstructed.jpg>] [37]
+) [36] [37]
 \openout2 = `chapters/Chapter4_ExperimentalSetup.aux'.
 
  (chapters/Chapter4_ExperimentalSetup.tex [38
@@ -905,14 +1043,32 @@ Overfull \hbox (5.21733pt too wide) in paragraph at lines 135--147
  (chapters/Chapter5_ExperimentalAnalysis.tex
 Chapter 5.
 
-Overfull \hbox (13.11581pt too wide) in paragraph at lines 10--14
-\T1/cmr/m/n/12 FASI (FASE 1 - D1 (SENZA FO-CUS SU AC-CU-RACY MA SULLA CAL-I-BRAZIONE),
+Underfull \hbox (badness 4899) in paragraph at lines 43--43
+[]\T1/cmr/m/n/12 Calibration: mem-ory
  []
 
 
-Overfull \hbox (76.95403pt too wide) in paragraph at lines 33--44
- [][] 
+Underfull \hbox (badness 1043) in paragraph at lines 43--43
+\T1/cmr/m/n/12 bank, de-ci-sion thresh-
  []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 43--44
+[]\T1/cmr/m/n/12 FPR, thresh-old
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 44--44
+[]\T1/cmr/m/n/12 Real-world ac-cu-racy
+ []
+
+
+Underfull \hbox (badness 4266) in paragraph at lines 44--44
+\T1/cmr/m/n/12 with man-ual poly-gon
+ []
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
 
 [43
 
@@ -920,43 +1076,55 @@ Overfull \hbox (76.95403pt too wide) in paragraph at lines 33--44
 
 
 
-] [44]
+]
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+[44]
 
 LaTeX Font Warning: Font shape `OT1/cmr/bx/n' in size <13> not available
-(Font)              size <12> substituted on input line 130.
+(Font)              size <12> substituted on input line 139.
 
 
 LaTeX Font Warning: Font shape `OT1/cmr/bx/n' in size <6.5> not available
-(Font)              size <6> substituted on input line 130.
+(Font)              size <6> substituted on input line 139.
+
+[45]
+Overfull \hbox (56.44347pt too wide) in paragraph at lines 215--227
+ [][] 
+ []
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-
-Overfull \hbox (6.17288pt too wide) in paragraph at lines 182--201
-[]\T1/cmr/m/n/12 Comparing the two runs sep-a-rates the false neg-a-tives by cause. Two are \T1/cmr/m/it/12 calibration-
+[46]
+<images/patchCore/p3_calibration_shift.pdf, id=530, 468.81929pt x 252.12569pt>
+File: images/patchCore/p3_calibration_shift.pdf Graphic file (type pdf)
+<use images/patchCore/p3_calibration_shift.pdf>
+Package pdftex.def Info: images/patchCore/p3_calibration_shift.pdf  used on inp
+ut line 252.
+(pdftex.def)             Requested size: 362.77525pt x 195.0953pt.
+ [47]
+Overfull \hbox (6.17288pt too wide) in paragraph at lines 307--326
+[]\T1/cmr/m/n/12 Comparing the two runs sep-a-rates the false neg-a-tives by ca
+use. Two are \T1/cmr/m/it/12 calibration-
  []
 
-[45] [46]
-Overfull \hbox (56.44347pt too wide) in paragraph at lines 263--275
- [][] 
- []
-
-[47]) [48]
+[48]) [49]
 \openout2 = `chapters/Chapter6_Conclusions.aux'.
 
- (chapters/Chapter6_Conclusions.tex
-Chapter 6.
-) [49
+ (chapters/Chapter6_Conclusions.tex [50
 
 
 
 
 
 ]
+Chapter 6.
+) [51]
 \openout2 = `chapters/AppendiceA.aux'.
 
- (chapters/AppendiceA.tex [50
+ (chapters/AppendiceA.tex [52
 
 
 
@@ -966,20 +1134,26 @@ Chapter 6.
 Appendix A.
 
 Overfull \hbox (38.96568pt too wide) in paragraph at lines 5--5
-[][]\T1/cmr/bx/n/17.28 Questa Ë un'altra sezione, ma non viene in-serita nell'indice 
+[][]\T1/cmr/bx/n/17.28 Questa Ë un'altra sezione, ma non viene in-serita nell'i
+ndice 
  []
 
-) [51] (main.bbl [52
+) [53] (main.bbl [54
 
 
 
 
-] [53] [54]
+] [55] [56]
 Underfull \hbox (badness 1675) in paragraph at lines 169--176
-\T1/cmr/m/n/12 en-cy-clo-pe-dia.  [][]$\T1/cmtt/m/n/12 https : / / en . wikipedia . org / w / index . php ? title = Johnson %
+\T1/cmr/m/n/12 en-cy-clo-pe-dia.  [][]$\T1/cmtt/m/n/12 https : / / en . wikiped
+ia . org / w / index . php ? title = Johnson %
  []
 
-) [55] (main.aux (chapters/Frontespizio.aux) (chapters/Abstract.aux) (chapters/Chapter1_Introduction.aux) (chapters/Chapter2_StateOfTheArt.aux) (chapters/Chapter3_Method.aux) (chapters/Chapter4_ExperimentalSetup.aux) (chapters/Chapter5_ExperimentalAnalysis.aux) (chapters/Chapter6_Conclusions.aux) (chapters/AppendiceA.aux))
+) [57] (main.aux (chapters/Frontespizio.aux) (chapters/Abstract.aux)
+(chapters/Chapter1_Introduction.aux) (chapters/Chapter2_StateOfTheArt.aux)
+(chapters/Chapter3_Method.aux) (chapters/Chapter4_ExperimentalSetup.aux)
+(chapters/Chapter5_ExperimentalAnalysis.aux) (chapters/Chapter6_Conclusions.aux
+) (chapters/AppendiceA.aux))
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-04>
@@ -993,17 +1167,18 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: B41922A46607F68784A49471E677E1D2;5585.
  ) 
 Here is how much of TeX's memory you used:
- 17742 strings out of 474485
- 298896 string characters out of 5743261
- 1943542 words of memory out of 5000000
- 39503 multiletter control sequences out of 15000+600000
+ 17713 strings out of 474485
+ 298385 string characters out of 5743261
+ 1945542 words of memory out of 5000000
+ 39476 multiletter control sequences out of 15000+600000
  578707 words of font info for 87 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 108i,12n,107p,707b,621s stack positions out of 10000i,1000n,20000p,200000b,200000s
- <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ectt1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\tcrm1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm0900.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecti1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1728.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx2488.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx2986.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx1440.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm1200.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecbx2074.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm1440.pk> <C:\Users\andrea\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ecrm2074.pk><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmbx12.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmex10.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi12.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi6.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi9.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr12.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr6.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr9.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy6.pfb><C:/Users/andrea/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy9.pfb>
-Output written on main.pdf (55 pages, 2819489 bytes).
+ 108i,12n,107p,827b,621s stack positions out of 10000i,1000n,20000p,200000b,200000s
+
+pdfTeX warning: \pdfdraftmode enabled, not changing output pdf
+
 PDF statistics:
- 1416 PDF objects out of 1440 (max. 8388607)
- 193 named destinations out of 1000 (max. 500000)
- 289 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 586 PDF objects out of 1000 (max. 8388607)
+ 197 named destinations out of 1000 (max. 500000)
+ 46 words of extra memory for PDF output out of 10000 (max. 10000000)
 
