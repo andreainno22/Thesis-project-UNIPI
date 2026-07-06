@@ -411,16 +411,18 @@ spatial constraint on the anomaly map.
 
 Door-frame polygons (left jamb, right jamb, threshold,
 architrave) are annotated once on the reference image and rasterised into a
-binary \emph{frame mask} $F$ (Figure \ref{fig:p3-gating}). The gating rule operates on the connected components
-of the thresholded anomaly map: the map is binarised at $\theta$, its
+binary \emph{frame mask} $F$ (Figure~\ref{fig:p3-frame}). The gating rule operates
+on the connected components of the thresholded anomaly map
+(Figure~\ref{fig:p3-gating}): the map is binarised at $\theta$, its
 $8$-connected components are labelled, and a component $C$ is accepted only if
 
 \begin{figure}
   \centering
   \includegraphics[width=0.5\textwidth]{images/patchCore/esempio_stipiti.png}
-  \caption{Schematic of the spatial gating rule. A component $C$ is accepted if it
-  overlaps the frame mask $F$ by at least $\tau$ pixels, otherwise it is rejected.}
-  \label{fig:p3-gating}
+  \caption{Door-frame polygons (architrave, left and right jambs, threshold)
+  annotated once on a glass-door reference image and rasterised into the binary
+  frame mask $F$ used by the gating rule.}
+  \label{fig:p3-frame}
 \end{figure}
 
 \begin{equation}
@@ -436,6 +438,22 @@ obstruction produces a component reaching the threshold or jambs and is accepted
 The same rule applies to opaque doors when the panel exhibits strong illumination
 variation: specular highlights stay on the panel, while grounded obstructions
 reach the frame.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\textwidth]{images/patchCore/p3_gating_mechanism.pdf}
+  \caption{The connected-component gating rule, stage by stage. (a) The continuous
+  anomaly map is (b) binarised at the per-camera threshold $\theta = \mu + k\sigma$;
+  (c) the foreground is split into $8$-connectivity connected components; (d) a
+  component is a valid detection only if it overlaps the frame mask $F$ (jambs,
+  architrave, threshold) in at least $\tau$ pixels. The grounded obstruction
+  reaches the threshold band and is accepted; a blob lying entirely on the door
+  panel, which is excluded from $F$ (e.g.\ the head of a thin-stemmed object), has
+  no frame contact and is rejected. The image score is the maximum anomaly over
+  the accepted components, or $0$ if none survive. The anomaly map is schematic,
+  but every downstream step runs the real algorithm.}
+  \label{fig:p3-gating}
+\end{figure}
 
 \paragraph{Structural limitations.} Gating assumes the frame geometry is stable
 and visible at test time. An \emph{open door} violates this: the threshold and

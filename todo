@@ -1,7 +1,106 @@
-#TODO:
-* Capire se la deviazione standard per la calibrazione calcolata globalmente ha senso nel caso reale oppure è inutile (serve solo per pompare le metriche)
-* testare fps
-* aggiungere ostacoli fake per pipeline 2
-* fare bounding box sia a immagine baseline che a immagine con ostacolo (per pipeline 2)
-* Per P1: testare yolo 26, yolo 11 e rcnn
-* Aggiungere al dataset copypaste varianti con oggetti tagliati dalla scena per metà
+# TODO
+
+## Sistema / App finale (cross-pipeline — da discutere con il collega)
+- [ ] Threshold temporale: un ostacolo è tale solo se persiste per un tempo T
+      (aggregazione su finestra di frame per evitare falsi allarmi da transitori;
+      cfr. Chapter2 / Zaidi2024, dove la temporal aggregation è un layer
+      ortogonale ai detector).
+- [ ] Gestione allarme: una volta scattato, come mantenerlo finché l'ostruzione
+      non è risolta. Allarme acustico continuo = sconveniente → valutare notifica
+      push.
+- [ ] Scheletro app "nodo" edge: esegue l'inferenza on-device e invia un JSON al
+      nodo centrale al momento del rilevamento dell'ostruzione (la dashboard del
+      nodo centrale è fuori scope).
+      → Definire lo schema del JSON (es. id venue/porta, timestamp, tipo
+        ostacolo, confidence, pipeline, ...).
+- [ ] Testare FPS delle pipeline (fattibilità real-time su edge).
+- [ ] Device target: Raspberry Pi oppure Jetson Nano. Riferimento: Miglionico,
+      Ducange et al. (IJCNN 2025) validano YOLOv11 su Jetson Nano — nano 10.6
+      FPS con TensorRT, small 5.5; RT-DETR non real-time. Su Raspberry (no GPU)
+      servirebbe export ONNX/NCNN e modello nano.
+
+## P1 — Object detection puro (IN CORSO)
+
+Obiettivo: rilevare la PRESENZA di un'ostruzione (non il tipo di oggetto)
+tramite object detection, con fine tuning di una rete preaddestrata.
+
+Scelta di design: singola classe "ostruzione" (tutti gli oggetti collassati in
+una classe), come da letteratura. Non interessa cosa ostruisce, solo se c'è o no
+un'ostruzione. Il copy-paste `ostruzioni_reali` è già a classe singola (0),
+coerente con questa scelta.
+
+STATO SCAFFOLD (fatto): creato `pipeline1/` con prepare/train/evaluate/annotate
++ mapping COCO. Env `tesi_env` ha `ultralytics` (CPU-only, no CUDA su questa
+macchina → training reale lento, valutare GPU/Colab). Smoke test end-to-end OK.
+Baseline COCO già girata sul test poli: recall 0.23 / F1 0.30 / FPR 0.25 (COCO
+non riconosce cart/wheelchair/stretcher/bin → motiva il fine tuning). Vedi
+`pipeline1/README.md`. Restano da fare: annotazione bbox poli + training reale.
+
+### Decisioni aperte
+- [ ] Decidere se raccogliere un ulteriore dataset di immagini ospedaliere
+      reali. Probabilmente poco utile per YOLO (un contesto ospedaliero generico
+      senza gli oggetti target annotati non aiuta la detection); valutare
+      costo/beneficio.
+
+### Dataset
+- [ ] Training / fine-tuning: usare il copy-paste `ostruzioni_reali`
+      (990 img + 990 label YOLO).
+      NB: le cartelle `oggetti_fine_tuning/*.v1i.yolo26` contengono RITAGLI di
+      singoli oggetti (per il copy-paste), non scene complete annotate → non
+      usabili tal quali come training detection.
+- [x] Negativi nel training: 110 reference held-out (pruned) inclusi come
+      background images (label assente). Implementato in prepare_yolo_dataset.py
+      leggendo `pruned_backgrounds.txt` + DB (validato: 990 pos / 110 neg,
+      nessun leakage con gli sfondi del copy-paste).
+- [x] Test set: preso dal DB (`split=test`): 30 reali + 36 normali poli.
+      (image-level non richiede bbox).
+- [ ] ANNOTARE le bounding box sulle 30 img di `ostruzioni_poli_ingegneria`
+      (oggi non hanno label → senza, niente mAP sul test reale).
+      Tool pronto: `pipeline1/src/annotate_bboxes.py`.
+- [x] Valutazione sul copy-paste: CROSS VALIDATION 5-fold raggruppata per
+      `source_group`, implementata (prepare + evaluate cv-map). Nel DB resta
+      marcato come test solo poli ingegneria.
+
+### Modello preaddestrato
+- [x] Rete preaddestrata COCO: yolo11n scaricata; train_yolo.py accetta
+      qualsiasi `--model`. Vincolo edge → default nano/small.
+- [ ] Valutare alternative: modelli open-vocabulary (YOLO-World, Grounding DINO)
+      per detection zero-shot degli oggetti ospedalieri; altre famiglie
+      (RT-DETR, Faster R-CNN).
+      NB: COCO ha "chair"/"suitcase" ma non wheelchair/cart/stretcher → motiva
+      il fine tuning.
+
+### Training ed evaluation
+- [ ] Fine tuning reale sul copy-paste (codice pronto: train_yolo.py; su CPU è
+      lento → valutare GPU/Colab).
+- [ ] Testare YOLOv26, YOLOv11 e (R-)CNN (variare `--model`).
+- [x] Baseline COCO zero-shot sul test set: fatta (recall 0.23, F1 0.30,
+      FPR 0.25). Manca il lato fine-tunato per il delta.
+- [x] Mapping COCO→ostruzione definito in `coco_obstruction_map.py`
+      (bench/backpack/handbag/suitcase/chair/couch/potted plant/bed/dining
+      table/refrigerator; esclusi persona/piccoli; filtro area minima).
+      Da rivedere/affinare la lista.
+- [ ] Nel training/fine tuning includere esempi di oggetti PARZIALMENTE VISIBILI
+      (tagliati dal bordo della scena), così il modello li riconosce anche a
+      test. NB: NON ancora presente nel copy-paste attuale.
+- [x] Metriche detection (cv-map) e image-level (accuracy/F1/precision/recall/
+      FPR/FNR) implementate in evaluate_yolo.py, con scrittura opzionale su DB.
+
+### Codice
+- [x] Scaffold `pipeline1/src/` creato: prepare_yolo_dataset / train_yolo /
+      evaluate_yolo / annotate_bboxes / coco_obstruction_map. Riusa il DB per
+      split e tracking (experiments/results, pipeline='P1'). Vedi README.
+- [x] Setup: `ultralytics` installato in `tesi_env`.
+
+## P2 — Door-centric bounding box
+- [ ] Aggiungere ostacoli "fake" al dataset.
+- [ ] Fare la bounding box sia sull'immagine baseline sia sull'immagine con
+      ostacolo.
+
+## P3 — PatchCore anomaly detection
+- [ ] Verificare se la deviazione standard usata per la calibrazione, calcolata
+      globalmente, ha senso nel caso reale oppure serve solo a gonfiare le
+      metriche.
+
+## P4 — Siamese change detection (pianificata)
+- [ ] (da definire)

@@ -1,0 +1,2 @@
+model,n_pos,n_neg,conf,TP,FP,TN,FN,accuracy,precision,recall,F1,FPR,FNR
+coco-baseline,30,36,0.25,7,9,27,23,0.5152,0.4375,0.2333,0.3043,0.25,0.7667

@@ -118,7 +118,8 @@ Introducing shadow augmentation in the build phase, then decoupling and pooling
 the calibration, traces a clear path (Table~\ref{tab:p3-phaseC}). Coupling the
 build and calibration probabilities ($p_{\mathrm{sh}} =
 p_{\mathrm{sh}}^{\mathrm{cal}} = 0.4$) reduces shadow FPR by two orders of
-magnitude but over-inflates the threshold, dropping TPR to $70.6\%$; the cause is
+magnitude but over-inflates the threshold, dropping TPR to $70.6\%$; the cause is- [ ] Aggiungere al dataset copy-paste varianti con oggetti tagliati a metà dalla
+      scena.
 a long tail in the per-camera threshold distribution, where $12\%$ of cameras
 generate $86\%$ of all false negatives. Decoupling
 ($p_{\mathrm{sh}}^{\mathrm{cal}} = 0.1$, $n_{\mathrm{cal}} = 30$) recovers TPR but
@@ -278,11 +279,13 @@ unobstructed images, and the six references. Consistent with the fixed-camera
 assumption, all shots of a door share the same framing, so the negatives measure
 the FPR under normal content and illumination variability at fixed geometry. The
 full pipeline is active: pooled $\sigma$ plus connected-component gating
-($\tau = 10$) against the hand-annotated door-frame polygons.
+($\tau = 10$) against the hand-annotated door-frame polygons
+(the gating rule is illustrated stage by stage in
+Figure~\ref{fig:p3-gating}).
 
 Validated on the synthetic suites, $k=4$ proved too conservative on real scenes;
 lowering it to $k=3$ raises recall at no FPR cost
-(Table~\ref{tab:p3-phaseD}). Because the pooled $\operatorname{median}(\sigma) =
+(Table~\ref{tab:p3-phaseD}; Figure~\ref{fig:p3-d2-metrics}). Because the pooled $\operatorname{median}(\sigma) =
 0.213$ is a shared constant, lowering $k$ shifts every threshold down by the same
 amount without widening the distribution - the per-camera variance amplification
 of the naive rule does not reappear.
@@ -304,7 +307,18 @@ of the naive rule does not reappear.
   \label{tab:p3-phaseD}
 \end{table}
 
-Comparing the two runs separates the false negatives by cause. Two are
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{images/patchCore/p3_d2_metrics.pdf}
+  \caption{Operating-point metrics on the real test set (D2), at the
+  synthetic-validated $k=4$ and the recalibrated $k=3$. Lowering $k$ raises recall
+  ($83.3\% \to 90.0\%$), $F_1$ ($0.893 \to 0.931$) and accuracy
+  ($90.0\% \to 93.3\%$) at unchanged FPR ($3.3\%$) and precision.}
+  \label{fig:p3-d2-metrics}
+\end{figure}
+
+Comparing the two runs separates the false negatives by cause
+(Figure~\ref{fig:p3-d2-scores}). Two are
 \emph{calibration-limited} and are recovered at $k=3$ through the two distinct
 stages where $k$ acts: one is a decision-stage miss (a valid gated component
 scored just below the decision threshold at $k=4$), the other a
@@ -314,15 +328,88 @@ that $\theta$ controls not only the decision but which pixels exist for gating t
 evaluate, so an overly high $k$ can erase a low-contrast obstruction before
 gating sees it. Three remain zeroed even at $k=3$ and are \emph{gating-limited}:
 the prototypical case is a free-standing floor fan whose wide head sits on the
-door panel (excluded from the frame mask by design) and whose only frame contact,
-the thin pole, narrows to $1$-$2$ px after resizing and fails the $\tau=10$
-overlap. PatchCore detects the fan correctly; the failure is purely geometric,
+door panel (excluded from the frame mask by design) while its thin pole is the
+only part touching the frame and threshold (Figure~\ref{fig:p3-d2-fn-fan}). The
+pole is too slender to register as anomalous: only the head produces a strong
+response, so the fan does not form a single connected anomaly component that
+bridges the panel to a frame region. The head's component lies entirely in the
+excluded panel area and has no anomalous link reaching the frame, so gating zeros
+it. PatchCore detects the obstruction correctly; the failure is purely geometric,
 confirming the structural limitation anticipated in Chapter~\ref{chap:method}:
 the grounded-obstacle assumption holds for wide-profile objects (carts,
 wheelchairs, bins) but not for thin-stemmed ones (fans, coat racks, sign posts).
-A single FP is a glass door whose background changed behind the panel. With
+A single FP is a glass door whose background changed behind the panel
+(Figure~\ref{fig:p3-d2-fp-blind}): with the external rolling shutter lowered, the
+view through the glass differs entirely from the reference frame, so the whole
+panel area lights up in the anomaly map and the pooled threshold is exceeded -
+a calibration limit of the fixed-background assumption rather than a gating
+failure. With
 order-of-tens samples, these numbers are a qualitative validation of the complete
 pipeline, not a production benchmark.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.85\textwidth]{images/patchCore/p3_d2_scores.pdf}
+  \caption{Per-sample decision margin (score $-$ per-camera threshold) on D2 at
+  $k=3$; the decision boundary is the line at $0$. The $30$ obstructed and $30$
+  hard-negative frames are cleanly separated except for three obstructions gated to
+  a zero score - the gating-limited false negatives, including the thin-stemmed
+  floor fan - and one hard-negative false positive (a glass door whose background
+  changed behind the panel).}
+  \label{fig:p3-d2-scores}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.42\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{images/patchCore/p3_d2_fn_fan_ref.jpg}
+    \caption{Reference (normal)}
+    \label{fig:p3-d2-fn-fan-ref}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.42\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{images/patchCore/p3_d2_fn_fan_heatmap.jpg}
+    \caption{Anomaly heatmap}
+    \label{fig:p3-d2-fn-fan-heatmap}
+  \end{subfigure}
+  \caption{Gating-limited false negative (worst case, score $0.000$). PatchCore
+  correctly flags the fan head and base as anomalous in the heatmap, but the head
+  rests on the door panel, which is excluded from the frame mask by design. The
+  thin pole - the only part touching the frame and threshold - is too slender to
+  register as anomalous, so the fan does not form a single connected anomaly
+  component bridging the panel to a frame region. The head's component lies
+  entirely in the excluded panel area with no anomalous link reaching the frame,
+  and gating therefore zeros it. The failure is purely geometric, not a detection
+  error.}
+  \label{fig:p3-d2-fn-fan}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.42\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{images/patchCore/p3_d2_fp_blind_ref.jpg}
+    \caption{Reference (normal)}
+    \label{fig:p3-d2-fp-blind-ref}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}{0.42\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{images/patchCore/p3_d2_fp_blind_heatmap.jpg}
+    \caption{Anomaly heatmap}
+    \label{fig:p3-d2-fp-blind-heatmap}
+  \end{subfigure}
+  \caption{Hard-negative false positive (worst case, score $3.873$) on a glass
+  door. In the reference the external rolling shutter is up and the glass shows
+  the courtyard outside; in the test frame the shutter is lowered, so the view
+  through the panel changes completely. The background variation is too large for
+  the fixed-camera assumption: the entire glazed area exceeds the anomaly
+  threshold and overlaps the door frame, producing a false detection. This is a
+  calibration limit of the static-background assumption, not a gating failure.}
+  \label{fig:p3-d2-fp-blind}
+\end{figure}
 
 \subsubsection{Discussion}
 
