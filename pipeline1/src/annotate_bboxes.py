@@ -40,6 +40,14 @@ class BoxAnnotator:
         self.idx = 0
         # boxes[i] = list of (cx, cy, w, h) normalized for image i
         self.boxes: dict[int, list[tuple[float, float, float, float]]] = {}
+
+        # Disable matplotlib default keybindings that conflict with our
+        # shortcuts: 'p' = pan, 's' = save dialog, 'backspace'/'left' = back
+        # view, 'right' = forward view, 'q' = quit.
+        for km in ("keymap.pan", "keymap.save", "keymap.back",
+                   "keymap.forward", "keymap.quit"):
+            plt.rcParams[km] = []
+
         self.fig, self.ax = plt.subplots(figsize=(11, 8))
         self.selector = RectangleSelector(
             self.ax, self._on_select, useblit=True,
@@ -103,22 +111,26 @@ class BoxAnnotator:
         self._redraw()
 
     def _on_key(self, event) -> None:
-        if event.key in ("u", "backspace"):
+        key = (event.key or "").lower()
+        print(f"key event received: {event.key!r}")
+        if key in ("u", "backspace"):
             if self.boxes.get(self.idx):
                 self.boxes[self.idx].pop()
                 self._redraw()
-        elif event.key == "s":
+        elif key == "s":
             self._save(self.idx)
             print(f"saved {self._label_path(self.idx).name}")
-        elif event.key in ("n", "right"):
+        elif key in ("n", "right"):
             self._save(self.idx)
+            if self.idx == len(self.images) - 1:
+                print("already at last image")
             self.idx = min(self.idx + 1, len(self.images) - 1)
             self._load()
-        elif event.key in ("p", "left"):
+        elif key in ("p", "left"):
             self._save(self.idx)
             self.idx = max(self.idx - 1, 0)
             self._load()
-        elif event.key == "q":
+        elif key == "q":
             self._save(self.idx)
             plt.close(self.fig)
 

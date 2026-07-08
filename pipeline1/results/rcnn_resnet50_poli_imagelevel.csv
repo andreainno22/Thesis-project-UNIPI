@@ -1,0 +1,2 @@
+model,n_pos,n_neg,conf,TP,FP,TN,FN,accuracy,precision,recall,F1,FPR,FNR
+fasterrcnn-resnet50,30,36,0.25,8,4,32,22,0.6061,0.6667,0.2667,0.381,0.1111,0.7333

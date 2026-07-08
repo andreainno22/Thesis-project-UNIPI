@@ -63,5 +63,7 @@ $PY pipeline1/src/evaluate_yolo.py image-level \
 - **Baseline mapping**: `coco_obstruction_map.py` definisce quali classi COCO
   contano come ostruzione (esclusi persona, oggetti piccoli, ...). E' una
   scelta di design, facilmente editabile.
-- `evaluate_yolo.py ... --write-db` traccia l'esperimento nelle tabelle
-  `experiments`/`results` (pipeline='P1').
+- `evaluate_yolo.py image-level` traccia l'esperimento nelle tabelle
+  `experiments`/`results` (pipeline='P1') per default; usare `--no-db` per
+  saltare. Le metriche complete (accuracy, conteggi, mapping COCO usato) sono
+  salvate in `experiments.hyperparams` (JSON).

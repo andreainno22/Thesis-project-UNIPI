@@ -30,14 +30,16 @@ from __future__ import annotations
 OBSTRUCTION_COCO_NAMES: set[str] = {
     "bench",
     "backpack",
-    "handbag",
     "suitcase",
     "chair",
     "couch",
     "potted plant",
     "bed",
     "dining table",
-    "refrigerator",
+    "bicycle",
+    "motorcycle",
+    "vase",
+    "toilet",
 }
 
 # Detections smaller than this fraction of the image area are ignored, to honour

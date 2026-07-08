@@ -54,6 +54,7 @@ def fetch_positives(conn: sqlite3.Connection) -> list[dict]:
         "SELECT frame_id, file_path, venue_type, source_group "
         "FROM frames WHERE occlusion_type = 'synthetic_copypaste'"
     ).fetchall()
+    # lista di dict, ogni dict ha chiavi frame_id, file_path, venue_type, source_group
     return [dict(r) for r in rows]
 
 
@@ -64,6 +65,7 @@ def fetch_negatives(conn: sqlite3.Connection, pruned_stems: set[str]) -> list[di
     We restrict to the clean Pinterest normals (not shadow/light variants).
     """
     placeholders = ",".join("?" * len(pruned_stems))
+    # a un source_group corrisponde una singola immagine
     rows = conn.execute(
         f"SELECT frame_id, file_path, venue_type, source_group "
         f"FROM frames "
@@ -106,6 +108,9 @@ def build_folds(samples: list[dict], n_folds: int, seed: int) -> list[int]:
     for k, (_, val_idx) in enumerate(sgkf.split(X, strata, groups)):
         for i in val_idx:
             fold_of[i] = k
+    # è una lista lunga quanto samples, fold_of[i]=k indice a quale fold 
+    # di validazione appartiene il sample i-esimo (tutti i sample prima o poi
+    # saranno in un fold di validazione)
     return fold_of
 
 
@@ -153,6 +158,7 @@ def main() -> None:
     # ---- positives ----
     pos = fetch_positives(conn)
     for s in pos:
+        # si aggiunge una chiave "label" al dict
         s["label"] = "pos"
 
     # ---- negatives (held-out pruned backgrounds) ----
@@ -161,6 +167,8 @@ def main() -> None:
     for s in neg:
         s["label"] = "neg"
 
+
+    # check che tutti i pruned siano stati presi dal db
     found_stems = {s["source_group"] for s in neg}
     missing = pruned_stems - found_stems
     if missing:

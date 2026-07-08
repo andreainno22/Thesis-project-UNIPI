@@ -1,4 +1,5 @@
-﻿import os
+import os
+import json
 import random
 import glob
 import hashlib
@@ -44,12 +45,25 @@ MIN_Y_FRACTION = 0.50
 MAX_IOU = 0.10
 MAX_PLACEMENT_ATTEMPTS = 30
 
-# 8. Riproducibilita (None = casuale)
-RNG_SEED = None
+# 7b. Oggetti tagliati dal bordo (parzialmente fuori scena).
+#     Con probabilita CUT_PROBABILITY l'oggetto viene piazzato a cavallo di un
+#     bordo (sinistro/destro/inferiore) con una frazione CUT_FRACTION_RANGE
+#     fuori dall'immagine. La label YOLO viene clippata alla parte VISIBILE.
+CUT_PROBABILITY = 0.25
+CUT_FRACTION_RANGE = (0.15, 0.50)
+CUT_EDGES = ("left", "right", "bottom")
+MIN_VISIBLE_PX = 24          # scarta oggetti con parte visibile troppo piccola
+
+# 8. Riproducibilita (None = casuale). Fissato per la rigenerazione v2.
+RNG_SEED = 42
 
 # 9. Percentuale di background da lasciare puliti (negative samples)
 NEGATIVE_BG_RATIO = 0.10
 NEGATIVE_BG_SEED = 42
+
+# 10. Metadata: per ogni immagine salva categoria/oggetto/bbox/taglio di ogni
+#     incollaggio, cosi da poter fare analisi per categoria a posteriori.
+METADATA_FILENAME = "objects_metadata.json"
 
 # ========================================================
 # FUNZIONI PRINCIPALI
@@ -97,6 +111,19 @@ def select_negative_backgrounds(venue_paths, venue_name: str) -> set[str]:
     return set(rng.sample(bg_stems, count))
 
 
+def write_pruned_file(negatives_by_venue: dict[str, set[str]]) -> None:
+    """Scrive pruned_backgrounds.txt nello stesso formato della v1."""
+    lines = [f"ratio={NEGATIVE_BG_RATIO}", f"seed={NEGATIVE_BG_SEED}"]
+    for venue in sorted(negatives_by_venue):
+        stems = negatives_by_venue[venue]
+        lines.append(f"{venue}={len(stems)}")
+        lines.extend(f"  {s}" for s in sorted(stems))
+    path = os.path.join(OUTPUT_DIR, "pruned_backgrounds.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"Scritto {path}")
+
+
 def load_objects_by_category():
     """Carica i percorsi di tutti gli oggetti per categoria."""
     objects_by_category = {}
@@ -105,7 +132,8 @@ def load_objects_by_category():
         for ext in ["*.png"]:  # Gli oggetti scontornati sono PNG
             obj_paths.extend(glob.glob(os.path.join(obj_dir, ext)))
 
-        objects_by_category[category] = obj_paths
+        # ordinati per riproducibilita (glob non garantisce l'ordine)
+        objects_by_category[category] = sorted(obj_paths)
         print(f"Categoria {category}: trovati {len(obj_paths)} oggetti ritagliati.")
 
     return objects_by_category
@@ -115,13 +143,13 @@ def create_yolo_label(bg_w, bg_h, fg_x, fg_y, fg_w, fg_h, class_id):
     # Calcola il centro dell'oggetto
     center_x = fg_x + (fg_w / 2.0)
     center_y = fg_y + (fg_h / 2.0)
-    
+
     # Normalizza rispetto alle dimensioni dello sfondo (valori tra 0 e 1)
     norm_x = center_x / bg_w
     norm_y = center_y / bg_h
     norm_w = fg_w / bg_w
     norm_h = fg_h / bg_h
-    
+
     # Assicurati che i valori siano formattati a 6 cifre decimali
     return f"{class_id} {norm_x:.6f} {norm_y:.6f} {norm_w:.6f} {norm_h:.6f}"
 
@@ -155,8 +183,22 @@ def compute_iou(box_a, box_b):
     return inter_area / union_area
 
 
-def find_non_overlapping_placement(bg_w, bg_h, fg_img, existing_boxes):
-    """Trova una posizione che rispetti la soglia di overlap."""
+def clip_box_to_image(x, y, w, h, bg_w, bg_h):
+    """Ritaglia una box (anche parzialmente fuori) ai bordi dell'immagine.
+    Ritorna (x, y, w, h) della parte visibile, o None se non visibile."""
+    x1 = max(0, x)
+    y1 = max(0, y)
+    x2 = min(bg_w, x + w)
+    y2 = min(bg_h, y + h)
+    if x2 - x1 < MIN_VISIBLE_PX or y2 - y1 < MIN_VISIBLE_PX:
+        return None
+    return (x1, y1, x2 - x1, y2 - y1)
+
+
+def find_placement(bg_w, bg_h, fg_img, existing_boxes):
+    """Trova una posizione (interna o tagliata dal bordo) che rispetti la
+    soglia di overlap. Ritorna (resized_img, paste_xy, visible_box, cut_edge)
+    dove visible_box e la parte dell'oggetto dentro l'immagine."""
     aspect_ratio = fg_img.width / fg_img.height
 
     for _ in range(MAX_PLACEMENT_ATTEMPTS):
@@ -173,25 +215,57 @@ def find_non_overlapping_placement(bg_w, bg_h, fg_img, existing_boxes):
             continue
 
         min_y = int(bg_h * MIN_Y_FRACTION)
-        max_y = bg_h - new_fg_h
-        if max_y < 0:
-            continue
 
-        if max_y <= min_y:
-            paste_y = max(0, max_y)
-        else:
+        cut_edge = None
+        if random.random() < CUT_PROBABILITY:
+            cut_edge = random.choice(CUT_EDGES)
+            cut_frac = random.uniform(CUT_FRACTION_RANGE[0], CUT_FRACTION_RANGE[1])
+
+        if cut_edge == "left":
+            paste_x = -int(new_fg_w * cut_frac)
+            max_y = bg_h - new_fg_h
+            if max_y < min_y:
+                continue
             paste_y = random.randint(min_y, max_y)
+        elif cut_edge == "right":
+            paste_x = bg_w - new_fg_w + int(new_fg_w * cut_frac)
+            max_y = bg_h - new_fg_h
+            if max_y < min_y:
+                continue
+            paste_y = random.randint(min_y, max_y)
+        elif cut_edge == "bottom":
+            paste_y = bg_h - new_fg_h + int(new_fg_h * cut_frac)
+            if paste_y < min_y:
+                continue
+            max_x = bg_w - new_fg_w
+            if max_x < 0:
+                continue
+            paste_x = random.randint(0, max_x)
+        else:
+            # piazzamento interamente dentro la scena (come v1)
+            max_y = bg_h - new_fg_h
+            if max_y < 0:
+                continue
+            if max_y <= min_y:
+                paste_y = max(0, max_y)
+            else:
+                paste_y = random.randint(min_y, max_y)
 
-        max_x = bg_w - new_fg_w
-        if max_x < 0:
+            max_x = bg_w - new_fg_w
+            if max_x < 0:
+                continue
+            paste_x = random.randint(0, max_x)
+
+        visible_box = clip_box_to_image(
+            paste_x, paste_y, new_fg_w, new_fg_h, bg_w, bg_h
+        )
+        if visible_box is None:
             continue
 
-        paste_x = random.randint(0, max_x)
-
-        candidate_box = (paste_x, paste_y, new_fg_w, new_fg_h)
-        if all(compute_iou(candidate_box, box) < MAX_IOU for box in existing_boxes):
+        # l'overlap si valuta sulla parte visibile
+        if all(compute_iou(visible_box, box) < MAX_IOU for box in existing_boxes):
             resized = fg_img.resize((new_fg_w, new_fg_h), Image.Resampling.LANCZOS)
-            return resized, candidate_box
+            return resized, (paste_x, paste_y), visible_box, cut_edge
 
     return None
 
@@ -215,6 +289,10 @@ def generate_dataset():
 
     total_generated = 0
     total_skipped = 0
+    total_cut_objects = 0
+    total_objects = 0
+    metadata: dict[str, list[dict]] = {}
+    negatives_by_venue: dict[str, set[str]] = {}
 
     for venue, bg_paths in backgrounds_by_venue.items():
         if not bg_paths:
@@ -223,12 +301,13 @@ def generate_dataset():
         generated_for_venue = 0
         skipped_backgrounds = 0
         negative_bg_stems = select_negative_backgrounds(bg_paths, venue)
+        negatives_by_venue[venue] = negative_bg_stems
         if negative_bg_stems:
             print(
                 f"Venue {venue}: {len(negative_bg_stems)} background lasciati puliti (negative)"
             )
 
-        for bg_idx, bg_path in enumerate(bg_paths, start=1):
+        for bg_path in bg_paths:
             try:
                 bg_img = Image.open(bg_path).convert("RGB")
             except Exception as e:
@@ -250,6 +329,7 @@ def generate_dataset():
                 composed_img = bg_img.copy()
                 labels_list = []
                 placed_boxes = []
+                objects_meta = []
 
                 num_objects = random.randint(MIN_OBJECTS_PER_IMAGE, MAX_OBJECTS_PER_IMAGE)
 
@@ -260,7 +340,7 @@ def generate_dataset():
                     try:
                         with Image.open(fg_path) as fg_img:
                             fg_img = fg_img.convert("RGBA")
-                            placement = find_non_overlapping_placement(
+                            placement = find_placement(
                                 bg_w, bg_h, fg_img, placed_boxes
                             )
                     except Exception:
@@ -269,28 +349,48 @@ def generate_dataset():
                     if placement is None:
                         continue
 
-                    resized_img, (paste_x, paste_y, new_fg_w, new_fg_h) = placement
+                    resized_img, (paste_x, paste_y), visible_box, cut_edge = placement
                     composed_img.paste(resized_img, (paste_x, paste_y), resized_img)
-                    placed_boxes.append((paste_x, paste_y, new_fg_w, new_fg_h))
+                    placed_boxes.append(visible_box)
 
+                    vx, vy, vw, vh = visible_box
                     yolo_label = create_yolo_label(
-                        bg_w, bg_h, paste_x, paste_y, new_fg_w, new_fg_h, CLASS_ID
+                        bg_w, bg_h, vx, vy, vw, vh, CLASS_ID
                     )
                     labels_list.append(yolo_label)
+
+                    # frazione dell'oggetto rimasta visibile (1.0 = intero)
+                    full_area = resized_img.width * resized_img.height
+                    visible_frac = (vw * vh) / full_area if full_area else 0.0
+                    objects_meta.append({
+                        "category": category,
+                        "object_file": os.path.basename(fg_path),
+                        "bbox_yolo": [float(v) for v in yolo_label.split()[1:]],
+                        "cut_edge": cut_edge,
+                        "visible_frac": round(visible_frac, 3),
+                    })
+                    total_objects += 1
+                    if cut_edge is not None:
+                        total_cut_objects += 1
 
                 if not labels_list:
                     total_skipped += 1
                     continue
 
-                output_filename = (
-                    f"{venue}_{bg_idx:04d}_{bg_filename}_v{variation_idx:02d}"
-                )
+                # naming coerente con la v1 e con il DB: {bg}_ostruita.jpg
+                # (con VARIATIONS (1,1) il suffisso variazione non serve)
+                if num_variations > 1:
+                    output_filename = f"{bg_filename}_ostruita_v{variation_idx:02d}"
+                else:
+                    output_filename = f"{bg_filename}_ostruita"
                 img_save_path = os.path.join(images_out_dir, f"{output_filename}.jpg")
                 composed_img.save(img_save_path, "JPEG", quality=95)
 
                 txt_save_path = os.path.join(labels_out_dir, f"{output_filename}.txt")
                 with open(txt_save_path, "w") as f:
                     f.write("\n".join(labels_list))
+
+                metadata[f"{output_filename}.jpg"] = objects_meta
 
                 total_generated += 1
                 generated_for_venue += 1
@@ -304,8 +404,31 @@ def generate_dataset():
         if skipped_backgrounds:
             print(f"Venue {venue}: background puliti (skip) {skipped_backgrounds}.")
 
+    # metadata: parametri di generazione + mappa immagine -> oggetti incollati
+    meta_doc = {
+        "_meta": {
+            "rng_seed": RNG_SEED,
+            "negative_bg_seed": NEGATIVE_BG_SEED,
+            "negative_bg_ratio": NEGATIVE_BG_RATIO,
+            "scale_range": SCALE_RANGE,
+            "objects_per_image": [MIN_OBJECTS_PER_IMAGE, MAX_OBJECTS_PER_IMAGE],
+            "cut_probability": CUT_PROBABILITY,
+            "cut_fraction_range": CUT_FRACTION_RANGE,
+            "categories": list(OBJECT_CATEGORIES.keys()),
+        },
+        "images": metadata,
+    }
+    meta_path = os.path.join(OUTPUT_DIR, METADATA_FILENAME)
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta_doc, f, indent=1, ensure_ascii=False)
+    print(f"Scritto {meta_path}")
+
+    write_pruned_file(negatives_by_venue)
+
     print(f"\nCOMPLETATO! Dataset sintetico salvato in: {OUTPUT_DIR}")
     print(f"Immagini generate: {total_generated}")
+    print(f"Oggetti incollati: {total_objects}, di cui tagliati dal bordo: "
+          f"{total_cut_objects} ({100 * total_cut_objects / max(1, total_objects):.1f}%)")
     if total_skipped:
         print(f"Immagini scartate (nessun oggetto piazzato): {total_skipped}")
     print("Pronto per l'addestramento con YOLO!")

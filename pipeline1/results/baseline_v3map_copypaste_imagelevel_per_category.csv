@@ -1,0 +1,8 @@
+category,n_images,detected,recall
+barella,349,152,0.4355
+carrello,326,139,0.4264
+cestino,338,131,0.3876
+scatola,338,120,0.355
+sedia,329,209,0.6353
+whole_objects_only,479,168,0.3507
+with_cut_object,511,234,0.4579

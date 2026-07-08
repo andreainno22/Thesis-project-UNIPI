@@ -1,0 +1,2 @@
+model,n_pos,n_neg,conf,TP,FP,TN,FN,accuracy,precision,recall,F1,FPR,FNR
+fasterrcnn-mobilenet,30,36,0.25,12,10,26,18,0.5758,0.5455,0.4,0.4615,0.2778,0.6

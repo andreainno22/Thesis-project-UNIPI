@@ -1,0 +1,2 @@
+model,n_pos,n_neg,conf,TP,FP,TN,FN,accuracy,precision,recall,F1,FPR,FNR
+yolo26n.pt+coco-map,30,36,0.25,5,0,36,25,0.6212,1.0,0.1667,0.2857,0.0,0.8333

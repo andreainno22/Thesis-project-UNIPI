@@ -22,7 +22,40 @@
 ## P1 — Object detection puro (IN CORSO)
 
 Obiettivo: rilevare la PRESENZA di un'ostruzione (non il tipo di oggetto)
-tramite object detection, con fine tuning di una rete preaddestrata.
+tramite object detection.
+
+CAMBIO DI ROTTA (2026-07-07, indicazione del relatore): il fine tuning "non
+serve" → per ora ci fidiamo e proviamo SENZA fine tuning: valutare COCO (con
+mapping classi→ostruzione) sul dataset copy-paste e vedere come si comporta.
+Poi due strade per i dati, da decidere in base ai risultati:
+  a) generare oggetti con Gemini su scene specifiche (image generation);
+  b) usare i dataset reali trovati online (HIOD ecc., v. Decisioni aperte).
+Il codice di fine tuning (train_yolo.py, fold CV) resta pronto se la baseline
+si rivelasse insufficiente (sul test poli: recall 0.23 → scettici ma proviamo).
+
+RISULTATO baseline COCO sul copy-paste v2 (2026-07-07, conf 0.25, 990 pos/110
+neg): recall 0.30, precision 0.93, F1 0.46, FPR 0.21 → COCO manca il 70%
+delle ostruzioni; coerente col poli (recall 0.23) e con la v1 (0.31: gli
+oggetti tagliati non peggiorano la baseline). Quando "vede" qualcosa è quasi
+sempre giusto (precision 0.93), il problema è il vocabolario. Breakdown recall
+per categoria: sedia/wheelchair 0.40, carrello 0.38, barella 0.33, scatola
+0.29, cestino 0.23 → nessuna categoria funziona, il ~30-40% che becca sono
+probabili confusioni con chair/bench/suitcase/bed. Recall cresce con il n. di
+oggetti (1 ogg: 0.22, 2: 0.34, 3: 0.36); tagliati vs interi a parità di
+1 oggetto: 0.26 vs 0.21 (nessun degrado da taglio). Dati alla mano, il "fine
+tuning non serve" NON regge con COCO puro; alternative senza fine tuning:
+modelli open-vocabulary (YOLO-World con prompt "wheelchair, stretcher, ...")
+- da provare prima di riaprire il discorso training. CSV: pipeline1/results/
+baseline_copypaste_v2_*.csv.
+
+COPY-PASTE RIGENERATO (v2, 2026-07-07) con generate_synthetic_dataset.py
+aggiornato: seed fisso 42 (riproducibile), stessi nomi file e stessi 110
+pruned della v1 (verificato byte-identico), METADATA objects_metadata.json
+(categoria + file oggetto + bbox + taglio per ogni incollaggio), e OGGETTI
+TAGLIATI DAL BORDO (615/1900 = 32%, bordi left/right/bottom, label clippata
+alla parte visibile). DB: annotations_bbox refreshati con label_class =
+categoria (refresh_copypaste_bboxes.py). La v1 (usata per i risultati
+preliminari P3) e in Dataset/ostruzioni_reali_v1_backup/.
 
 Scelta di design: singola classe "ostruzione" (tutti gli oggetti collassati in
 una classe), come da letteratura. Non interessa cosa ostruisce, solo se c'è o no
@@ -37,10 +70,30 @@ non riconosce cart/wheelchair/stretcher/bin → motiva il fine tuning). Vedi
 `pipeline1/README.md`. Restano da fare: annotazione bbox poli + training reale.
 
 ### Decisioni aperte
-- [ ] Decidere se raccogliere un ulteriore dataset di immagini ospedaliere
-      reali. Probabilmente poco utile per YOLO (un contesto ospedaliero generico
-      senza gli oggetti target annotati non aiuta la detection); valutare
-      costo/beneficio.
+- [ ] Ulteriore test set REALE (non copy-paste) con oggetti ospedalieri.
+      Candidati trovati (ricerca 2026-07-07):
+      1. HIOD - Hospital Indoor Object Detection (Univ. Florida): 4417 img
+         reali di interni ospedalieri, 56 classi tra cui wheelchair (60),
+         hospital bed (1581), utility cart (877), IV pole (1912), waste bin
+         (1233). Formato Pascal VOC (XML). Licenza GPL-3.0, solo ricerca
+         accademica → RICHIEDERE via email a mwang5@ufl.edu con mail
+         istituzionale. Il candidato migliore.
+      2. Freiburg MobilityAids: 17k+ img RGB-D in corridoi ospedalieri reali
+         (Freiburg + ospedale Francoforte), download libero. MA le classi sono
+         persone con ausili (wheelchair OCCUPATA, stampelle, deambulatore) →
+         semantica diversa (persona != ostruzione); utile al più per corridoi
+         reali di sfondo.
+      3. Roboflow Universe (download immediato, YOLO format): wheelchair
+         detection (~514-800 img), hospital bed detection (~180 img),
+         wheelchair/stroller (~4260 img). Qualità/contesti misti.
+      4. Dataset del paper CSAWOA-YOLOv8 (Biomimetics 2026): 4000 img di
+         corridoi ospedalieri (Jilin, Cina) con ostacoli annotati YOLO -
+         dominio perfetto ma NON pubblico → eventualmente scrivere agli autori.
+      NB: tutti questi sono dataset di DETECTION (oggetti annotati), non di
+      "via di fuga ostruita/libera" → usabili come test di GENERALIZZAZIONE
+      della detection (mAP su oggetti ospedalieri reali, niente artefatti
+      copy-paste), non come test image-level ostruita/libera (quello resta
+      il poli).
 
 ### Dataset
 - [ ] Training / fine-tuning: usare il copy-paste `ostruzioni_reali`
@@ -54,43 +107,204 @@ non riconosce cart/wheelchair/stretcher/bin → motiva il fine tuning). Vedi
       nessun leakage con gli sfondi del copy-paste).
 - [x] Test set: preso dal DB (`split=test`): 30 reali + 36 normali poli.
       (image-level non richiede bbox).
-- [ ] ANNOTARE le bounding box sulle 30 img di `ostruzioni_poli_ingegneria`
-      (oggi non hanno label → senza, niente mAP sul test reale).
-      Tool pronto: `pipeline1/src/annotate_bboxes.py`.
+- [x] ANNOTATE le bounding box su `ostruzioni_poli_ingegneria` (28/30 fatte
+      da Andrea con annotate_bboxes.py). Ora si puo' calcolare il mAP sul reale.
+- [x] ANALISI "cosa viene rilevato" (notebook detection_analysis.ipynb +
+      precompute_detection_matches.py). Matrice di confusione object-level sul
+      copy-paste (categoria vera → classe COCO via IoU): scatola quasi
+      invisibile (87% missed), sedia vista piu come bicycle/motorcycle (ruote)
+      che chair, barella→airplane (forma), cestino→toilet/cup; ~70% oggetti
+      MISSED anche a IoU 0.3. Sul poli reale (immagini ispezionate a mano):
+      unico ostacolo rilevato-e-mappato = la sedia (chair); bottiglie reali
+      viste come `bottle` (corretto ma non in mapping); cestino blu alto →
+      parking meter/niente (il `toilet` del copy-paste NON scatta sul cestino
+      reale rettangolare = gap sintetico→reale concreto); ventilatore/foglio
+      invisibili. AP@0.5 single-class poli = 0.336. Dettagli report sez.
+      6.2-6.3. NB: osservazioni poli DIAGNOSTICHE, non ritoccare il mapping su
+      di esse (si tarerebbe sul test).
 - [x] Valutazione sul copy-paste: CROSS VALIDATION 5-fold raggruppata per
       `source_group`, implementata (prepare + evaluate cv-map). Nel DB resta
       marcato come test solo poli ingegneria.
+      DECISIONE: niente test set ritagliato dal copy-paste (sarebbe stessa
+      distribuzione sintetica del val → ridondante). Le metriche CV sui fold
+      di val = stima interna; poli ingegneria = UNICO test esterno, da usare
+      una volta sola sul modello finale (mai per scegliere modelli/iperparam,
+      altrimenti perde valore di test indipendente).
 
 ### Modello preaddestrato
 - [x] Rete preaddestrata COCO: yolo11n scaricata; train_yolo.py accetta
       qualsiasi `--model`. Vincolo edge → default nano/small.
-- [ ] Valutare alternative: modelli open-vocabulary (YOLO-World, Grounding DINO)
-      per detection zero-shot degli oggetti ospedalieri; altre famiglie
-      (RT-DETR, Faster R-CNN).
-      NB: COCO ha "chair"/"suitcase" ma non wheelchair/cart/stretcher → motiva
-      il fine tuning.
+- [x] Open-vocabulary YOLO-World (zero-shot): comando `open-vocab` in
+      evaluate_yolo.py. RISULTATI (report sez. 8):
+      * copy-paste F1 0.96 (recall 0.93, FPR 0.064 a conf 0.10) vs COCO 0.46;
+      * poli reale F1 0.52 (recall 0.40, FPR 0.11) vs COCO 0.30.
+      Batte nettamente COCO ovunque, MA gap sintetico->reale enorme (0.96->0.52)
+      e sul poli i 18 miss sono tutti il VENTILATORE (porte 3-4), intrinsecamente
+      difficile anche aggiungendo il prompt. Conclusione: nessun approccio senza
+      training/dati reali arriva a recall adeguata sul reale → argomento forte
+      per la pipeline mista P1+P3 (P3 becca gli sconosciuti tipo ventilatore).
+- [x] VERIFICATO: YOLO-World e' ~5x piu pesante di yolo11n (13.4M vs 2.6M
+      param, 71.5 vs 6.6 GFLOPs, model.info(); yolov8s-world e' gia' la taglia
+      PIU' PICCOLA disponibile, non esiste una "nano"). Sul riferimento Jetson
+      Nano (Miglionico et al., yolo11n ~10.6 FPS TensorRT) scenderebbe
+      verosimilmente sotto 1 FPS.
+      MA: siccome il sistema campiona con soglia temporale (v. sopra, non
+      serve processare un flusso video continuo), 1 FPS o meno NON squalifica
+      automaticamente il deploy - basta campionare ogni tot secondi. Quindi
+      YOLO-World resta un candidato di deploy plausibile, da verificare
+      sull'hardware finale (sara' oggetto di test quando l'hardware sara'
+      disponibile - device Raspberry/Jetson ancora da fissare).
+      Vincolo che INVECE resta indipendente dagli FPS: la RAM. Il text encoder
+      CLIP (ViT-B-32) pesa 354 MB da solo (vs 5.6 MB di yolo11n.pt) e deve
+      stare in memoria durante l'inferenza (gira una sola volta per
+      set_classes(), non ad ogni frame, ma resta caricato). Da verificare col
+      budget RAM dell'hardware finale (Jetson Nano 4GB nel riferimento
+      Miglionico; Raspberry Pi da fissare).
+      RUOLO DI YOLO-WORLD NELLA TESI: soprattutto strumento diagnostico (ha
+      dimostrato che il problema di COCO e' il vocabolario, non i pesi, e dato
+      il tetto raggiungibile senza training) - ma non escluso a priori dal
+      deploy, la decisione finale dipende dai test sull'hardware vero.
+- [x] MAPPING COCO RAFFINATO con verifica visiva (report sez. 6.1), non solo
+      numeri: ispezionati i crop delle detection per capire COSA rileva ogni
+      classe prima di aggiungerla/toglierla.
+      * refrigerator RIMOSSA: verificato che rileva porte a due ante (sagoma
+        rettangolare bianca/grigia), non frigoriferi - anche sui positivi
+        spesso becca lo sfondo invece dell'oggetto incollato.
+      * handbag RIMOSSA (troppo piccola per essere ostruzione).
+      * bicycle, motorcycle AGGIUNTE (le ruote di carrelli/sedie a rotelle).
+      * toilet AGGIUNTA: verificato 47/48 detection = cestini VERI (nessuna
+        classe COCO dedicata a trash-can, la sagoma del cestino somiglia a un
+        vaso WC). Segnale eccellente.
+      * vase mantenuta (richiesta utente) ma segnale debole/misto: solo 5
+        detection totali, per lo piu vasi/piante decorative reali sullo
+        sfondo, non i 5 oggetti target - impatto trascurabile.
+      RISULTATI copy-paste (990/110, conf 0.25): recall 0.30→0.41,
+      precision 0.93→0.98, F1 0.46→0.57, FPR 0.21→0.09. Cestino: 0.23→0.39.
+      ATTENZIONE - GAP SINTETICO/REALE: sul poli il risultato e' IDENTICO
+      prima/dopo (TP=6,FP=3,FN=24, F1=0.308): `toilet` non rileva NESSUN
+      cestino reale nonostante fosse quasi perfetto sul copy-paste. Stesso
+      pattern gia' visto con YOLO-World: il copy-paste e' utile per iterare
+      ma non misura la generalizzazione vera. File: coco_obstruction_map.py,
+      CSV pipeline1/results/baseline_v3map_*.
+- [ ] IDEA (da questa scoperta): usare YOLO-World come "insegnante" per
+      auto-etichettare dati (copy-paste e/o dati reali) con pseudo-label, poi
+      fine tuning di yolo11n su quelle etichette (distillazione). Unisce il
+      vocabolario ricco di YOLO-World alla leggerezza edge di yolo11n, senza
+      annotazione manuale. Percorso concreto per il piano B fine tuning.
+- [x] YOLO26n testata (baseline COCO, stesso mapping finale, stessi 2 test
+      set; report sez. 8.2). yolo26n.pt: 2.57M param/6.1 GFLOPs (leggermente
+      piu leggero di yolo11n). Risultato: sistematicamente PIU CONSERVATIVO di
+      yolo11n a parita' di conf 0.25 - precision piu alta, FPR piu basso (0.0
+      sul poli!), ma recall PIU BASSA su entrambi i set (copy-paste 0.31 vs
+      0.41; poli 0.17 vs 0.20). Per un task di sicurezza (FN piu grave di FP)
+      e' un compromesso sfavorevole: il FPR=0 sul poli arriva perdendo ancora
+      piu ostruzioni vere (25/30 mancate vs 24/30). Non testato uno sweep di
+      soglie piu basse (potrebbe recuperare recall). CSV:
+      pipeline1/results/yolo26_*.
+- [x] Faster R-CNN (torchvision, COCO-pretrained) testato sul poli, 2 varianti
+      (report sez. 8.3, evaluate_rcnn.py):
+      * ResNet50-FPN: recall 0.267, F1 0.381, FPR 0.111. MA ~18 s/img su CPU
+        (160MB, ~41M param) → troppo lento anche per il campionamento, escluso.
+      * MobileNet-320-FPN (variante edge): recall 0.400 (la piu alta tra i
+        frozen!), F1 0.462, ma FPR 0.278 (il piu alto) - troppi falsi allarmi.
+        ~2 s/img, leggero.
+- [x] RT-DETR-L testato (transformer, il modello che cercavo = Lv et al. 2023,
+      testato anche da Miglionico et al.). ultralytics: YOLO('rtdetr-l.pt')
+      funziona con evaluate_yolo.py --coco-map. 33M param/108 GFLOPs, ~14 s/img
+      CPU. Poli: recall 0.367, F1 0.40, FPR 0.389 (il piu alto). CSV
+      pipeline1/results/rtdetr_l_*.
+- [ ] Altre alternative ancora da valutare: Grounding DINO, OWL-ViT, YOLOE.
+- [x] Analisi per-classe COCO (report completo in pipeline1/baseline_report.md):
+      chi scatta sui positivi vs negativi. Scoperte: (1) refrigerator e il
+      driver del FPR (11.8% dei negativi); (2) carrelli/sedie a rotelle
+      rilevati come bicycle/motorcycle (le ruote!), cestini come cup/toilet
+      → COCO vede gli oggetti ma con la label sbagliata.
+- [ ] GATING ROI su P1 (idea): riusare ESATTAMENTE lo stesso gating di P3
+      (roi_polygons + roi_utils, tutte le FRAME_LABELS stipiti/montante/soglia/
+      architrave, non solo la soglia): una box vale solo se tocca la ROI del
+      telaio. Permetterebbe di includere anche bicycle/motorcycle (aiutano sui
+      carrelli) senza il rischio "moto dietro il vetro". Includere bike/moto va
+      giustificato su base DI DOMINIO (in ospedale non ci sono bici/moto), non
+      perche scattano 0 sui nostri 110 negativi (sarebbe overfitting al test).
+      Caveat: ROI annotate solo su 6 frame porta poli finora.
 
 ### Training ed evaluation
 - [ ] Fine tuning reale sul copy-paste (codice pronto: train_yolo.py; su CPU è
       lento → valutare GPU/Colab).
-- [ ] Testare YOLOv26, YOLOv11 e (R-)CNN (variare `--model`).
-- [x] Baseline COCO zero-shot sul test set: fatta (recall 0.23, F1 0.30,
-      FPR 0.25). Manca il lato fine-tunato per il delta.
-- [x] Mapping COCO→ostruzione definito in `coco_obstruction_map.py`
-      (bench/backpack/handbag/suitcase/chair/couch/potted plant/bed/dining
-      table/refrigerator; esclusi persona/piccoli; filtro area minima).
-      Da rivedere/affinare la lista.
-- [ ] Nel training/fine tuning includere esempi di oggetti PARZIALMENTE VISIBILI
-      (tagliati dal bordo della scena), così il modello li riconosce anche a
-      test. NB: NON ancora presente nel copy-paste attuale.
+      IMPLICAZIONI FINE TUNING (chiarite):
+      * I PESI NON aumentano: il fine tuning riaddestra i pesi esistenti,
+        architettura identica. Anzi la testa passa da 80 classi COCO a 1
+        ("obstruction") → parametri leggermente MENO. yolo11n resta 2.6M param,
+        ~5-6MB, edge-deployable. E' l'unico modo di superare il limite di
+        vocabolario di COCO RESTANDO leggeri (a differenza di YOLO-World).
+      * TEMPO: su CPU (questa macchina) impraticabile (decine di ore/fold ×5).
+        Su GPU (Colab T4): ~20-60 min/fold → 2-4h per la 5-fold CV, meno per
+        il solo modello finale. SERVE GPU (train_yolo.py --device 0).
+      * SCELTA MODELLO: NON dai numeri frozen (non predicono il post-finetuning,
+        riflettono solo la calibrazione). Scegliere per idoneita' edge:
+        candidati = yolo11n/s, yolo26n + RT-DETR-L.
+        NB idoneita' edge rivista: ~1 FPS (anche poco sotto) e' OK per
+        obstruction detection col campionamento a soglia temporale → RT-DETR
+        (transformer) e' TESTABILE, e da' il confronto CNN vs transformer con
+        entrambi fine-tunati. Fuori solo R-CNN ResNet50 (18s/img) e YOLO-World
+        (CLIP 354MB RAM).
+      * VERIFICA (piano di Andrea): calcolare mAP su poli (serve annotare le
+        box, tool pronto) + su un dataset sintetico costruito con Gemini.
+- [x] Baseline COCO zero-shot sul test set: fatta. Mapping finale (dopo
+      verifica visiva, v. sez. Modello preaddestrato sopra): recall 0.20,
+      F1 0.31, FPR 0.08 sul poli. Manca il lato fine-tunato per il delta.
+- [x] Mapping COCO→ostruzione definito e affinato con verifica visiva in
+      `coco_obstruction_map.py` (v. dettagli sopra in "Modello preaddestrato").
+- [x] Oggetti PARZIALMENTE VISIBILI (tagliati dal bordo) nel copy-paste: fatto
+      con la rigenerazione v2 (32% degli oggetti tagliati, label clippate).
 - [x] Metriche detection (cv-map) e image-level (accuracy/F1/precision/recall/
       FPR/FNR) implementate in evaluate_yolo.py, con scrittura opzionale su DB.
+- [ ] TEST STATISTICI (richiesta relatore). Il disegno dipende da se si
+      allena o no:
+      * SENZA training (modelli frozen: COCO mappato, YOLO-World, ...): i fold
+        NON servono (nessun train/val da ruotare; qualsiasi partizione sarebbe
+        equivalente). Test giusti: McNemar a livello di immagine (confronto
+        appaiato di 2 modelli sulle stesse 1100 img) + bootstrap CI 95% sulle
+        metriche (obbligatorio sul poli: 60 img → CI larghi).
+      * CON fine tuning (se il piano B rientra): il fold torna a essere
+        l'unita naturale (5 modelli allenati diversi → varianza del training
+        da includere) → t-test appaiato/Wilcoxon sui 5 fold, frozen valutato
+        sugli stessi val fold per l'appaiamento.
+      Citazioni: Demsar 2006; Dietterich 1998 (McNemar).
 
 ### Codice
 - [x] Scaffold `pipeline1/src/` creato: prepare_yolo_dataset / train_yolo /
       evaluate_yolo / annotate_bboxes / coco_obstruction_map. Riusa il DB per
       split e tracking (experiments/results, pipeline='P1'). Vedi README.
 - [x] Setup: `ultralytics` installato in `tesi_env`.
+
+## P1+P3 — Modulo di fusione object detection + PatchCore (da sviluppare)
+Obiettivo: un modulo che unisce P1 e P3 in modo che l'uno sopprima le mancanze
+dell'altro. Complementarità attesa:
+  - P3 (PatchCore) rileva QUALSIASI cambiamento, anche oggetti mai visti
+    (es. ventilatore), ma soffre di FP su ombre/luce/sfondi dietro vetri.
+  - P1 (YOLO) è robusto a illuminazione/ombre (riconosce oggetti, non
+    differenze), ma manca le categorie fuori dal suo vocabolario.
+Architettura PREFERITA (idea di Andrea): cascata P3→P1 con VETO PER CLASSE.
+- [ ] PatchCore ha priorita: si inferisce prima con P3. Se NEGATIVO → nessun
+      allarme (stop, non si esegue YOLO → risparmio compute sul caso comune).
+      Se POSITIVO → si inferisce anche con YOLO.
+      YOLO NON serve a confermare l'ostruzione (fallirebbe sugli oggetti
+      sconosciuti tipo ventilatore) ma a VETARE: se YOLO riconosce con
+      confidenza una classe che NON e ostruzione (persona, telefono, e in
+      generale le classi COCO "innocue"), ALLORA l'allarme NON scatta.
+      Vantaggio chiave: un oggetto sconosciuto a YOLO NON viene vetato →
+      l'allarme di PatchCore resta (si preserva il punto di forza di P3).
+      Il veto scatta solo quando YOLO e SICURO che si tratta di un non-ostacolo.
+      → Serve definire la lista di classi "innocue" da veto (persona, cellulare,
+        e altri oggetti piccoli/personali) e le soglie di confidenza del veto.
+- [ ] Ensemble parallelo: inferenza su entrambi, fusione degli score
+      (OR/AND/media pesata; soglie separate da calibrare).
+- [ ] Cascata P1→P3: YOLO veloce come primo filtro, PatchCore su ciò che resta.
+- [ ] Definire le metriche di confronto: stesso protocollo image-level sul
+      test poli, confronto singoli vs fusione (obiettivo: FPR giù senza
+      perdere recall).
+- [ ] Considerare il costo edge: due modelli in inferenza (FPS, RAM).
 
 ## P2 — Door-centric bounding box
 - [ ] Aggiungere ostacoli "fake" al dataset.
