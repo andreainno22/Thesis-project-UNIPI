@@ -1,0 +1,16 @@
+# P1 (YOLO) fine-tuning deps on the university GPU container.
+#
+# The container image already ships system Python + torch/torchvision with
+# CUDA (checked: torch==2.5.1+cu124, cuda.is_available()==True) - no conda,
+# no venv needed. The only things missing are ultralytics and scikit-learn
+# (used by prepare_yolo_dataset.py for the grouped CV split).
+#
+# IMPORTANT: this container's writable layer (everything outside
+# /workspace) does NOT survive a container reset - conda disappeared this
+# way once already. torch is baked into the image so it's safe, but a
+# plain `pip install` of ultralytics/scikit-learn will need to be redone
+# after a reset. Re-run pipeline1/scripts/setup_cluster_env.sh (lives in
+# /workspace, so the script itself always survives) to reprovision in
+# ~15s.
+#
+#   bash pipeline1/scripts/setup_cluster_env.sh

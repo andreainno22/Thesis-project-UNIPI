@@ -1,0 +1,11 @@
+# Gemini-generated obstruction test set (single-class), for detection mAP.
+# All 34 images are positives (obstruction present). Labels are annotated by
+# hand into Dataset/ostruzioni_gemini/labels/corridoi/ (Ultralytics resolves
+# images/ -> labels/ automatically on Windows-native paths).
+# Usage (after annotating):
+#   yolo val model=yolo11n.pt data=pipeline1/gemini_test.yaml
+# or compute single-class AP with the notebook / a custom script.
+path: C:/Users/andrea/OneDrive - University of Pisa/Università/Unipi/tesi/Dataset/ostruzioni_gemini
+val: images/corridoi
+nc: 1
+names: [obstruction]

@@ -37,6 +37,8 @@ def train_one(data: Path, args, name: str) -> Path:
         epochs=args.epochs,
         imgsz=args.imgsz,
         batch=args.batch,
+        patience=args.patience,
+        freeze=args.freeze,
         device=args.device,
         project=str(Path(args.project).resolve()),
         name=name,
@@ -61,7 +63,18 @@ def main() -> None:
                     help="pretrained weights (COCO). nano/small for edge.")
     ap.add_argument("--epochs", type=int, default=100)
     ap.add_argument("--imgsz", type=int, default=640)
-    ap.add_argument("--batch", type=int, default=16)
+    ap.add_argument("--batch", type=int, default=-1,
+                    help="fixed batch size, or -1 for Ultralytics AutoBatch "
+                         "(picks the largest batch that fits ~60%% of free "
+                         "GPU memory - use this when the GPU is unknown).")
+    ap.add_argument("--patience", type=int, default=100,
+                    help="early-stop if val fitness doesn't improve for N "
+                         "epochs (default 100 = effectively no early stop).")
+    ap.add_argument("--freeze", type=int, default=None,
+                    help="freeze the first N backbone layers (COCO features) "
+                         "instead of fine-tuning the whole net. Try this only "
+                         "if CV shows overfitting (val loss rising while "
+                         "train loss keeps dropping).")
     ap.add_argument("--device", default=None,
                     help="'0' for GPU, 'cpu', or None to auto-pick")
     ap.add_argument("--project", default="pipeline1/runs")
