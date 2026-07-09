@@ -491,7 +491,304 @@ le altre.
   per-immagine gia salvate) + bootstrap CI, specie sul poli.
 - Valutare il gating ROI come da sezione 8.
 - Piano B: fine tuning in cross validation se le opzioni frozen restano
-  insufficienti.
+  insufficienti. -> FATTO, vedi sez. 11.
 
 File dei risultati: `pipeline1/results/baseline_copypaste_v2_*.csv`,
 `pipeline1/results/baseline_imagelevel.csv` (poli).
+
+## 11. Fine-tuning YOLO11n (Piano B)
+
+Data: 2026-07-09. Nessun modello frozen supera F1 0.52 sul poli reale
+(sez. 8.3): si passa al fine tuning vero e proprio.
+
+### 11.1 Motivazione della scelta del modello e setup
+
+Modello: **YOLO11n**, unica variante considerata (non yolo11s/m). Motivazione
+diversa da quella puramente prestazionale della sez. 8.3 (dove gli FPS erano
+il criterio): qui il vincolo stretto e' la RAM, non la latenza. Il modello
+finale gira sullo stesso hardware (Raspberry Pi o Jetson Nano) insieme a
+PatchCore (P3, backbone WideResNet50-2) e a un modello di pose estimation
+ancora da scegliere - tre reti in memoria contemporaneamente sullo stesso
+dispositivo, quindi ogni MB di peso extra conta piu della velocita' per
+singolo frame (il sistema campiona con soglia temporale, v. sez. 8.1: non
+serve processare a frame-rate video).
+
+Setup:
+- Hardware: GPU remota (VM universitaria, container Docker, NVIDIA
+  A100-SXM4-80GB), nessuna GPU disponibile in locale. Ambiente: torch
+  2.5.1+cu124, ultralytics 8.4.89.
+- Dataset: stesso copy-paste v2 della baseline (990 positivi, 110 sfondi
+  held-out come negativi). Split 5-fold raggruppato per `source_group` (nessun
+  background condiviso tra train e val di uno stesso fold), seed 42. Il
+  modello "finale" (`yolo11n_final`, quello valutato sotto) e' addestrato su
+  tutto il dataset (990+110).
+- Iperparametri: `epochs=100`, `patience=20` (early stop se il val fitness
+  non migliora per 20 epoche), `batch=32` (fisso, non AutoBatch, per non
+  monopolizzare una GPU condivisa con altri utenti), `imgsz=640`,
+  `single_cls=True`. Resto ai default di ultralytics: augmentation mosaic
+  1.0 (disattivato negli ultimi 10 epoch), HSV jitter, `fliplr=0.5`,
+  `flipud=0` (corretto per scene verticali di porte/corridoi), `mixup` e
+  `copy_paste` (l'augmentation nativa di ultralytics, diversa dal nostro
+  copy-paste dataset) a 0 perche' non disponiamo di maschere di
+  segmentazione.
+- La cross-validation a 5 fold e' stata lanciata ma i risultati non sono
+  ancora stati recuperati/analizzati (v. Prossimi passi, sez. 11.5): tutti i
+  numeri sotto sono del solo modello finale.
+
+### 11.2 Risultati su poli ingegneria (image-level)
+
+Stesso protocollo image-level della baseline (sez. 3), soglia di confidenza
+0.25, `pipeline1/src/evaluate_yolo.py image-level`.
+
+| n_pos | n_neg | TP | FP | TN | FN | accuracy | precision | recall | F1 | FPR |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 30 | 36 | 12 | 7 | 29 | 18 | 0.621 | 0.632 | 0.400 | 0.490 | 0.194 |
+
+Recall grezza 0.400: peggio di quanto suggerissero le curve di training. Il
+CSV per-immagine (`pipeline1/results/yolo11n_final_poli_perimage.csv`) mostra
+pero' un pattern concentrato, non rumore sparso: `porta_3` manca 9/9 (100%),
+`porta_4` manca 7/9, mentre `porta_1`, `porta_5`, `porta_6` sono perfette
+(3/3 ciascuna) e `porta_2` quasi (1/3 preso).
+
+Ispezione diretta delle immagini (`porta_3_1.jpg`, `porta_4_1.jpg`): in
+entrambe le location l'ostacolo e' lo **stesso ventilatore a piantana**,
+oggetto che non appartiene a nessuna delle 5 categorie di fine tuning
+(carrello, sedia a rotelle, barella, scatola, cestino) - quindi
+out-of-distribution puro, mai visto in training. E' lo stesso identico
+oggetto gia' documentato come failure case per P3 (Capitolo 5, "gating-limited
+false negative"): li' PatchCore lo rileva correttamente ma il gating lo
+azzera per un limite geometrico (testa larga fuori dal telaio); qui YOLO non
+lo rileva affatto perche' e' semplicemente una categoria mai vista. Due
+pipeline, due meccanismi di fallimento diversi, stesso oggetto reale - un
+filo conduttore utile per la discussione conclusiva della tesi.
+
+I restanti 2 FN (`porta_2_1`, `porta_2_3`) sono invece un vero cestino
+(categoria di training), quindi un miss genuino:
+
+| Causa del FN | Immagini | % dei 18 FN |
+|---|---|---|
+| Ventilatore (categoria out-of-distribution) | porta_3 (9) + porta_4 (7) = 16 | 89% |
+| Cestino reale mancato (categoria in-training, miss genuino) | porta_2_1, porta_2_3 = 2 | 11% |
+
+Escludendo le 18 immagini con il ventilatore (out-of-distribution per
+costruzione, nessun modello frozen della sez. 8.3 lo rileva neppure), la
+recall sulle sole categorie effettivamente coperte dal fine tuning e':
+**10/12 = 0.833**, molto piu vicina alle attese e piu rappresentativa delle
+capacita' reali del modello sulle categorie che conosce.
+
+Confronto con la tabella di sez. 8.3 (tutti i modelli, poli reale, image-level,
+conf 0.25):
+
+| modello | tipo | recall | precision | F1 | FPR | param |
+|---|---|---|---|---|---|---|
+| YOLO-World-s (open-vocab, frozen) | VL transformer | 0.400 | 0.750 | 0.520 | 0.111 | 13.4M |
+| Faster R-CNN MobileNet-320 (frozen) | CNN two-stage | 0.400 | 0.545 | 0.462 | 0.278 | ~19M |
+| **YOLO11n fine-tuned (recall grezza)** | CNN one-stage | 0.400 | 0.632 | 0.490 | 0.194 | 2.6M |
+| YOLO11n (frozen, baseline) | CNN one-stage | 0.200 | 0.667 | 0.308 | 0.083 | 2.6M |
+
+Lettura onesta: la recall grezza del fine tuning (0.400, F1 0.490) non batte
+nettamente il miglior baseline frozen (YOLO-World, F1 0.520) - il gap
+sintetico->reale gia' osservato nella baseline (sez. 7 punto 4) non e'
+sparito con il fine tuning. Il fine tuning migliora pero' nettamente la
+precision rispetto a YOLO-World (0.632 vs 0.750 sono comparabili, ma FPR
+0.194 contro 0.111 e' peggio) e soprattutto raddoppia la recall rispetto al
+proprio se stesso non fine-tunato (0.400 vs 0.200). Il dato piu informativo
+resta pero' il breakdown sopra: **la recall corretta sulle categorie note
+(0.833) supera nettamente ogni baseline frozen**, a conferma che il
+fine tuning ha funzionato bene sulle categorie effettivamente viste - il
+problema residuo e' copertura del vocabolario di oggetti (esattamente lo
+stesso tipo di limite gia' diagnosticato per COCO in sez. 7), non qualita'
+dell'addestramento.
+
+### 11.3 Risultati sul set gemini (detection mAP)
+
+Set di test generato con Gemini 2.5 Flash Image (editing fotorealistico di
+foto reali, oggetti aggiunti via prompt): 34 immagini corridoio + 60 porte,
+94 totali, tutte positive (nessun negativo, quindi qui non si calcolano
+precision/FPR image-level ma solo mAP di detection). Label annotate a mano
+in `Dataset/ostruzioni_gemini/{corridoi,porte}/labels/`.
+
+Nota metodologica (errore fatto e corretto durante l'analisi, riportato
+perche' rilevante per iterazioni future): il primo run di `yolo val` forzava
+`conf=0.25`, che ultralytics usa come soglia di NMS **prima** di costruire la
+curva precision-recall - questo esclude a priori le detection a bassa
+confidenza dal calcolo di mAP, sottostimandolo. Il default corretto per la
+validazione (`conf=None` -> 0.001 internamente) sweepa tutte le soglie:
+
+| | conf=0.25 forzato (sbagliato) | default (corretto) |
+|---|---|---|
+| Precision | 0.887 | 0.883 |
+| Recall | 0.588 | 0.599 |
+| mAP50 | 0.548 | **0.609** |
+| mAP50-95 | 0.358 | **0.392** |
+
+Risultati finali (corretti), 94 immagini / 187 istanze GT:
+
+| Precision | Recall | mAP50 | mAP50-95 |
+|---|---|---|---|
+| 0.883 | 0.599 | 0.609 | 0.392 |
+
+### 11.4 Recall per-istanza vs recall per-immagine, e analisi delle fusioni
+
+La recall per-istanza (0.599) conta ogni box GT separatamente: se in una
+scena ci sono piu' oggetti impilati/adiacenti e il modello ne rileva uno
+solo con una box che li copre tutti, le altre GT restano "mancate" anche se
+per lo scopo applicativo (rilevare che la via di fuga e' ostruita) la scena
+e' comunque correttamente segnalata. Recall per-immagine (almeno una
+detection sopra soglia 0.25 nell'immagine, calcolata con uno script ad-hoc
+perche' il set e' tutto positivo e non serve al calcolo di mAP):
+
+| Venue | Immagini con >=1 detection | Recall per-immagine |
+|---|---|---|
+| corridoi | 33/34 | 0.971 |
+| porte | 57/60 | 0.950 |
+| combinato | 90/94 | **0.957** |
+
+Il divario tra 0.599 (per-istanza) e 0.957 (per-immagine) e' pero' esso
+stesso fuorviante nella direzione opposta: se una scena contiene 4 oggetti
+diversi e il modello ne trova solo 1, la recall per-immagine segna comunque
+1.0, nascondendo che 3 oggetti su 4 sono stati mancati. Per distinguere il
+failure mode specifico osservato a occhio (scatole di cartone impilate:
+individuate, ma spesso come un'unica box invece di N separate) da un miss
+genuino su oggetti distinti, si e' scritta un'analisi geometrica
+(`pipeline1/src/analyze_gemini_failures.py`): per ogni GT non trovata (FN),
+si cerca la predizione che la copre meglio (qualunque IoU, non solo il match
+ufficiale a soglia 0.5):
+
+| Causa del FN | Conteggio | % dei 79 FN |
+|---|---|---|
+| Fusa in una box gia' assegnata a un'altra GT (sospetto impilamento) | 16 | 20% |
+| Coperta da una predizione non abbastanza precisa/sicura da fare match (IoU<0.5) | 41 | 52% |
+| Isolata, nessuna predizione nei paraggi | 22 | 28% |
+
+Il 72% dei FN (57/79) ha comunque una box del modello nei dintorni (condivisa
+con un'altra GT, o semplicemente imprecisa), coerente con il gap osservato
+tra mAP50 (0.609) e mAP50-95 (0.392): il modello individua la zona giusta
+piu' spesso di quanto suggerisca la recall grezza, ma la localizzazione/
+separazione delle istanze e' imprecisa. Solo il 28% e' un vero punto cieco
+senza alcuna predizione vicina.
+
+Limite di questa analisi: e' puramente geometrica (non sa quale sia la vera
+categoria dell'oggetto), quindi da sola non distingue "impilamento di
+scatole" da altri tipi di sovrapposizione. Le 187 GT del set gemini sono
+state percio' annotate a mano per categoria
+(`pipeline1/src/annotate_gemini_categories.py`, etichettatura interattiva
+che non tocca i file usati per il calcolo di mAP), permettendo di
+scomporre sia la recall sia il tipo di FN per categoria.
+
+Recall per categoria:
+
+| Categoria | Recall | Istanze GT |
+|---|---|---|
+| **box** | **0.281 (27/96)** | 96 |
+| waste_bin | 0.826 (19/23) | 23 |
+| cart | 0.857 (18/21) | 21 |
+| stretcher | 0.947 (18/19) | 19 |
+| wheelchair | 0.963 (26/27) | 27 |
+
+Le scatole sono l'unica categoria problematica (recall 0.281 contro >=0.826
+di tutte le altre) e sono anche il 51% di tutte le istanze del set (96/187):
+da sole spiegano quasi per intero perche' la recall aggregata (0.599) sia
+cosi' piu' bassa della recall per-immagine (0.957).
+
+Incrociando la categoria con il tipo di FN (fusa / imprecisa / isolata):
+
+| Categoria | Fusa | Imprecisa | Isolata | Totale FN |
+|---|---|---|---|---|
+| **box** | 16 | 41 | 12 | 69 |
+| cart | 0 | 0 | 3 | 3 |
+| stretcher | 0 | 0 | 1 | 1 |
+| waste_bin | 0 | 0 | 4 | 4 |
+| wheelchair | 0 | 0 | 1 | 1 |
+
+Risultato netto: **il 100% dei casi "fusa" e "imprecisa" (57/57) appartiene
+alla categoria box**; le altre quattro categorie, quando mancate (9 casi in
+totale su tutto il dataset), lo sono sempre in modo isolato e pulito, mai per
+fusione. Questo conferma in modo quantitativo l'osservazione qualitativa
+iniziale (scatole di cartone impilate rilevate come un'unica box invece di
+N separate) e ne delimita con precisione la portata: non e' un problema
+generale di localizzazione del modello, e' specifico alla categoria box,
+verosimilmente perche' e' l'unica delle 5 categorie che nel dataset
+(copy-paste e gemini) compare frequentemente in gruppi fisicamente
+ravvicinati/impilati, mentre le altre (carrelli, sedie, barelle, cestini)
+compaiono tipicamente come oggetto singolo per scena. Implicazione per il
+seguito: la fusione delle scatole e' verosimilmente un limite di NMS/anchor
+assignment su oggetti molto vicini e visivamente simili tra loro (v. sez.
+11.5), non un problema di training insufficiente sulla categoria in se': se
+si ipotizzano risolti tutti i casi "fusa" e "imprecisa" (NMS/localizzazione
+perfetti) e restano solo i 12 miss "isolata", la recall di box salirebbe a
+(96-12)/96 = 84/96 = 0.875, in linea con le altre categorie (0.826-0.963).
+
+**Causa radice, e perche' non e' banalmente risolvibile.** Il generatore
+copy-paste (`generate_synthetic_dataset.py`) impone `MAX_IOU = 0.10`: ogni
+nuovo oggetto viene ripiazzato (fino a 30 tentativi) finche' il suo box non
+si sovrappone per meno del 10% con ogni oggetto gia' piazzato. Il training
+set quindi non contiene, per costruzione, quasi nessuna scena con oggetti
+realmente impilati/sovrapposti - il modello non ha mai visto questa
+configurazione geometrica, qualunque sia la categoria. Le scatole sono
+l'unica categoria che gemini genera spesso impilata, quindi l'unica a
+incappare in questo gap. Una soluzione "ovvia" (generare varianti copy-paste
+con scatole impilate) e' pero' meno banale di quanto sembri: quando un
+oggetto e' fortemente occluso da un altro, la scelta della bounding box
+(amodale, l'estensione intera anche dove coperta, vs modale, ridotta alla
+sola porzione visibile) non e' neutra. Box amodali che si sovrappongono
+molto danno un segnale di training ambiguo che rinforzerebbe la fusione
+invece di correggerla; box modali risolvono l'ambiguita' ma per un oggetto
+quasi del tutto coperto degenerano in un lembo visibile minuscolo,
+probabilmente non rilevabile da nessun detector - non un limite di training,
+un limite di cio' che e' visivamente inferibile.
+
+**Ridefinizione del problema (il punto piu' importante di questa sezione).**
+Prima di investire nel fix sopra, va chiesto se serve davvero: P1 e' un
+task a **classe singola, single-class "obstruction"** - rileva la PRESENZA
+di un ostacolo, non il tipo ne' il conteggio (v. sez. 1). Se 3 scatole
+impilate producono una singola box che le copre tutte, per lo scopo
+applicativo (segnalare che la via di fuga e' ostruita) e' un successo
+pieno, non un errore. Verifica diretta: delle scene gemini con almeno un
+oggetto categoria box, quante vengono segnalate come ostruite (almeno una
+detection, indipendentemente da quante separate)?
+
+| | yolo11n | yolo26n |
+|---|---|---|
+| Scene con >=1 box, rilevate come ostruite | 30/30 (1.000) | 30/30 (1.000) |
+| Scene senza box, rilevate come ostruite | 60/64 (0.938) | 60/64 (0.938) |
+
+Le scene con scatole vengono rilevate **meglio** delle altre, non peggio.
+Il recall per-istanza basso su box (0.281) e' quindi interamente un
+artefatto della metrica scelta (mAP di detection, che conta istanze), non
+un deficit funzionale del sistema per il compito che deve davvero svolgere.
+Conclusione per la tesi: riportare onestamente entrambi i numeri (il
+recall per-istanza mostra un limite reale di *localizzazione/conteggio*,
+utile a livello di detection benchmark), ma il recall a livello di *scena*
+e' la metrica che conta per la funzione di sicurezza del sistema, ed e'
+li' che P1 va giudicato. Investire tempo residuo nel tentativo di separare
+scatole pesantemente occluse ha probabilmente un ritorno basso rispetto ad
+altri gap gia' identificati (il ventilatore out-of-distribution in sez.
+11.2, che *invece* causa mancate rilevazioni vere a livello di scena).
+
+### 11.5 Prossimi passi
+
+- Recuperare e analizzare i risultati della cross-validation a 5 fold
+  (`yolo11n_cv`), non ancora scaricati/valutati.
+- ~~Annotare le categorie del set gemini per completare la confusion matrix
+  per-categoria.~~ FATTO (sez. 11.4): fusione confermata specifica alla
+  categoria box (100% dei 57 casi fusa/imprecisa), MA a livello di scena le
+  box sono rilevate meglio delle altre categorie (30/30) - non e' un
+  deficit funzionale, e' un artefatto della metrica per-istanza. Bassa
+  priorita': non investire nel fix NMS/dati per le scatole impilate salvo
+  che serva davvero il conteggio/localizzazione per-istanza (non e' il caso
+  di P1, single-class).
+- Valutare uno sweep di soglie di confidenza sul poli (come fatto per
+  YOLO-World in sez. 8) per vedere se un conf piu' basso recupera i 2
+  cestini mancati (`porta_2_1`, `porta_2_3`) senza esplodere il FPR.
+- Valutare se aggiungere al training oggetti "thin-stemmed" (ventilatori,
+  attaccapanni, cartelli su piantana) chiuda il gap out-of-distribution
+  identificato in sez. 11.2 - lo stesso limite strutturale gia' documentato
+  per P3.
+- Valutare il gating ROI (sez. 9) anche per P1, riusando lo stesso
+  meccanismo gia' sviluppato per P3.
+
+File dei risultati: `pipeline1/results/yolo11n_final_poli_imagelevel.csv`,
+`pipeline1/results/yolo11n_final_poli_perimage.csv`,
+`pipeline1/runs/yolo11n_final/weights/best.pt`,
+`pipeline1/runs/yolo11n_final_gemini_val/` (curve, confusion matrix).

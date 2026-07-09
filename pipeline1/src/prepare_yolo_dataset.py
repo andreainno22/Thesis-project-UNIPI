@@ -145,6 +145,13 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--limit", type=int, default=0,
                     help="Cap total images (smoke tests only; 0 = all).")
+    ap.add_argument("--exclude-stems-file", default=None,
+                    help="File with one background stem (= source_group) per "
+                         "line; positives and negatives whose source_group "
+                         "matches are dropped from TRAIN. Use to remove "
+                         "copy-paste images whose background is reused in a "
+                         "test set (e.g. gemini), avoiding train/test "
+                         "background overlap. Lines starting with '#' ignored.")
     args = ap.parse_args()
 
     dataset_root = Path(args.dataset_root)
@@ -182,6 +189,25 @@ def main() -> None:
     if leak:
         print(f"[warn] {len(leak)} pruned stems ALSO appear as copy-paste "
               f"backgrounds - possible leakage (e.g. {sorted(leak)[:3]}).")
+
+    # ---- optional: drop samples whose background is reused in a test set ----
+    if args.exclude_stems_file:
+        excl_path = Path(args.exclude_stems_file)
+        if not excl_path.exists():
+            raise SystemExit(f"--exclude-stems-file not found: {excl_path}")
+        exclude = {ln.strip() for ln in excl_path.read_text(encoding="utf-8").splitlines()
+                   if ln.strip() and not ln.strip().startswith("#")}
+        n_pos0, n_neg0 = len(pos), len(neg)
+        pos = [s for s in pos if s["source_group"] not in exclude]
+        neg = [s for s in neg if s["source_group"] not in exclude]
+        n_pos_dropped, n_neg_dropped = n_pos0 - len(pos), n_neg0 - len(neg)
+        matched = (n_pos_dropped + n_neg_dropped)
+        print(f"[exclude] {excl_path.name}: {len(exclude)} stems listed; "
+              f"dropped {n_pos_dropped} positives + {n_neg_dropped} negatives "
+              f"from train")
+        if matched == 0:
+            print("[warn] exclusion file matched ZERO training samples - "
+                  "check that the stems match source_group naming in the DB.")
 
     print(f"positives (copy-paste): {len(pos)}")
     print(f"negatives (pruned bg) : {len(neg)}  "

@@ -1,0 +1,2 @@
+model,n_pos,n_neg,conf,TP,FP,TN,FN,accuracy,precision,recall,F1,FPR,FNR
+best.pt,30,36,0.15,7,0,36,23,0.6515,1.0,0.2333,0.3784,0.0,0.7667
