@@ -13,6 +13,9 @@ python3 -c "import torch; assert torch.cuda.is_available(); print('torch', torch
 echo "[check] nvidia-smi"
 nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
 
+echo "[install] system libs opencv needs on a headless image (libGL, libglib)"
+apt-get update -qq && apt-get install -y -qq libgl1 libglib2.0-0 > /dev/null
+
 echo "[install] ultralytics + scikit-learn"
 pip3 install --quiet ultralytics==8.4.89 scikit-learn
 
