@@ -1,15 +1,16 @@
 # Gemini-generated obstruction test set (single-class), for detection mAP.
 # All images are positives (obstruction present), both venues hand-annotated:
-#   Dataset/ostruzioni_gemini/corridoi/  (34 images)
+#   Dataset/ostruzioni_gemini/corridoi/  (60 images)
 #   Dataset/ostruzioni_gemini/porte/     (60 images)
-# Ultralytics resolves images/ -> labels/ automatically, so each venue keeps
-# its own images/<venue>/ + labels/<venue>/ pair.
+# Flat layout per venue: images/<file>.jpg + labels/<file>.txt (ultralytics
+# resolves images/ -> labels/ automatically). Per-object category tags live
+# alongside in categories/<file>.json (used by analyze_gemini_failures.py).
 # Usage:
 #   yolo val model=path/to/best.pt data=pipeline1/gemini_test.yaml
 path: C:/Users/andrea/OneDrive - University of Pisa/Università/Unipi/tesi/Dataset/ostruzioni_gemini
-train: corridoi/images/corridoi  # unused placeholder, this yaml is val-only
+train: corridoi/images  # unused placeholder, this yaml is val-only
 val:
-  - corridoi/images/corridoi
-  - porte/images/porte
+  - corridoi/images
+  - porte/images
 nc: 1
 names: [obstruction]
