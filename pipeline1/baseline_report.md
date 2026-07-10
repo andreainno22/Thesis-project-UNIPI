@@ -766,10 +766,128 @@ scatole pesantemente occluse ha probabilmente un ritorno basso rispetto ad
 altri gap gia' identificati (il ventilatore out-of-distribution in sez.
 11.2, che *invece* causa mancate rilevazioni vere a livello di scena).
 
-### 11.5 Prossimi passi
+### 11.6 Controllo del leakage di sfondo e confronto multi-modello (no-leak)
+
+**Il problema del leakage.** Il set di test gemini e' costruito editando foto
+reali di sfondo (aggiunta di oggetti via prompt su porte/corridoi esistenti).
+Molti di questi sfondi sono gli stessi usati per costruire il copy-paste di
+training: su 120 sfondi gemini, 107 corrispondono a un positivo copy-paste
+(il modello ha visto quella scena esatta, con un oggetto incollato diverso) e
+13 a un negativo pulito - **0 scene completamente nuove**. Quindi gemini, per
+come e' costruito, testa la generalizzazione a oggetti nuovi su scene
+familiari, non a scene nuove: c'e' il rischio che i suoi numeri siano gonfiati
+dal riconoscimento della scena piu' che dalla vera capacita' di rilevare
+l'oggetto.
+
+**Verifica empirica.** Invece di limitarsi a menzionare il rischio, lo si e'
+testato: si e' rigenerato il training set copy-paste **escludendo** i 107
+positivi + 13 negativi il cui sfondo compare in gemini
+(`prepare_yolo_dataset.py --exclude-stems-file`, lista di stem in
+`pipeline1/data/gemini_bg_exclude.txt`), passando da 990/110 a 883/97
+immagini, e si e' riaddestrato yolo11n ("no-leak"). Confronto sullo stesso
+identico set gemini (120 immagini, 166 istanze), a parita' di tutto tranne
+l'esclusione degli sfondi condivisi:
+
+| yolo11n | mAP50 | mAP50-95 | precision | recall |
+|---|---|---|---|---|
+| leak (training completo 990/110) | 0.863 | 0.709 | 0.951 | 0.789 |
+| **no-leak (883/97, sfondi gemini esclusi)** | **0.866** | 0.703 | 0.963 | 0.831 |
+
+I due modelli sono **praticamente identici** (mAP50 0.866 vs 0.863; la recall
+no-leak e' addirittura leggermente piu' alta). Rimuovere ogni sovrapposizione
+di sfondo train/test **non peggiora** le prestazioni: il leakage di sfondo
+NON stava gonfiando i numeri di gemini. Il modello sta imparando a rilevare
+l'ostacolo, non a memorizzare lo sfondo. Punto metodologico forte per la tesi:
+l'ipotesi di leakage e' stata testata ed esclusa empiricamente, non solo
+dichiarata. Tutti i modelli successivi (yolo26n, RT-DETR) sono addestrati
+sulla versione no-leak per coerenza.
+
+**Confronto multi-modello (tutti no-leak, stesso set gemini 120 img / 166 ist).**
+
+| modello | tipo | mAP50 | mAP50-95 | precision | recall | param |
+|---|---|---|---|---|---|---|
+| **yolo11n** | CNN one-stage | **0.866** | 0.703 | 0.963 | **0.831** | 2.6M |
+| yolo26n | CNN one-stage | 0.852 | 0.708 | 0.969 | 0.789 | 2.6M |
+| rtdetr-l (*) | transformer | 0.828 | 0.645 | 0.903 | 0.741 | 33M |
+
+(*) checkpoint parziale, v. sotto: il training e' divergato.
+
+Risultato netto: **il modello piu' piccolo (yolo11n) e' il migliore** su questo
+set, sia in mAP50 sia in recall. RT-DETR, con ~13x i parametri, e' il peggiore
+dei tre. Questo rafforza la scelta di deploy su due assi contemporaneamente:
+il transformer pesante non solo viola il vincolo di RAM (il piu' stringente,
+data la co-esecuzione con PatchCore e pose estimation, v. sez. 11.1), ma qui
+non offre nemmeno un vantaggio di accuratezza che lo giustifichi.
+
+**Instabilita' del training di RT-DETR (caveat importante).** Il confronto
+sopra NON e' "RT-DETR a parita' di budget, convergito". Il `results.csv` del
+run mostra che RT-DETR ha allenato bene fino all'epoca 14 (best: mAP50 0.970,
+mAP50-95 0.795 sul val interno copy-paste), poi all'epoca 15 e' **collassato a
+zero** (precision/recall/mAP tutti 0) restandoci fino alla fine; la loss di
+validazione mostra `NaN` gia' a sprazzi (epoche 4, 12, 13) e poi in modo
+permanente dall'epoca 15. L'early stopping (patience 20) ha correttamente
+fermato il run all'epoca 34. Il `best.pt` valutato e' quindi il checkpoint
+dell'epoca 14, prima del collasso - un risultato valido ma di un training non
+convergito in modo pulito. Il `NaN` nella loss e' la firma tipica
+dell'**instabilita' numerica di RT-DETR sotto la ricetta di training di
+default di ultralytics** (mixed precision AMP e learning rate calibrati per le
+CNN YOLO, non per l'architettura transformer con matching di Hungarian di
+RT-DETR): un problema noto.
+
+Modifiche da provare per un confronto RT-DETR equo (training stabile e
+convergito):
+- **`amp=False`**: disattivare la mixed precision automatica e' la causa piu'
+  probabile dei `NaN` (gradienti in fp16 che overflowano nel matching
+  bipartito); da provare per prima.
+- **`lr0` piu' basso** (es. da 0.01 a 0.0001-0.001) con `optimizer=AdamW`:
+  RT-DETR e' notoriamente sensibile al learning rate, i valori YOLO-default
+  sono troppo aggressivi.
+- **`warmup_epochs` piu' lungo** e/o **batch piu' piccolo**: piu' stabilita'
+  nelle prime epoche, dove compaiono i primi `NaN`.
+- Eventualmente **piu' epoche**: i transformer convergono piu' lentamente
+  delle CNN; una volta stabilizzato il training, RT-DETR potrebbe beneficiare
+  di un budget piu' lungo.
+
+Questi parametri non sono oggi esposti da `train_yolo.py` (che passa i default
+di ultralytics): andrebbero aggiunti i flag `--amp/--no-amp` e `--lr0` prima
+di rilanciare. NOTA: anche se un RT-DETR stabilizzato recuperasse accuratezza,
+resterebbe comunque escluso dal deploy per il vincolo di RAM; il suo ruolo in
+tesi e' di baseline comparativa CNN-vs-transformer, non di candidato reale.
+
+**yolo11n e yolo26n sono saturi, non under-trained.** Contrariamente a
+RT-DETR (rotto), yolo11n e yolo26n no-leak sono convergiti correttamente: piu'
+epoche non aiuterebbero. Entrambi hanno eseguito tutte le 150 epoche (tetto
+raggiunto, nessun early stop), e il best e' in fondo (epoca 150 per yolo11n,
+148 per yolo26n) - il che a prima vista suggerirebbe di allungare il training.
+Ma la deviazione standard del mAP50-95 sulle ultime 15 epoche e' ~0.003 per
+entrambi: non e' un trend in salita, e' un **plateau piatto** nel rumore, e il
+"best all'epoca 150" e' solo il picco casuale della curva piatta. Soprattutto,
+questo plateau e' misurato sul val interno (`fold0_val` del **copy-paste**),
+cioe' la stessa distribuzione sintetica del training, ed e' **saturo**:
+mAP50 $\approx 0.995$, mAP50-95 $\approx 0.97$-$0.98$. Due conseguenze:
+
+- Piu' epoche non darebbero quasi nulla: la metrica ottimizzata dal training e'
+  gia' al massimo.
+- Anzi rischierebbero di **peggiorare** il reale: continuare ad allenare su
+  copy-paste gia' saturo spinge verso l'overfitting sul dominio sintetico,
+  l'opposto di cio' che serve per generalizzare a gemini/poli. Semmai il dubbio
+  legittimo e' il contrario (150 epoche potrebbero gia' essere troppe).
+
+Il collo di bottiglia per il reale non e' la durata del training ma il gap
+sintetico->reale e la copertura del vocabolario (v. sez. 11.2, 11.4): la leva
+per migliorare non e' piu' training, sono dati migliori (scene/oggetti piu'
+realistici, categorie mancanti come il ventilatore).
+
+### 11.7 Prossimi passi
 
 - Recuperare e analizzare i risultati della cross-validation a 5 fold
   (`yolo11n_cv`), non ancora scaricati/valutati.
+- Ri-addestrare RT-DETR con la ricetta stabilizzata (sez. 11.6: `amp=False`,
+  `lr0` basso) per un confronto CNN-vs-transformer a training convergito;
+  aggiungere prima i flag `--amp`/`--lr0` a `train_yolo.py`.
+- Rifare poli image-level + failure analysis per categoria su yolo26n e
+  RT-DETR no-leak, per completare il confronto multi-modello anche sul test
+  reale e sulle scatole.
 - ~~Annotare le categorie del set gemini per completare la confusion matrix
   per-categoria.~~ FATTO (sez. 11.4): fusione confermata specifica alla
   categoria box (100% dei 57 casi fusa/imprecisa), MA a livello di scena le
