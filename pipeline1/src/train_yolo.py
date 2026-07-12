@@ -18,6 +18,10 @@ Examples:
   python pipeline1/src/train_yolo.py --data pipeline1/data/all.yaml \
       --model yolo11n.pt --epochs 100 --name final
 
+  # RT-DETR: AMP MUST be off (see --no-amp), otherwise training NaNs out
+  python pipeline1/src/train_yolo.py --data pipeline1/data_noleak/all.yaml \
+      --model rtdetr-l.pt --no-amp --epochs 150 --name rtdetr_l_noamp
+
 Edge target (Raspberry Pi / Jetson Nano): keep --model at nano/small sizes
 (yolo11n.pt / yolo11s.pt). See Miglionico et al. (IJCNN 2025).
 """
@@ -32,6 +36,9 @@ from ultralytics import YOLO
 
 def train_one(data: Path, args, name: str) -> Path:
     model = YOLO(args.model)
+    kwargs = {}
+    if args.lr0 is not None:
+        kwargs["lr0"] = args.lr0
     model.train(
         data=str(data.resolve()),
         epochs=args.epochs,
@@ -39,6 +46,7 @@ def train_one(data: Path, args, name: str) -> Path:
         batch=args.batch,
         patience=args.patience,
         freeze=args.freeze,
+        amp=args.amp,
         device=args.device,
         project=str(Path(args.project).resolve()),
         name=name,
@@ -47,6 +55,7 @@ def train_one(data: Path, args, name: str) -> Path:
         # single-class problem: let YOLO treat all boxes as one class
         single_cls=True,
         verbose=True,
+        **kwargs,
     )
     best = Path(args.project) / name / "weights" / "best.pt"
     print(f"[done] {name}: {best}")
@@ -75,6 +84,18 @@ def main() -> None:
                          "instead of fine-tuning the whole net. Try this only "
                          "if CV shows overfitting (val loss rising while "
                          "train loss keeps dropping).")
+    ap.add_argument("--no-amp", dest="amp", action="store_false", default=True,
+                    help="disable Automatic Mixed Precision (fp32 everywhere). "
+                         "REQUIRED for RT-DETR: ultralytics' own RTDETRTrainer "
+                         "docstring warns that 'AMP training can lead to NaN "
+                         "outputs and may produce errors during bipartite graph "
+                         "matching' - with amp on, our rtdetr run collapsed to "
+                         "zero metrics at epoch 15. Slower and more VRAM, "
+                         "numerically safe.")
+    ap.add_argument("--lr0", type=float, default=None,
+                    help="initial learning rate (default: ultralytics' own, "
+                         "0.01 for SGD / auto for AdamW). Lower it (1e-4..1e-3) "
+                         "only if NaNs persist after --no-amp.")
     ap.add_argument("--device", default=None,
                     help="'0' for GPU, 'cpu', or None to auto-pick")
     ap.add_argument("--project", default="pipeline1/runs")

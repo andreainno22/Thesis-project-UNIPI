@@ -828,31 +828,74 @@ validazione mostra `NaN` gia' a sprazzi (epoche 4, 12, 13) e poi in modo
 permanente dall'epoca 15. L'early stopping (patience 20) ha correttamente
 fermato il run all'epoca 34. Il `best.pt` valutato e' quindi il checkpoint
 dell'epoca 14, prima del collasso - un risultato valido ma di un training non
-convergito in modo pulito. Il `NaN` nella loss e' la firma tipica
-dell'**instabilita' numerica di RT-DETR sotto la ricetta di training di
-default di ultralytics** (mixed precision AMP e learning rate calibrati per le
-CNN YOLO, non per l'architettura transformer con matching di Hungarian di
-RT-DETR): un problema noto.
+convergito in modo pulito.
 
-Modifiche da provare per un confronto RT-DETR equo (training stabile e
-convergito):
-- **`amp=False`**: disattivare la mixed precision automatica e' la causa piu'
-  probabile dei `NaN` (gradienti in fp16 che overflowano nel matching
-  bipartito); da provare per prima.
-- **`lr0` piu' basso** (es. da 0.01 a 0.0001-0.001) con `optimizer=AdamW`:
-  RT-DETR e' notoriamente sensibile al learning rate, i valori YOLO-default
-  sono troppo aggressivi.
-- **`warmup_epochs` piu' lungo** e/o **batch piu' piccolo**: piu' stabilita'
-  nelle prime epoche, dove compaiono i primi `NaN`.
-- Eventualmente **piu' epoche**: i transformer convergono piu' lentamente
-  delle CNN; una volta stabilizzato il training, RT-DETR potrebbe beneficiare
-  di un budget piu' lungo.
+**Causa documentata (fonte primaria).** Il `NaN` nella loss non e' una
+sorpresa: e' un comportamento noto e documentato dagli autori stessi di
+ultralytics. Nel docstring della classe `RTDETRTrainer` (file
+`ultralytics/models/rtdetr/train.py`, riga 41 nella versione 8.4.89 usata qui;
+identico alla reference ufficiale [1]) si legge testualmente:
 
-Questi parametri non sono oggi esposti da `train_yolo.py` (che passa i default
-di ultralytics): andrebbero aggiunti i flag `--amp/--no-amp` e `--lr0` prima
-di rilanciare. NOTA: anche se un RT-DETR stabilizzato recuperasse accuratezza,
-resterebbe comunque escluso dal deploy per il vincolo di RAM; il suo ruolo in
-tesi e' di baseline comparativa CNN-vs-transformer, non di candidato reale.
+> Notes:
+>   - F.grid_sample used in RT-DETR does not support the `deterministic=True` argument.
+>   - **AMP training can lead to NaN outputs and may produce errors during bipartite graph matching.**
+
+Cioe': l'addestramento in mixed precision (AMP) puo' produrre output `NaN` ed
+errori durante il *bipartite graph matching*, l'assegnamento uno-a-uno tra
+query predette e oggetti veri (matching di Hungarian) che sostituisce l'NMS in
+RT-DETR. E' esattamente il sintomo osservato. AMP e' attivo di default in
+ultralytics (`amp=True`), e `train_yolo.py` non lo disattiva: il run e' quindi
+caduto nel caso previsto dalla documentazione.
+
+Modifiche da provare per un confronto RT-DETR equo, in ordine di solidita'
+della fonte:
+
+- **`amp=False` (fonte forte, da provare per prima e da sola).** Disattiva la
+  mixed precision automatica: il modello calcola i gradienti interamente in
+  fp32 invece di usare fp16 dove possibile. AMP serve a ridurre memoria e
+  tempo di training usando meta' precisione numerica, ma fp16 ha un intervallo
+  di rappresentazione molto piu' stretto: valori piccoli finiscono a zero
+  (underflow), valori grandi saturano (overflow) e diventano `inf`/`NaN`. Nel
+  matching bipartito di RT-DETR si calcola una matrice di costo e la si
+  ottimizza: se anche un solo costo diventa `NaN`, l'assegnamento si rompe e
+  il `NaN` si propaga a tutta la loss e ai pesi - da cui il collasso
+  irreversibile a metriche zero, che e' precisamente il crollo all'epoca 15.
+  Con `amp=False` il training e' piu' lento e usa piu' VRAM, ma numericamente
+  robusto: sull'A100-80GB il costo e' irrilevante. Raccomandazione esplicita
+  della documentazione ufficiale [1] e delle discussioni ultralytics [2].
+- **`lr0` piu' basso (fonte media).** Riportato in issue ultralytics come
+  mitigazione dell'instabilita' [2][3]. Da notare pero' che nella issue [2]
+  il `NaN` compariva **gia' con `lr0=0.001`** (learning rate gia' basso), il
+  che suggerisce che la leva primaria sia AMP e non il learning rate: motivo in
+  piu' per cambiare una variabile alla volta.
+- **`warmup_epochs` piu' lungo / batch piu' piccolo (fonte debole).** Pratica
+  generale sui transformer, nessuna raccomandazione specifica trovata per
+  RT-DETR in ultralytics. Da tenere come piano C.
+- **Piu' epoche.** I transformer convergono piu' lentamente delle CNN; ha senso
+  solo DOPO aver stabilizzato il training, non come rimedio all'instabilita'.
+
+Metodologia dell'esperimento: cambiare **solo `amp=False`**, tenendo lr, batch
+ed epoche identici. Se il training si stabilizza, la causa e' attribuita con
+certezza e supportata da fonte ufficiale - molto piu' difendibile che cambiare
+tre parametri insieme senza sapere quale abbia funzionato.
+
+Il flag non e' oggi esposto da `train_yolo.py` (che passa i default di
+ultralytics): va aggiunto `--amp/--no-amp` prima di rilanciare. NOTA: anche se
+un RT-DETR stabilizzato recuperasse accuratezza, resterebbe comunque escluso
+dal deploy per il vincolo di RAM; il suo ruolo in tesi e' di baseline
+comparativa CNN-vs-transformer, non di candidato reale.
+
+Fonti:
+- [1] Ultralytics, *Reference for `ultralytics/models/rtdetr/train.py`* (docstring
+  `RTDETRTrainer`, avviso AMP / NaN / bipartite graph matching):
+  https://docs.ultralytics.com/reference/models/rtdetr/train/
+  (verificato anche nel sorgente installato, ultralytics 8.4.89, riga 41)
+- [2] Ultralytics issue #7594, *RTDETR training on custom dataset giving "NAN"
+  loss after 50 epochs using AdamW optimizer*:
+  https://github.com/ultralytics/ultralytics/issues/7594
+- [3] Ultralytics issue #18521, *RT-DETR model's loss became "nan" and mAP,
+  recall not update after epoch 40*:
+  https://github.com/ultralytics/ultralytics/issues/18521
 
 **yolo11n e yolo26n sono saturi, non under-trained.** Contrariamente a
 RT-DETR (rotto), yolo11n e yolo26n no-leak sono convergiti correttamente: piu'
@@ -880,22 +923,12 @@ realistici, categorie mancanti come il ventilatore).
 
 ### 11.7 Prossimi passi
 
-- Recuperare e analizzare i risultati della cross-validation a 5 fold
-  (`yolo11n_cv`), non ancora scaricati/valutati.
 - Ri-addestrare RT-DETR con la ricetta stabilizzata (sez. 11.6: `amp=False`,
   `lr0` basso) per un confronto CNN-vs-transformer a training convergito;
   aggiungere prima i flag `--amp`/`--lr0` a `train_yolo.py`.
 - Rifare poli image-level + failure analysis per categoria su yolo26n e
   RT-DETR no-leak, per completare il confronto multi-modello anche sul test
   reale e sulle scatole.
-- ~~Annotare le categorie del set gemini per completare la confusion matrix
-  per-categoria.~~ FATTO (sez. 11.4): fusione confermata specifica alla
-  categoria box (100% dei 57 casi fusa/imprecisa), MA a livello di scena le
-  box sono rilevate meglio delle altre categorie (30/30) - non e' un
-  deficit funzionale, e' un artefatto della metrica per-istanza. Bassa
-  priorita': non investire nel fix NMS/dati per le scatole impilate salvo
-  che serva davvero il conteggio/localizzazione per-istanza (non e' il caso
-  di P1, single-class).
 - Valutare uno sweep di soglie di confidenza sul poli (come fatto per
   YOLO-World in sez. 8) per vedere se un conf piu' basso recupera i 2
   cestini mancati (`porta_2_1`, `porta_2_3`) senza esplodere il FPR.
