@@ -503,15 +503,45 @@ Data: 2026-07-09. Nessun modello frozen supera F1 0.52 sul poli reale
 
 ### 11.1 Motivazione della scelta del modello e setup
 
-Modello: **YOLO11n**, unica variante considerata (non yolo11s/m). Motivazione
-diversa da quella puramente prestazionale della sez. 8.3 (dove gli FPS erano
-il criterio): qui il vincolo stretto e' la RAM, non la latenza. Il modello
+Modello: **YOLO11n**, unica variante considerata in questo primo giro (non
+yolo11s/m). La motivazione originale era il **vincolo di RAM**: il modello
 finale gira sullo stesso hardware (Raspberry Pi o Jetson Nano) insieme a
 PatchCore (P3, backbone WideResNet50-2) e a un modello di pose estimation
-ancora da scegliere - tre reti in memoria contemporaneamente sullo stesso
-dispositivo, quindi ogni MB di peso extra conta piu della velocita' per
-singolo frame (il sistema campiona con soglia temporale, v. sez. 8.1: non
-serve processare a frame-rate video).
+ancora da scegliere - tre reti in memoria contemporaneamente, quindi si era
+assunto che ogni MB di peso extra contasse piu' della velocita' per singolo
+frame (il sistema campiona con soglia temporale, v. sez. 8.1: non serve
+processare a frame-rate video).
+
+**CORREZIONE (2026-07-10): questa motivazione era sbagliata, o almeno molto
+piu' debole del previsto.** Misurando davvero i pesi in memoria:
+
+| Componente | RAM a regime |
+|---|---|
+| PatchCore backbone WideResNet50-2 troncato (stem + layer1..3) | $\approx 100$ MB |
+| di cui `layer3` da solo | $83$ MB |
+| PatchCore memory bank (coreset 1%) | $\approx 0.7$ MB per camera |
+| **yolo11n** | **$5$ MB** |
+| yolo11s | $\approx 18$ MB |
+| rtdetr-l | $64$ MB |
+
+**Il collo di bottiglia della RAM non e' il detector, e' PatchCore**: il
+backbone di P3 pesa ~20x yolo11n. Salire da nano ($5$ MB) a small ($18$ MB)
+aggiunge $13$ MB su un budget dove P3 da solo ne occupa $\approx 100$: e'
+rumore. La scelta del nano NON puo' quindi essere giustificata dalla memoria -
+va giustificata (o smentita) dai **risultati**, cioe' dal fatto che generalizzi
+meglio, il che e' precisamente quanto emerge in sez. 11.6 (yolo11n batte sia
+yolo26n sia rtdetr-l su gemini, e i modelli piu' capaci overfittano al dominio
+sintetico). La conclusione finale non cambia, ma la motivazione sì: e' un
+risultato empirico, non un vincolo hardware.
+
+Due conseguenze operative: (i) yolo11s e yolo11m sono **candidati di deploy
+legittimi** e vanno testati (v. sez. 11.7), non scartati a priori; (ii) se un
+giorno la RAM stringesse davvero, la leva efficace e' P3 (backbone piu' leggero,
+es. ResNet18), non P1. Nota: il troncamento del backbone di PatchCore e' gia'
+implementato correttamente (`FeatureExtractor` tiene solo stem+layer1..3,
+scartando `layer4`+`fc` = $176$ MB); resta solo un picco transitorio all'avvio,
+in cui la rete intera ($275$ MB) e' materializzata prima di scartare i pezzi
+inutili - irrilevante su Jetson Nano 4GB, ma da sapere.
 
 Setup:
 - Hardware: GPU remota (VM universitaria, container Docker, NVIDIA
@@ -802,25 +832,39 @@ l'ipotesi di leakage e' stata testata ed esclusa empiricamente, non solo
 dichiarata. Tutti i modelli successivi (yolo26n, RT-DETR) sono addestrati
 sulla versione no-leak per coerenza.
 
-**Confronto multi-modello (tutti no-leak, stesso set gemini 120 img / 166 ist).**
+**Confronto multi-modello finale (tutti no-leak, tutti convergiti
+correttamente, stesso set gemini 120 img / 166 ist).** RT-DETR e' qui nella
+versione con training riparato (`--no-amp`, v. sotto); il primo run, divergato,
+e' riportato solo per confronto e non entra nelle conclusioni.
 
 | modello | tipo | mAP50 | mAP50-95 | precision | recall | param |
 |---|---|---|---|---|---|---|
 | **yolo11n** | CNN one-stage | **0.866** | 0.703 | 0.963 | **0.831** | 2.6M |
 | yolo26n | CNN one-stage | 0.852 | 0.708 | 0.969 | 0.789 | 2.6M |
-| rtdetr-l (*) | transformer | 0.828 | 0.645 | 0.903 | 0.741 | 33M |
-
-(*) checkpoint parziale, v. sotto: il training e' divergato.
+| rtdetr-l (`--no-amp`) | transformer | 0.847 | 0.702 | 0.943 | 0.801 | 33M |
+| ~~rtdetr-l (con AMP, divergato)~~ | transformer | 0.828 | 0.645 | 0.903 | 0.741 | 33M |
 
 Risultato netto: **il modello piu' piccolo (yolo11n) e' il migliore** su questo
-set, sia in mAP50 sia in recall. RT-DETR, con ~13x i parametri, e' il peggiore
-dei tre. Questo rafforza la scelta di deploy su due assi contemporaneamente:
-il transformer pesante non solo viola il vincolo di RAM (il piu' stringente,
-data la co-esecuzione con PatchCore e pose estimation, v. sez. 11.1), ma qui
-non offre nemmeno un vantaggio di accuratezza che lo giustifichi.
+set, sia in mAP50 sia in recall - e la conclusione regge anche dopo aver
+riparato il training di RT-DETR (che infatti migliora, ma non abbastanza da
+superare i nano). RT-DETR, con ~13x i parametri, resta ultimo in mAP50 e
+sotto yolo11n in recall. Questo rafforza la scelta di deploy su due assi
+contemporaneamente: il transformer pesante non solo viola il vincolo di RAM (il
+piu' stringente, data la co-esecuzione con PatchCore e pose estimation, v. sez.
+11.1), ma non offre nemmeno un vantaggio di accuratezza che lo giustifichi.
 
-**Instabilita' del training di RT-DETR (caveat importante).** Il confronto
-sopra NON e' "RT-DETR a parita' di budget, convergito". Il `results.csv` del
+**Overfitting al dominio sintetico (osservazione importante).** Il confronto
+tra val interno e test gemini rivela un pattern istruttivo: sul val interno
+(copy-paste, stessa distribuzione del training) RT-DETR e' il **migliore** dei
+tre (mAP50-95 $0.991$, contro $0.982$ di yolo26n e $0.972$ di yolo11n), ma su
+gemini finisce **ultimo**. Il modello con piu' capacita' impara meglio il
+copy-paste e generalizza peggio: e' overfitting al dominio sintetico, misurato
+direttamente. E' anche una conferma indipendente di quanto detto sopra sulla
+saturazione del val interno - quel numero non predice la generalizzazione, e
+usarlo per selezionare il modello avrebbe portato alla scelta sbagliata.
+
+**Instabilita' del training di RT-DETR: diagnosi e fix verificato.** Il primo
+run di RT-DETR era divergato. Il `results.csv` del
 run mostra che RT-DETR ha allenato bene fino all'epoca 14 (best: mAP50 0.970,
 mAP50-95 0.795 sul val interno copy-paste), poi all'epoca 15 e' **collassato a
 zero** (precision/recall/mAP tutti 0) restandoci fino alla fine; la loss di
@@ -877,13 +921,36 @@ della fonte:
 Metodologia dell'esperimento: cambiare **solo `amp=False`**, tenendo lr, batch
 ed epoche identici. Se il training si stabilizza, la causa e' attribuita con
 certezza e supportata da fonte ufficiale - molto piu' difendibile che cambiare
-tre parametri insieme senza sapere quale abbia funzionato.
+tre parametri insieme senza sapere quale abbia funzionato. A questo scopo e'
+stato aggiunto il flag `--no-amp` (piu' `--lr0`, come piano B) a
+`train_yolo.py`, che prima passava i default di ultralytics.
 
-Il flag non e' oggi esposto da `train_yolo.py` (che passa i default di
-ultralytics): va aggiunto `--amp/--no-amp` prima di rilanciare. NOTA: anche se
-un RT-DETR stabilizzato recuperasse accuratezza, resterebbe comunque escluso
-dal deploy per il vincolo di RAM; il suo ruolo in tesi e' di baseline
-comparativa CNN-vs-transformer, non di candidato reale.
+**Esito: ipotesi confermata.** Il run ripetuto con `--no-amp` e tutto il resto
+identico (`lr0=0.01`, `batch=32`, `epochs=150`, `patience=20`) e' stabile e
+convergito:
+
+| | con AMP (default) | `--no-amp` |
+|---|---|---|
+| Epoche eseguite | 34 (early stop dopo il collasso) | **150 (complete)** |
+| Epoche con `val/cls_loss = NaN` | molte (dalla 4) | **0** |
+| Epoche collassate (mAP $= 0$) | 20 (dalla 15) | **0** |
+| Best epoch | 14 (prima del crollo) | 150 |
+| mAP50-95 (val interno) | $0.795$ | $\mathbf{0.9913}$ |
+
+Zero `NaN`, zero collassi, training completo con plateau finale piatto
+($\sigma = 0.0012$ sul mAP50-95 delle ultime 15 epoche). Avendo cambiato una
+sola variabile, la causa e' attribuita con certezza ad AMP, in accordo con la
+documentazione ufficiale [1]. Sul test gemini il modello riparato migliora su
+tutta la linea rispetto al checkpoint divergato (mAP50-95 $0.645 \to 0.702$,
+recall $0.741 \to 0.801$): il confronto precedente penalizzava RT-DETR e non
+era equo. La conclusione finale non cambia (RT-DETR resta sotto i nano, v.
+tabella sopra), ma ora e' difendibile senza obiezioni: il transformer e' stato
+addestrato correttamente, dopo aver diagnosticato e risolto un'instabilita'
+nota e documentata, e anche cosi' e' piu' pesante e meno accurato.
+
+NOTA: anche recuperando accuratezza, RT-DETR resta comunque escluso dal deploy
+per il vincolo di RAM; il suo ruolo in tesi e' di baseline comparativa
+CNN-vs-transformer, non di candidato reale.
 
 Fonti:
 - [1] Ultralytics, *Reference for `ultralytics/models/rtdetr/train.py`* (docstring
@@ -923,12 +990,17 @@ realistici, categorie mancanti come il ventilatore).
 
 ### 11.7 Prossimi passi
 
-- Ri-addestrare RT-DETR con la ricetta stabilizzata (sez. 11.6: `amp=False`,
-  `lr0` basso) per un confronto CNN-vs-transformer a training convergito;
-  aggiungere prima i flag `--amp`/`--lr0` a `train_yolo.py`.
+- ~~Ri-addestrare RT-DETR con la ricetta stabilizzata (`amp=False`) per un
+  confronto CNN-vs-transformer a training convergito.~~ FATTO (sez. 11.6):
+  `--no-amp` elimina completamente i `NaN`, il training arriva a 150 epoche.
+  RT-DETR migliora ma resta sotto yolo11n su gemini; la conclusione regge ed
+  e' ora basata su un training corretto.
 - Rifare poli image-level + failure analysis per categoria su yolo26n e
   RT-DETR no-leak, per completare il confronto multi-modello anche sul test
-  reale e sulle scatole.
+  reale e sulle scatole (finora il confronto multi-modello e' solo su gemini).
+- Allineare i numeri della sez. 11.4 (fusione scatole: 57 casi, 30/30 scene)
+  al set gemini nuovo (120 img / 166 istanze): quelli attuali si riferiscono
+  al set precedente (94 img / 187 istanze).
 - Valutare uno sweep di soglie di confidenza sul poli (come fatto per
   YOLO-World in sez. 8) per vedere se un conf piu' basso recupera i 2
   cestini mancati (`porta_2_1`, `porta_2_3`) senza esplodere il FPR.
