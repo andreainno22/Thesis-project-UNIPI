@@ -1,56 +1,87 @@
 \relax 
 \providecommand\hyper@newdestlabel[2]{}
-\@writefile{toc}{\contentsline {chapter}{\numberline {5}Experimental Analysis}{43}{chapter.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {5}Experimental Analysis}{51}{chapter.5}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\newlabel{chap:analysis}{{5}{43}{Experimental Analysis}{chapter.5}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.1}Pipeline Results}{43}{section.5.1}\protected@file@percent }
-\newlabel{sec:p3-results}{{5.1}{43}{Pipeline Results}{section.5.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{43}{subsection.5.1.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Evaluation protocol}{43}{section*.49}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Phase 1: calibration on the synthetic corpus (D1)}{43}{section*.51}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.1}{\ignorespaces The two macro-phases of the P3 evaluation.}}{44}{table.caption.50}\protected@file@percent }
-\newlabel{tab:p3-phases}{{5.1}{44}{The two macro-phases of the P3 evaluation}{table.caption.50}{}}
-\@writefile{toc}{\contentsline {paragraph}{Baseline.}{44}{section*.52}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.2}{\ignorespaces Phase 1 baseline on the synthetic test set.}}{44}{table.caption.53}\protected@file@percent }
-\newlabel{tab:p3-phaseA}{{5.2}{44}{Phase 1 baseline on the synthetic test set}{table.caption.53}{}}
-\@writefile{toc}{\contentsline {paragraph}{Shadow vulnerability.}{44}{section*.54}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.3}{\ignorespaces Phase 1, shadow vulnerability: shadow-normal scores overlap the obstructed range $[3.54, 4.51]$.}}{45}{table.caption.55}\protected@file@percent }
-\newlabel{tab:p3-phaseB}{{5.3}{45}{Phase 1, shadow vulnerability: shadow-normal scores overlap the obstructed range $[3.54, 4.51]$}{table.caption.55}{}}
-\@writefile{toc}{\contentsline {paragraph}{Shadow augmentation and calibration stabilisation.}{45}{section*.56}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.4}{\ignorespaces Phase 1, shadow augmentation and calibration stabilisation. $\sigma _\theta $ is the standard deviation of the per-camera thresholds.}}{45}{table.caption.57}\protected@file@percent }
-\newlabel{tab:p3-phaseC}{{5.4}{45}{Phase 1, shadow augmentation and calibration stabilisation. $\sigma _\theta $ is the standard deviation of the per-camera thresholds}{table.caption.57}{}}
-\@writefile{toc}{\contentsline {paragraph}{Light augmentation ablation.}{45}{section*.58}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.5}{\ignorespaces Phase 1 light-augmentation ablation. TPR is $\geq 97.7\%$ throughout. L0/L2 use $n_{\mathrm  {aug}}=15$, L3 uses $n_{\mathrm  {aug}}=25$.}}{46}{table.caption.59}\protected@file@percent }
-\newlabel{tab:p3-phaseE}{{5.5}{46}{Phase 1 light-augmentation ablation. TPR is $\geq 97.7\%$ throughout. L0/L2 use $n_{\mathrm {aug}}=15$, L3 uses $n_{\mathrm {aug}}=25$}{table.caption.59}{}}
-\@writefile{toc}{\contentsline {paragraph}{Discrimination versus calibration.}{46}{section*.60}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.6}{\ignorespaces Controlled comparison: shadow FPR swings $40\times $ while raw and per-camera AUROC stay fixed.}}{47}{table.caption.61}\protected@file@percent }
-\newlabel{tab:p3-disc}{{5.6}{47}{Controlled comparison: shadow FPR swings $40\times $ while raw and per-camera AUROC stay fixed}{table.caption.61}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.1}{\ignorespaces Calibration, not discrimination. The raw score distributions of normal, shadowed-normal, and obstructed scenes are essentially unchanged by augmentation, so their overlap - and the per-camera ranking (AUROC $0.996$) - is fixed. Only the decision threshold moves: calibrated on clean variants it sits at $\approx 2.47$ (dotted), inside the shadow band, flagging $90\%$ of shadows; with disturbance-augmented, pooled calibration it rises to $\approx 3.74$ (dashed), above the shadow band but still below the obstructions, cutting the shadow FPR to $\approx 12\%$. The thresholds shown are means of the per-camera values.}}{47}{figure.caption.62}\protected@file@percent }
-\newlabel{fig:p3-calib}{{5.1}{47}{Calibration, not discrimination. The raw score distributions of normal, shadowed-normal, and obstructed scenes are essentially unchanged by augmentation, so their overlap - and the per-camera ranking (AUROC $0.996$) - is fixed. Only the decision threshold moves: calibrated on clean variants it sits at $\approx 2.47$ (dotted), inside the shadow band, flagging $90\%$ of shadows; with disturbance-augmented, pooled calibration it rises to $\approx 3.74$ (dashed), above the shadow band but still below the obstructions, cutting the shadow FPR to $\approx 12\%$. The thresholds shown are means of the per-camera values}{figure.caption.62}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Phase 2: real-world accuracy with manual gating (D2)}{48}{section*.63}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.7}{\ignorespaces Phase 2: recalibration of $k$ on the real test set.}}{48}{table.caption.64}\protected@file@percent }
-\newlabel{tab:p3-phaseD}{{5.7}{48}{Phase 2: recalibration of $k$ on the real test set}{table.caption.64}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.2}{\ignorespaces Operating-point metrics on the real test set (D2), at the synthetic-validated $k=4$ and the recalibrated $k=3$. Lowering $k$ raises recall ($83.3\% \to 90.0\%$), $F_1$ ($0.893 \to 0.931$) and accuracy ($90.0\% \to 93.3\%$) at unchanged FPR ($3.3\%$) and precision.}}{49}{figure.caption.65}\protected@file@percent }
-\newlabel{fig:p3-d2-metrics}{{5.2}{49}{Operating-point metrics on the real test set (D2), at the synthetic-validated $k=4$ and the recalibrated $k=3$. Lowering $k$ raises recall ($83.3\% \to 90.0\%$), $F_1$ ($0.893 \to 0.931$) and accuracy ($90.0\% \to 93.3\%$) at unchanged FPR ($3.3\%$) and precision}{figure.caption.65}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Discussion}{49}{section*.69}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {5.3}{\ignorespaces Per-sample decision margin (score $-$ per-camera threshold) on D2 at $k=3$; the decision boundary is the line at $0$. The $30$ obstructed and $30$ hard-negative frames are cleanly separated except for three obstructions gated to a zero score - the gating-limited false negatives, including the thin-stemmed floor fan - and one hard-negative false positive (a glass door whose background changed behind the panel).}}{50}{figure.caption.66}\protected@file@percent }
-\newlabel{fig:p3-d2-scores}{{5.3}{50}{Per-sample decision margin (score $-$ per-camera threshold) on D2 at $k=3$; the decision boundary is the line at $0$. The $30$ obstructed and $30$ hard-negative frames are cleanly separated except for three obstructions gated to a zero score - the gating-limited false negatives, including the thin-stemmed floor fan - and one hard-negative false positive (a glass door whose background changed behind the panel)}{figure.caption.66}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.2}Application Results}{50}{section.5.2}\protected@file@percent }
-\newlabel{fig:p3-d2-fn-fan-ref}{{5.4a}{51}{Reference (normal)}{figure.caption.67}{}}
-\newlabel{sub@fig:p3-d2-fn-fan-ref}{{a}{51}{Reference (normal)}{figure.caption.67}{}}
-\newlabel{fig:p3-d2-fn-fan-heatmap}{{5.4b}{51}{Anomaly heatmap}{figure.caption.67}{}}
-\newlabel{sub@fig:p3-d2-fn-fan-heatmap}{{b}{51}{Anomaly heatmap}{figure.caption.67}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.4}{\ignorespaces Gating-limited false negative (worst case, score $0.000$). PatchCore correctly flags the fan head and base as anomalous in the heatmap, but the head rests on the door panel, which is excluded from the frame mask by design. The thin pole - the only part touching the frame and threshold - is too slender to register as anomalous, so the fan does not form a single connected anomaly component bridging the panel to a frame region. The head's component lies entirely in the excluded panel area with no anomalous link reaching the frame, and gating therefore zeros it. The failure is purely geometric, not a detection error.}}{51}{figure.caption.67}\protected@file@percent }
-\newlabel{fig:p3-d2-fn-fan}{{5.4}{51}{Gating-limited false negative (worst case, score $0.000$). PatchCore correctly flags the fan head and base as anomalous in the heatmap, but the head rests on the door panel, which is excluded from the frame mask by design. The thin pole - the only part touching the frame and threshold - is too slender to register as anomalous, so the fan does not form a single connected anomaly component bridging the panel to a frame region. The head's component lies entirely in the excluded panel area with no anomalous link reaching the frame, and gating therefore zeros it. The failure is purely geometric, not a detection error}{figure.caption.67}{}}
-\newlabel{fig:p3-d2-fp-blind-ref}{{5.5a}{52}{Reference (normal)}{figure.caption.68}{}}
-\newlabel{sub@fig:p3-d2-fp-blind-ref}{{a}{52}{Reference (normal)}{figure.caption.68}{}}
-\newlabel{fig:p3-d2-fp-blind-heatmap}{{5.5b}{52}{Anomaly heatmap}{figure.caption.68}{}}
-\newlabel{sub@fig:p3-d2-fp-blind-heatmap}{{b}{52}{Anomaly heatmap}{figure.caption.68}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.5}{\ignorespaces Hard-negative false positive (worst case, score $3.873$) on a glass door. In the reference the external rolling shutter is up and the glass shows the courtyard outside; in the test frame the shutter is lowered, so the view through the panel changes completely. The background variation is too large for the fixed-camera assumption: the entire glazed area exceeds the anomaly threshold and overlaps the door frame, producing a false detection. This is a calibration limit of the static-background assumption, not a gating failure.}}{52}{figure.caption.68}\protected@file@percent }
-\newlabel{fig:p3-d2-fp-blind}{{5.5}{52}{Hard-negative false positive (worst case, score $3.873$) on a glass door. In the reference the external rolling shutter is up and the glass shows the courtyard outside; in the test frame the shutter is lowered, so the view through the panel changes completely. The background variation is too large for the fixed-camera assumption: the entire glazed area exceeds the anomaly threshold and overlaps the door frame, producing a false detection. This is a calibration limit of the static-background assumption, not a gating failure}{figure.caption.68}{}}
+\newlabel{chap:analysis}{{5}{51}{Experimental Analysis}{chapter.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.1}Pipeline Results}{51}{section.5.1}\protected@file@percent }
+\newlabel{sec:p3-results}{{5.1}{51}{Pipeline Results}{section.5.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{51}{subsection.5.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Evaluation protocol}{51}{section*.65}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Phase 1: calibration on the synthetic corpus (D1)}{51}{section*.67}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.1}{\ignorespaces The two macro-phases of the P3 evaluation.}}{52}{table.caption.66}\protected@file@percent }
+\newlabel{tab:p3-phases}{{5.1}{52}{The two macro-phases of the P3 evaluation}{table.caption.66}{}}
+\@writefile{toc}{\contentsline {paragraph}{Baseline.}{52}{section*.68}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.2}{\ignorespaces Phase 1 baseline on the synthetic test set.}}{52}{table.caption.69}\protected@file@percent }
+\newlabel{tab:p3-phaseA}{{5.2}{52}{Phase 1 baseline on the synthetic test set}{table.caption.69}{}}
+\@writefile{toc}{\contentsline {paragraph}{Shadow vulnerability.}{52}{section*.70}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.3}{\ignorespaces Phase 1, shadow vulnerability: shadow-normal scores overlap the obstructed range $[3.54, 4.51]$.}}{53}{table.caption.71}\protected@file@percent }
+\newlabel{tab:p3-phaseB}{{5.3}{53}{Phase 1, shadow vulnerability: shadow-normal scores overlap the obstructed range $[3.54, 4.51]$}{table.caption.71}{}}
+\@writefile{toc}{\contentsline {paragraph}{Shadow augmentation and calibration stabilisation.}{53}{section*.72}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.4}{\ignorespaces Phase 1, shadow augmentation and calibration stabilisation. $\sigma _\theta $ is the standard deviation of the per-camera thresholds.}}{53}{table.caption.73}\protected@file@percent }
+\newlabel{tab:p3-phaseC}{{5.4}{53}{Phase 1, shadow augmentation and calibration stabilisation. $\sigma _\theta $ is the standard deviation of the per-camera thresholds}{table.caption.73}{}}
+\@writefile{toc}{\contentsline {paragraph}{Light augmentation ablation.}{53}{section*.74}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.5}{\ignorespaces Phase 1 light-augmentation ablation. TPR is $\geq 97.7\%$ throughout. L0/L2 use $n_{\mathrm  {aug}}=15$, L3 uses $n_{\mathrm  {aug}}=25$.}}{54}{table.caption.75}\protected@file@percent }
+\newlabel{tab:p3-phaseE}{{5.5}{54}{Phase 1 light-augmentation ablation. TPR is $\geq 97.7\%$ throughout. L0/L2 use $n_{\mathrm {aug}}=15$, L3 uses $n_{\mathrm {aug}}=25$}{table.caption.75}{}}
+\@writefile{toc}{\contentsline {paragraph}{Discrimination versus calibration.}{54}{section*.76}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.6}{\ignorespaces Controlled comparison: shadow FPR swings $40\times $ while raw and per-camera AUROC stay fixed.}}{55}{table.caption.77}\protected@file@percent }
+\newlabel{tab:p3-disc}{{5.6}{55}{Controlled comparison: shadow FPR swings $40\times $ while raw and per-camera AUROC stay fixed}{table.caption.77}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.1}{\ignorespaces Calibration, not discrimination. The raw score distributions of normal, shadowed-normal, and obstructed scenes are essentially unchanged by augmentation, so their overlap - and the per-camera ranking (AUROC $0.996$) - is fixed. Only the decision threshold moves: calibrated on clean variants it sits at $\approx 2.47$ (dotted), inside the shadow band, flagging $90\%$ of shadows; with disturbance-augmented, pooled calibration it rises to $\approx 3.74$ (dashed), above the shadow band but still below the obstructions, cutting the shadow FPR to $\approx 12\%$. The thresholds shown are means of the per-camera values.}}{55}{figure.caption.78}\protected@file@percent }
+\newlabel{fig:p3-calib}{{5.1}{55}{Calibration, not discrimination. The raw score distributions of normal, shadowed-normal, and obstructed scenes are essentially unchanged by augmentation, so their overlap - and the per-camera ranking (AUROC $0.996$) - is fixed. Only the decision threshold moves: calibrated on clean variants it sits at $\approx 2.47$ (dotted), inside the shadow band, flagging $90\%$ of shadows; with disturbance-augmented, pooled calibration it rises to $\approx 3.74$ (dashed), above the shadow band but still below the obstructions, cutting the shadow FPR to $\approx 12\%$. The thresholds shown are means of the per-camera values}{figure.caption.78}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Phase 2: real-world accuracy with manual gating (D2)}{56}{section*.79}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.7}{\ignorespaces Phase 2: recalibration of $k$ on the real test set.}}{56}{table.caption.80}\protected@file@percent }
+\newlabel{tab:p3-phaseD}{{5.7}{56}{Phase 2: recalibration of $k$ on the real test set}{table.caption.80}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.2}{\ignorespaces Operating-point metrics on the real test set (D2), at the synthetic-validated $k=4$ and the recalibrated $k=3$. Lowering $k$ raises recall ($83.3\% \to 90.0\%$), $F_1$ ($0.893 \to 0.931$) and accuracy ($90.0\% \to 93.3\%$) at unchanged FPR ($3.3\%$) and precision.}}{57}{figure.caption.81}\protected@file@percent }
+\newlabel{fig:p3-d2-metrics}{{5.2}{57}{Operating-point metrics on the real test set (D2), at the synthetic-validated $k=4$ and the recalibrated $k=3$. Lowering $k$ raises recall ($83.3\% \to 90.0\%$), $F_1$ ($0.893 \to 0.931$) and accuracy ($90.0\% \to 93.3\%$) at unchanged FPR ($3.3\%$) and precision}{figure.caption.81}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Discussion}{57}{section*.85}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5.3}{\ignorespaces Per-sample decision margin (score $-$ per-camera threshold) on D2 at $k=3$; the decision boundary is the line at $0$. The $30$ obstructed and $30$ hard-negative frames are cleanly separated except for three obstructions gated to a zero score - the gating-limited false negatives, including the thin-stemmed floor fan - and one hard-negative false positive (a glass door whose background changed behind the panel).}}{58}{figure.caption.82}\protected@file@percent }
+\newlabel{fig:p3-d2-scores}{{5.3}{58}{Per-sample decision margin (score $-$ per-camera threshold) on D2 at $k=3$; the decision boundary is the line at $0$. The $30$ obstructed and $30$ hard-negative frames are cleanly separated except for three obstructions gated to a zero score - the gating-limited false negatives, including the thin-stemmed floor fan - and one hard-negative false positive (a glass door whose background changed behind the panel)}{figure.caption.82}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.2}Single-Class Obstruction Detection with YOLO (P1)}{58}{subsection.5.1.2}\protected@file@percent }
+\newlabel{ssec:p1-results}{{5.1.2}{58}{Single-Class Obstruction Detection with YOLO (P1)}{subsection.5.1.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Evaluation protocol}{58}{section*.86}\protected@file@percent }
+\newlabel{fig:p3-d2-fn-fan-ref}{{5.4a}{59}{Reference (normal)}{figure.caption.83}{}}
+\newlabel{sub@fig:p3-d2-fn-fan-ref}{{a}{59}{Reference (normal)}{figure.caption.83}{}}
+\newlabel{fig:p3-d2-fn-fan-heatmap}{{5.4b}{59}{Anomaly heatmap}{figure.caption.83}{}}
+\newlabel{sub@fig:p3-d2-fn-fan-heatmap}{{b}{59}{Anomaly heatmap}{figure.caption.83}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.4}{\ignorespaces Gating-limited false negative (worst case, score $0.000$). PatchCore correctly flags the fan head and base as anomalous in the heatmap, but the head rests on the door panel, which is excluded from the frame mask by design. The thin pole - the only part touching the frame and threshold - is too slender to register as anomalous, so the fan does not form a single connected anomaly component bridging the panel to a frame region. The head's component lies entirely in the excluded panel area with no anomalous link reaching the frame, and gating therefore zeros it. The failure is purely geometric, not a detection error.}}{59}{figure.caption.83}\protected@file@percent }
+\newlabel{fig:p3-d2-fn-fan}{{5.4}{59}{Gating-limited false negative (worst case, score $0.000$). PatchCore correctly flags the fan head and base as anomalous in the heatmap, but the head rests on the door panel, which is excluded from the frame mask by design. The thin pole - the only part touching the frame and threshold - is too slender to register as anomalous, so the fan does not form a single connected anomaly component bridging the panel to a frame region. The head's component lies entirely in the excluded panel area with no anomalous link reaching the frame, and gating therefore zeros it. The failure is purely geometric, not a detection error}{figure.caption.83}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Phase 1: frozen-vocabulary baselines}{59}{section*.88}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{COCO class mapping.}{59}{section*.89}\protected@file@percent }
+\citation{Cheng2024yoloworld}
+\newlabel{fig:p3-d2-fp-blind-ref}{{5.5a}{60}{Reference (normal)}{figure.caption.84}{}}
+\newlabel{sub@fig:p3-d2-fp-blind-ref}{{a}{60}{Reference (normal)}{figure.caption.84}{}}
+\newlabel{fig:p3-d2-fp-blind-heatmap}{{5.5b}{60}{Anomaly heatmap}{figure.caption.84}{}}
+\newlabel{sub@fig:p3-d2-fp-blind-heatmap}{{b}{60}{Anomaly heatmap}{figure.caption.84}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.5}{\ignorespaces Hard-negative false positive (worst case, score $3.873$) on a glass door. In the reference the external rolling shutter is up and the glass shows the courtyard outside; in the test frame the shutter is lowered, so the view through the panel changes completely. The background variation is too large for the fixed-camera assumption: the entire glazed area exceeds the anomaly threshold and overlaps the door frame, producing a false detection. This is a calibration limit of the static-background assumption, not a gating failure.}}{60}{figure.caption.84}\protected@file@percent }
+\newlabel{fig:p3-d2-fp-blind}{{5.5}{60}{Hard-negative false positive (worst case, score $3.873$) on a glass door. In the reference the external rolling shutter is up and the glass shows the courtyard outside; in the test frame the shutter is lowered, so the view through the panel changes completely. The background variation is too large for the fixed-camera assumption: the entire glazed area exceeds the anomaly threshold and overlaps the door frame, producing a false detection. This is a calibration limit of the static-background assumption, not a gating failure}{figure.caption.84}{}}
+\@writefile{toc}{\contentsline {paragraph}{Open-vocabulary variant.}{60}{section*.91}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.8}{\ignorespaces The two macro-phases of the P1 evaluation.}}{61}{table.caption.87}\protected@file@percent }
+\newlabel{tab:p1-phases}{{5.8}{61}{The two macro-phases of the P1 evaluation}{table.caption.87}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5.9}{\ignorespaces Phase 1: effect of the mapping refinement on the synthetic corpus.}}{61}{table.caption.90}\protected@file@percent }
+\newlabel{tab:p1-mapping}{{5.9}{61}{Phase 1: effect of the mapping refinement on the synthetic corpus}{table.caption.90}{}}
+\@writefile{toc}{\contentsline {paragraph}{Frozen ceiling.}{61}{section*.92}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Phase 2: fine-tuning}{61}{section*.94}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Real-world accuracy (D2).}{61}{section*.95}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.10}{\ignorespaces Phase 1: all frozen baselines on the real test set (D2), image-level, $\tau _{\mathrm  {conf}} = 0.25$, refined mapping (YOLO-World uses direct prompts instead). No frozen model reaches operational accuracy.}}{62}{table.caption.93}\protected@file@percent }
+\newlabel{tab:p1-frozen}{{5.10}{62}{Phase 1: all frozen baselines on the real test set (D2), image-level, $\tau _{\mathrm {conf}} = 0.25$, refined mapping (YOLO-World uses direct prompts instead). No frozen model reaches operational accuracy}{table.caption.93}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5.11}{\ignorespaces Phase 2 on the real test set ($30$ obstructed, $36$ clear frames): fine-tuning versus the frozen baseline, and the recall restricted to frames whose obstacle belongs to a training category ($16$ of the $18$ false negatives contain the out-of-vocabulary floor fan).}}{62}{table.caption.96}\protected@file@percent }
+\newlabel{tab:p1-ft-poli}{{5.11}{62}{Phase 2 on the real test set ($30$ obstructed, $36$ clear frames): fine-tuning versus the frozen baseline, and the recall restricted to frames whose obstacle belongs to a training category ($16$ of the $18$ false negatives contain the out-of-vocabulary floor fan)}{table.caption.96}{}}
+\@writefile{toc}{\contentsline {paragraph}{Detection quality (D3).}{62}{section*.97}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Instance-level versus scene-level reading}{62}{section*.98}\protected@file@percent }
+\newlabel{sssec:p1-metrics}{{5.1.2}{62}{Instance-level versus scene-level reading}{section*.98}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Background-leakage control}{63}{section*.99}\protected@file@percent }
+\citation{Miglionico2025}
+\@writefile{lot}{\contentsline {table}{\numberline {5.12}{\ignorespaces Background-leakage control on D3: removing every training image that shares a background with the test set leaves the results unchanged.}}{64}{table.caption.100}\protected@file@percent }
+\newlabel{tab:p1-leak}{{5.12}{64}{Background-leakage control on D3: removing every training image that shares a background with the test set leaves the results unchanged}{table.caption.100}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Capacity and architecture study}{64}{section*.101}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5.13}{\ignorespaces Capacity and architecture study, all models trained identically on the purged corpus. A $12.6\times $ parameter range moves D3 mAP$@50$ by two points with no monotone trend, while the internal synthetic validation is saturated for every model.}}{64}{table.caption.102}\protected@file@percent }
+\newlabel{tab:p1-scaling}{{5.13}{64}{Capacity and architecture study, all models trained identically on the purged corpus. A $12.6\times $ parameter range moves D3 mAP$@50$ by two points with no monotone trend, while the internal synthetic validation is saturated for every model}{table.caption.102}{}}
+\citation{UltralyticsRTDETRTrainer}
+\@writefile{toc}{\contentsline {paragraph}{RT-DETR training instability.}{65}{section*.103}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Discussion}{65}{section*.104}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5.2}Application Results}{66}{section.5.2}\protected@file@percent }
 \@setckpt{chapters/Chapter5_ExperimentalAnalysis}{
-\setcounter{page}{53}
+\setcounter{page}{67}
 \setcounter{equation}{0}
 \setcounter{enumi}{3}
 \setcounter{enumii}{0}
@@ -66,11 +97,11 @@
 \setcounter{paragraph}{0}
 \setcounter{subparagraph}{0}
 \setcounter{figure}{5}
-\setcounter{table}{7}
+\setcounter{table}{13}
 \setcounter{btxromaniannumeral}{0}
 \setcounter{r@tfl@t}{0}
 \setcounter{parentequation}{0}
-\setcounter{caption@flags}{6}
+\setcounter{caption@flags}{2}
 \setcounter{continuedfloat}{0}
 \setcounter{subfigure}{2}
 \setcounter{subtable}{0}
@@ -78,7 +109,7 @@
 \setcounter{section@level}{1}
 \setcounter{Item}{7}
 \setcounter{Hfootnote}{0}
-\setcounter{bookmark@seq@number}{29}
+\setcounter{bookmark@seq@number}{33}
 \setcounter{definition}{0}
 \setcounter{theorem}{0}
 \setcounter{lstlisting}{0}

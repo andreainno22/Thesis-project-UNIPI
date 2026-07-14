@@ -18,6 +18,13 @@ Yunkang Cao, Yuqi Cheng, Xiaohao Xu, Yiheng Zhang, Yihan Sun, Yuxiang Tan,
   large-scale benchmark.
 \newblock arXiv preprint arXiv:2505.10996, 2025.
 
+\bibitem{Carion2020detr}
+Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander
+  Kirillov, and Sergey Zagoruyko.
+\newblock End-to-end object detection with transformers.
+\newblock In {\em European Conference on Computer Vision (ECCV)}, pages
+  213--229, 2020.
+
 \bibitem{Chen2025}
 Dayou Chen, Long Chen, Yi~Yang, Qiuchen Lu, Craig Hancock, Russell Lock, and
   Simon S{\o}lvsten.
@@ -25,6 +32,12 @@ Dayou Chen, Long Chen, Yi~Yang, Qiuchen Lu, Craig Hancock, Russell Lock, and
   fire safety compliance checking in operational buildings.
 \newblock SSRN preprint, 2025.
 \newblock \url{https://ssrn.com/abstract=5387267}.
+
+\bibitem{Cheng2024yoloworld}
+Tianheng Cheng, Lin Song, Yixiao Ge, Wenyu Liu, Xinggang Wang, and Ying Shan.
+\newblock {YOLO-World}: Real-time open-vocabulary object detection.
+\newblock In {\em Proceedings of the IEEE/CVF Conference on Computer Vision and
+  Pattern Recognition (CVPR)}, pages 16901--16911, 2024.
 
 \bibitem{Cohen2020}
 Niv Cohen and Yedid Hoshen.
@@ -50,6 +63,12 @@ M.~Fikret Ercan and Asha Mathyalakan.
 \newblock In {\em TENCON 2024 -- IEEE Region 10 Conference}, pages 1398--1401,
   2024.
 
+\bibitem{Feng2021tood}
+Chengjian Feng, Yujie Zhong, Yu~Gao, Matthew~R. Scott, and Weilin Huang.
+\newblock {TOOD}: Task-aligned one-stage object detection.
+\newblock In {\em Proceedings of the IEEE/CVF International Conference on
+  Computer Vision (ICCV)}, pages 3510--3519, 2021.
+
 \bibitem{Gallo2022}
 Gionatan Gallo, Francesco Di~Rienzo, Federico Garzelli, Pietro Ducange, and
   Carlo Vallati.
@@ -57,11 +76,23 @@ Gionatan Gallo, Francesco Di~Rienzo, Federico Garzelli, Pietro Ducange, and
   industrial environments based on deep learning at the edge.
 \newblock {\em IEEE Access}, 10:110862--110878, 2022.
 
+\bibitem{GoogleGeminiImage2025}
+{Google DeepMind}.
+\newblock Gemini 2.5 flash image.
+\newblock \url{https://deepmind.google/models/gemini/}, 2025.
+\newblock Generative image editing model, \texttt{gemini-2.5-flash-image}.
+
 \bibitem{Iglesias2023}
 Guillermo Iglesias, Edgar Talavera, and Alberto D{\'i}az-{\'A}lvarez.
 \newblock A survey on {GAN}s for computer vision: Recent research, analysis and
   taxonomy.
 \newblock {\em Computer Science Review}, 48:100553, 2023.
+
+\bibitem{Jocher2024yolo11}
+Glenn Jocher and Jing Qiu.
+\newblock Ultralytics {YOLO11}.
+\newblock \url{https://docs.ultralytics.com/models/yolo11/}, 2024.
+\newblock Ultralytics, version 11.0.0.
 
 \bibitem{JuReibman2024}
 Shengtai Ju and Amy~R. Reibman.
@@ -69,12 +100,25 @@ Shengtai Ju and Amy~R. Reibman.
   synthetic to real datasets.
 \newblock arXiv preprint arXiv:2410.03984, 2024.
 
+\bibitem{Lin2014coco}
+Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva
+  Ramanan, Piotr Doll{\'a}r, and C.~Lawrence Zitnick.
+\newblock Microsoft {COCO}: Common objects in context.
+\newblock In {\em European Conference on Computer Vision (ECCV)}, pages
+  740--755, 2014.
+
 \bibitem{Lin2024}
 Yuxuan Lin, Yang Chang, Xuan Tong, Jiawen Yu, Antonio Liotta, Guofan Huang, Wei
   Song, Deyu Zeng, Zongze Wu, Yan Wang, and Wenqiang Zhang.
 \newblock A survey on {RGB}, {3D}, and multimodal approaches for unsupervised
   industrial image anomaly detection.
 \newblock arXiv preprint arXiv:2410.21982, 2024.
+
+\bibitem{Lv2024rtdetr}
+Wenyu Lv, Yian Zhao, Qinyao Chang, Kui Huang, Guanzhong Wang, and Yi~Liu.
+\newblock {DETRs} beat {YOLOs} on real-time object detection.
+\newblock In {\em Proceedings of the IEEE/CVF Conference on Computer Vision and
+  Pattern Recognition (CVPR)}, pages 16965--16974, 2024.
 
 \bibitem{Miglionico2025}
 Giustino~Claudio Miglionico, Francesco Di~Rienzo, Pietro Ducange, Francesco
@@ -124,6 +168,13 @@ Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi.
 \newblock In {\em Proceedings of the IEEE Conference on Computer Vision and
   Pattern Recognition (CVPR)}, pages 779--788, 2016.
 
+\bibitem{Ren2015fasterrcnn}
+Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun.
+\newblock Faster {R-CNN}: Towards real-time object detection with region
+  proposal networks.
+\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
+  2015.
+
 \bibitem{Roth2022}
 Karsten Roth, Latha Pemula, Joaquin Zepeda, Bernhard Sch{\"o}lkopf, Thomas
   Brox, and Peter Gehler.
@@ -164,6 +215,20 @@ Hamed Talebi, Nahid~Khoshk Angabini, Arezoo Sarkheyli-H{\"a}gele, and Erdal
   for emergency evacuation.
 \newblock In {\em Proceedings of the 18th International Conference on Agents
   and Artificial Intelligence (ICAART)}, volume~3, pages 2648--2657, 2026.
+
+\bibitem{UltralyticsRTDETRTrainer}
+{Ultralytics}.
+\newblock Reference for \texttt{ultralytics/models/rtdetr/train.py}.
+\newblock \url{https://docs.ultralytics.com/reference/models/rtdetr/train/},
+  2025.
+\newblock Accessed July 2026. The \texttt{RTDETRTrainer} docstring warns: ``AMP
+  training can lead to NaN outputs and may produce errors during bipartite
+  graph matching''.
+
+\bibitem{Ultralytics2025yolo26}
+{Ultralytics}.
+\newblock {YOLO26}: Unified real-time end-to-end vision models.
+\newblock \url{https://docs.ultralytics.com/models/yolo26/}, 2025.
 
 \bibitem{enwiki:1357719950}
 {Wikipedia contributors}.

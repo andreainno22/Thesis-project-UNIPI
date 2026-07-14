@@ -30,43 +30,74 @@
 \contentsline {subsubsection}{Test phase and anomaly map}{27}{section*.18}%
 \contentsline {subsubsection}{Shadow and light augmentation}{28}{section*.19}%
 \contentsline {subsubsection}{Spatial gating via annotated polygons}{29}{section*.20}%
-\contentsline {paragraph}{Structural limitations.}{29}{section*.23}%
+\contentsline {paragraph}{Structural limitations.}{31}{section*.23}%
 \contentsline {subsubsection}{Calibration stabilisation: pooled sigma}{31}{section*.24}%
-\contentsline {section}{\numberline {3.3}Dataset Description}{31}{section.3.3}%
-\contentsline {subsection}{\numberline {3.3.1}Sources of raw material}{32}{subsection.3.3.1}%
-\contentsline {subsubsection}{Normal background scenes}{32}{section*.25}%
-\contentsline {subsubsection}{Obstacle objects}{32}{section*.27}%
-\contentsline {subsection}{\numberline {3.3.2}Synthetic occlusion corpus (D1)}{33}{subsection.3.3.2}%
-\contentsline {subsubsection}{Object extraction}{33}{section*.28}%
-\contentsline {subsubsection}{Copy-paste composition}{33}{section*.29}%
-\contentsline {subsubsection}{Limitations of the synthetic corpus}{34}{section*.31}%
-\contentsline {subsection}{\numberline {3.3.3}Real on-site test set (D2)}{34}{subsection.3.3.3}%
-\contentsline {subsubsection}{Acquisition and structure}{35}{section*.33}%
-\contentsline {subsubsection}{Scope and obstruction criterion}{35}{section*.35}%
-\contentsline {subsubsection}{Hard negatives and real obstructions}{36}{section*.36}%
-\contentsline {subsection}{\numberline {3.3.4}Database organisation and anti-leakage}{36}{subsection.3.3.4}%
-\contentsline {chapter}{\numberline {4}Experimental Setup}{39}{chapter.4}%
-\contentsline {section}{\numberline {4.1}Pipeline Implementation}{39}{section.4.1}%
-\contentsline {subsection}{\numberline {4.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{39}{subsection.4.1.1}%
-\contentsline {subsubsection}{Backbone and feature extraction}{39}{section*.39}%
-\contentsline {subsubsection}{Build and calibration settings}{39}{section*.41}%
-\contentsline {subsubsection}{Anti-leakage separation}{40}{section*.43}%
-\contentsline {subsubsection}{Shadow and light augmentation}{41}{section*.45}%
-\contentsline {subsubsection}{ROI annotation and connected-component gating}{41}{section*.47}%
-\contentsline {subsubsection}{Pooled-sigma evaluation}{42}{section*.48}%
-\contentsline {section}{\numberline {4.2}Application}{42}{section.4.2}%
-\contentsline {chapter}{\numberline {5}Experimental Analysis}{43}{chapter.5}%
-\contentsline {section}{\numberline {5.1}Pipeline Results}{43}{section.5.1}%
-\contentsline {subsection}{\numberline {5.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{43}{subsection.5.1.1}%
-\contentsline {subsubsection}{Evaluation protocol}{43}{section*.49}%
-\contentsline {subsubsection}{Phase 1: calibration on the synthetic corpus (D1)}{43}{section*.51}%
-\contentsline {paragraph}{Baseline.}{44}{section*.52}%
-\contentsline {paragraph}{Shadow vulnerability.}{44}{section*.54}%
-\contentsline {paragraph}{Shadow augmentation and calibration stabilisation.}{45}{section*.56}%
-\contentsline {paragraph}{Light augmentation ablation.}{45}{section*.58}%
-\contentsline {paragraph}{Discrimination versus calibration.}{46}{section*.60}%
-\contentsline {subsubsection}{Phase 2: real-world accuracy with manual gating (D2)}{48}{section*.63}%
-\contentsline {subsubsection}{Discussion}{49}{section*.69}%
-\contentsline {section}{\numberline {5.2}Application Results}{50}{section.5.2}%
-\contentsline {chapter}{\numberline {6}Conclusions}{53}{chapter.6}%
-\contentsline {chapter}{\numberline {A}Questa è un'appendice}{55}{appendix.A}%
+\contentsline {subsection}{\numberline {3.2.2}Single-Class Obstruction Detection with YOLO (P1)}{32}{subsection.3.2.2}%
+\contentsline {subsubsection}{Motivation and design rationale}{32}{section*.25}%
+\contentsline {subsubsection}{Key intuition}{32}{section*.26}%
+\contentsline {subsubsection}{One-stage detection: formulation}{33}{section*.27}%
+\contentsline {subsubsection}{YOLO11}{33}{section*.28}%
+\contentsline {subsubsection}{YOLO26: end-to-end NMS-free detection}{34}{section*.29}%
+\contentsline {subsubsection}{RT-DETR: a transformer-based comparison point}{34}{section*.30}%
+\contentsline {subsubsection}{Training data and anti-leakage}{34}{section*.31}%
+\contentsline {section}{\numberline {3.3}Dataset Description}{35}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Sources of raw material}{35}{subsection.3.3.1}%
+\contentsline {subsubsection}{Normal background scenes}{35}{section*.32}%
+\contentsline {subsubsection}{Obstacle objects}{36}{section*.34}%
+\contentsline {subsection}{\numberline {3.3.2}Synthetic occlusion corpus (D1)}{36}{subsection.3.3.2}%
+\contentsline {subsubsection}{Object extraction}{36}{section*.35}%
+\contentsline {subsubsection}{Copy-paste composition}{36}{section*.36}%
+\contentsline {subsubsection}{Limitations of the synthetic corpus}{37}{section*.38}%
+\contentsline {subsection}{\numberline {3.3.3}Real on-site test set (D2)}{38}{subsection.3.3.3}%
+\contentsline {subsubsection}{Acquisition and structure}{38}{section*.40}%
+\contentsline {subsubsection}{Scope and obstruction criterion}{38}{section*.42}%
+\contentsline {subsubsection}{Hard negatives and real obstructions}{39}{section*.43}%
+\contentsline {subsection}{\numberline {3.3.4}Generative photorealistic test set (D3)}{40}{subsection.3.3.4}%
+\contentsline {subsection}{\numberline {3.3.5}Database organisation and anti-leakage}{41}{subsection.3.3.5}%
+\contentsline {chapter}{\numberline {4}Experimental Setup}{43}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Pipeline Implementation}{43}{section.4.1}%
+\contentsline {subsection}{\numberline {4.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{43}{subsection.4.1.1}%
+\contentsline {subsubsection}{Backbone and feature extraction}{43}{section*.46}%
+\contentsline {subsubsection}{Build and calibration settings}{43}{section*.48}%
+\contentsline {subsubsection}{Anti-leakage separation}{44}{section*.50}%
+\contentsline {subsubsection}{Shadow and light augmentation}{45}{section*.52}%
+\contentsline {subsubsection}{ROI annotation and connected-component gating}{45}{section*.54}%
+\contentsline {subsubsection}{Pooled-sigma evaluation}{46}{section*.55}%
+\contentsline {subsection}{\numberline {4.1.2}Single-Class Obstruction Detection with YOLO (P1)}{46}{subsection.4.1.2}%
+\contentsline {subsubsection}{Models}{46}{section*.56}%
+\contentsline {subsubsection}{Training configuration}{47}{section*.58}%
+\contentsline {paragraph}{Numerical stability of RT-DETR.}{47}{section*.60}%
+\contentsline {subsubsection}{Anti-leakage: exclusion of shared backgrounds}{48}{section*.61}%
+\contentsline {subsubsection}{Evaluation protocol}{48}{section*.62}%
+\contentsline {paragraph}{Detection level (D3).}{48}{section*.63}%
+\contentsline {paragraph}{Image level (D2).}{48}{section*.64}%
+\contentsline {section}{\numberline {4.2}Application}{49}{section.4.2}%
+\contentsline {chapter}{\numberline {5}Experimental Analysis}{51}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Pipeline Results}{51}{section.5.1}%
+\contentsline {subsection}{\numberline {5.1.1}Unsupervised Anomaly Detection with PatchCore (P3)}{51}{subsection.5.1.1}%
+\contentsline {subsubsection}{Evaluation protocol}{51}{section*.65}%
+\contentsline {subsubsection}{Phase 1: calibration on the synthetic corpus (D1)}{51}{section*.67}%
+\contentsline {paragraph}{Baseline.}{52}{section*.68}%
+\contentsline {paragraph}{Shadow vulnerability.}{52}{section*.70}%
+\contentsline {paragraph}{Shadow augmentation and calibration stabilisation.}{53}{section*.72}%
+\contentsline {paragraph}{Light augmentation ablation.}{53}{section*.74}%
+\contentsline {paragraph}{Discrimination versus calibration.}{54}{section*.76}%
+\contentsline {subsubsection}{Phase 2: real-world accuracy with manual gating (D2)}{56}{section*.79}%
+\contentsline {subsubsection}{Discussion}{57}{section*.85}%
+\contentsline {subsection}{\numberline {5.1.2}Single-Class Obstruction Detection with YOLO (P1)}{58}{subsection.5.1.2}%
+\contentsline {subsubsection}{Evaluation protocol}{58}{section*.86}%
+\contentsline {subsubsection}{Phase 1: frozen-vocabulary baselines}{59}{section*.88}%
+\contentsline {paragraph}{COCO class mapping.}{59}{section*.89}%
+\contentsline {paragraph}{Open-vocabulary variant.}{60}{section*.91}%
+\contentsline {paragraph}{Frozen ceiling.}{61}{section*.92}%
+\contentsline {subsubsection}{Phase 2: fine-tuning}{61}{section*.94}%
+\contentsline {paragraph}{Real-world accuracy (D2).}{61}{section*.95}%
+\contentsline {paragraph}{Detection quality (D3).}{62}{section*.97}%
+\contentsline {subsubsection}{Instance-level versus scene-level reading}{62}{section*.98}%
+\contentsline {subsubsection}{Background-leakage control}{63}{section*.99}%
+\contentsline {subsubsection}{Capacity and architecture study}{64}{section*.101}%
+\contentsline {paragraph}{RT-DETR training instability.}{65}{section*.103}%
+\contentsline {subsubsection}{Discussion}{65}{section*.104}%
+\contentsline {section}{\numberline {5.2}Application Results}{66}{section.5.2}%
+\contentsline {chapter}{\numberline {6}Conclusions}{67}{chapter.6}%
+\contentsline {chapter}{\numberline {A}Questa è un'appendice}{69}{appendix.A}%

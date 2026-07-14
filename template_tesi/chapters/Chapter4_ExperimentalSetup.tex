@@ -194,6 +194,144 @@ Pooling affects neither inference time nor memory size, since calibration
 variants never enter the coreset; its only cost is a one-off computation at build
 time.
 
+\subsection{Single-Class Obstruction Detection with YOLO (P1)}
+\label{ssec:p1-setup}
+
+This section reports the concrete settings of the detector pipeline derived in
+Section~\ref{ssec:p1-method}. All experiments use the Ultralytics framework
+(version 8.4.89) on PyTorch 2.5.1 with CUDA 12.4; training runs on a remote
+NVIDIA A100-SXM4-80GB GPU, while all evaluations run locally on CPU, a
+deliberate check that inference does not require server-class hardware.
+
+\subsubsection{Models}
+
+Seven detectors are fine-tuned, spanning two axes: \emph{capacity} within a
+fixed architecture (nano, small, medium) and \emph{architecture} at comparable
+scale (CNN versus transformer). All start from COCO-pretrained weights
+(Table~\ref{tab:p1-models}).
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{llccc}
+    \hline
+    Model & Type & Parameters & GFLOPs & Weight file \\
+    \hline
+    YOLO11n & CNN, one-to-many + NMS & $2.6$M & $6.5$ & $5.3$ MB \\
+    YOLO11s & CNN, one-to-many + NMS & $9.4$M & $21.5$ & $18$ MB \\
+    YOLO11m & CNN, one-to-many + NMS & $20.1$M & $68.0$ & $39$ MB \\
+    YOLO26n & CNN, end-to-end & $2.4$M & $5.4$ & $5.2$ MB \\
+    YOLO26s & CNN, end-to-end & $9.9$M & -- & $19$ MB \\
+    YOLO26m & CNN, end-to-end & $21.8$M & -- & $42$ MB \\
+    RT-DETR-L & Transformer, end-to-end & $32.8$M & $108.0$ & $64$ MB \\
+    \hline
+  \end{tabular}
+  \caption{Detectors fine-tuned in P1. The nano CNNs are the deployment
+  candidates; the larger variants isolate the capacity axis, and RT-DETR-L the
+  architecture axis.}
+  \label{tab:p1-models}
+\end{table}
+
+A note on the memory budget is due, since the deployment hardware (Raspberry
+Pi or Jetson Nano) hosts the detector alongside the P3 memory-bank pipeline
+and a pose-estimation model. Measured at rest, the truncated P3 backbone
+(stem and blocks $\ell_1$--$\ell_3$ of WideResNet50-2) occupies about $100$~MB,
+against $5$~MB for YOLO11n: the detector is not the memory bottleneck of the
+stack, so the choice among the nano, small, and medium variants is driven by
+accuracy results (Chapter~\ref{chap:analysis}), not by RAM.
+
+\subsubsection{Training configuration}
+
+All models share one configuration; nothing is tuned per-model, so that any
+performance difference is attributable to the architecture alone. Training runs
+for up to $150$ epochs with early stopping when the validation fitness does not
+improve for $20$ consecutive epochs, at input resolution $640 \times 640$,
+batch size $32$ (fixed, rather than memory-adaptive, for reproducibility on a
+shared GPU), and seed $42$. The single-class mode of the framework collapses
+all box labels onto one class at load time. The optimiser is the framework's
+automatic choice, and the learning-rate schedule is the default linear decay -
+one consequence, verified empirically, is that the schedule is coupled to the
+epoch budget, so intermediate checkpoints of a longer run are not equivalent to
+a shorter run.
+
+Data augmentation keeps the Ultralytics defaults (Table~\ref{tab:p1-aug}).
+Two defaults deserve comment: vertical flip is disabled, which is semantically
+correct for upright indoor scenes; and the framework's own copy-paste
+augmentation stays off, as it requires segmentation masks that the box-only
+labels do not provide.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lll}
+    \hline
+    Transform & Value & Note \\
+    \hline
+    Mosaic & $1.0$ & Disabled for the last $10$ epochs \\
+    HSV jitter (h/s/v) & $0.015$ / $0.7$ / $0.4$ & Photometric variation \\
+    Translation & $\pm 10\%$ & Random affine \\
+    Scale & $\pm 50\%$ & Random affine \\
+    Horizontal flip & $p = 0.5$ & Valid for indoor scenes \\
+    Vertical flip & $p = 0$ & Kept off (upright scenes) \\
+    Random erasing & $0.4$ & Occlusion robustness \\
+    Mixup / copy-paste & $0$ & Off (default; no masks available) \\
+    \hline
+  \end{tabular}
+  \caption{Augmentation at training time (Ultralytics defaults).}
+  \label{tab:p1-aug}
+\end{table}
+
+\paragraph{Numerical stability of RT-DETR.} The only per-model deviation
+concerns RT-DETR, whose training with the default automatic mixed precision
+(AMP) is numerically unstable: the official trainer documentation warns that
+``AMP training can lead to NaN outputs and may produce errors during bipartite
+graph matching'' \cite{UltralyticsRTDETRTrainer}. RT-DETR is therefore trained
+with AMP disabled (full fp32), all other settings unchanged; the collapse
+observed with AMP on, and its resolution by this single-variable change, are
+documented in Chapter~\ref{chap:analysis}. AMP stays on for the YOLO models,
+which train without anomalies.
+
+\subsubsection{Anti-leakage: exclusion of shared backgrounds}
+
+Following Section~\ref{sssec:p1-data}, the training list excludes every image
+whose background stem appears in the generative test set D3: $107$ positives
+and $13$ clean negatives are dropped, leaving $883$ positives and $97$
+negatives. The exclusion list is materialised as a versioned text file of
+background stems and applied at fold-construction time, with a hard failure if
+the list matches zero images - a guard against silently ineffective exclusion
+when the script runs on a machine where stems differ.
+
+\subsubsection{Evaluation protocol}
+
+P1 is evaluated at two levels, on two disjoint test beds.
+
+\paragraph{Detection level (D3).} Localisation quality is measured by mean
+Average Precision on the generative test set: mAP$@50$, the area under the
+precision-recall curve with a match declared at $\mathrm{IoU} \geq 0.5$
+between predicted and ground-truth box, and mAP$@50$--$95$, its average over
+match thresholds from $0.5$ to $0.95$ - the stricter the threshold, the more
+the metric rewards precise localisation. One methodological detail matters:
+the confidence threshold must \emph{not} be raised during mAP computation
+(the framework default retains virtually all candidates at
+$\tau_{\mathrm{conf}} = 0.001$), because the precision-recall curve is traced
+by sweeping confidence, and discarding low-confidence detections beforehand
+truncates the curve and underestimates the metric. The reported
+precision and recall are taken at the confidence that maximises F1 along that
+curve.
+
+\paragraph{Image level (D2).} Operational accuracy is measured on the real
+test set with the same binary protocol as P3, making the two pipelines
+directly comparable: a frame is predicted \emph{obstructed} when at least one
+detection with confidence $\geq \tau_{\mathrm{conf}} = 0.25$ and box area of at
+least $1\%$ of the image survives; accuracy, precision, recall, F1, and
+false-positive rate follow from the $2 \times 2$ confusion matrix over the
+$30$ obstructed and $36$ unobstructed frames. Per-image predictions are
+recorded to support the error analysis of Chapter~\ref{chap:analysis}.
+
+For the frozen-vocabulary baselines of Chapter~\ref{chap:analysis} (COCO
+models used without fine-tuning), a detection counts toward the obstructed
+decision only if its class belongs to a curated mapping of COCO classes onto
+the obstruction concept; the mapping and its refinement are described together
+with the results.
+
 \section{Application}
 
 [General description of the application, its modules, and overall architecture -

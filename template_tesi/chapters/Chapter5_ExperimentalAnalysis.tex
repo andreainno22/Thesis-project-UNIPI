@@ -441,6 +441,356 @@ positives. Larger-scale quantitative validation of the gating on real glass
 doors, conditioned on a semi-automatically annotated test set, is the natural
 next step.
 
+\subsection{Single-Class Obstruction Detection with YOLO (P1)}
+\label{ssec:p1-results}
+
+\subsubsection{Evaluation protocol}
+
+The evaluation of P1 is organised in two macro-phases (Table~\ref{tab:p1-phases}),
+mirroring the structure used for P3. \textbf{Phase~1} tests the
+\emph{frozen-vocabulary hypothesis}: COCO-pretrained detectors used without any
+fine-tuning, with a curated mapping of COCO classes onto the obstruction
+concept. Its role is to establish, at zero training cost, the ceiling of the
+``no fine-tuning'' route and to diagnose \emph{why} it falls short.
+\textbf{Phase~2} fine-tunes the detectors of Table~\ref{tab:p1-models} on the
+synthetic corpus and evaluates them at two levels: detection mAP on the
+generative test set (D3) and image-level operational accuracy on the real
+on-site set (D2), the latter shared with P3. Unless stated otherwise,
+image-level decisions use the protocol of Chapter~\ref{chap:setup}
+($\tau_{\mathrm{conf}} = 0.25$, minimum box area $1\%$).
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{c l p{4.3cm} p{3.2cm}}
+    \hline
+    Phase & Data & Focus & Key metrics \\
+    \hline
+    1 & D1 + D2 & Frozen COCO detectors, class mapping, open-vocabulary variant & Image-level recall, F1, FPR \\
+    2 & D3 + D2 & Fine-tuned detectors: localisation quality, real-world accuracy, capacity and architecture axes & mAP, instance/scene recall, F1 \\
+    \hline
+  \end{tabular}
+  \caption{The two macro-phases of the P1 evaluation.}
+  \label{tab:p1-phases}
+\end{table}
+
+\subsubsection{Phase 1: frozen-vocabulary baselines}
+
+\paragraph{COCO class mapping.} A COCO-pretrained detector knows $80$ classes,
+none of which is ``obstruction''. The baseline therefore counts a detection as
+an obstruction when its class belongs to a hand-curated subset of COCO classes
+semantically compatible with floor-standing obstacles (initially: bench,
+backpack, handbag, suitcase, chair, couch, potted plant, bed, dining table,
+refrigerator). With YOLO11n and this initial mapping, the result on the
+synthetic corpus is a recall of $0.302$ at precision $0.929$ - the detector
+misses about $70\%$ of the obstructions - and transfers to the real set at
+recall $0.233$ with F1 $0.304$.
+
+A per-class analysis on the $990$ positives and $110$ clean negatives
+identifies both the false-positive drivers and the latent signal. The
+\texttt{refrigerator} class fires on $11.8\%$ of the \emph{clean} negatives
+(against $3.5\%$ of positives): visual inspection of all $49$ crops shows it
+acting as a generic detector of large flat vertical panels - doors, not
+refrigerators - and it is removed from the mapping. Conversely, objects with
+wheels are systematically detected under vehicle classes: \texttt{bicycle}
+fires on $9.9\%$ of positives and on \emph{zero} negatives, \texttt{motorcycle}
+on $3.8\%$/$0\%$, because the detector recognises the wheels of carts and
+wheelchairs; cylindrical waste bins fire on \texttt{toilet} ($47$ of $48$
+detections on positives). The refined mapping (removing
+\texttt{refrigerator} and \texttt{handbag}, adding \texttt{bicycle},
+\texttt{motorcycle}, \texttt{toilet}, \texttt{vase}) improves the synthetic
+metrics substantially (Table~\ref{tab:p1-mapping}).
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lcccc}
+    \hline
+    Mapping (YOLO11n, D1) & Recall & Precision & F1 & FPR \\
+    \hline
+    Initial ($10$ classes) & $0.302$ & $0.929$ & $0.456$ & $0.209$ \\
+    Refined (final) & $0.406$ & $0.976$ & $\mathbf{0.574}$ & $0.091$ \\
+    \hline
+  \end{tabular}
+  \caption{Phase 1: effect of the mapping refinement on the synthetic corpus.}
+  \label{tab:p1-mapping}
+\end{table}
+
+The improvement, however, does \emph{not} transfer: on the real test set the
+refined mapping produces a result identical to the previous one (recall
+$0.200$, F1 $0.308$) - the \texttt{toilet} class, which detected the synthetic
+cylindrical bins almost perfectly, fires on none of the real rectangular bins.
+This is a concrete instance of the synthetic-to-real gap: a mapping adjustment
+validated on clean synthetic crops is useless on real scenes, a warning that
+recurs throughout this chapter.
+
+\paragraph{Open-vocabulary variant.} YOLO-World \cite{Cheng2024yoloworld}
+replaces the fixed vocabulary with text prompts, so the five obstacle
+categories (plus synonyms) can be requested directly. On the synthetic corpus
+it is nearly perfect (F1 $0.958$ at confidence $0.10$, FPR $0.064$); on the
+real set it reaches recall $0.400$ and F1 $0.522$ - the best frozen result,
+but still missing $60\%$ of real obstructions. The missed frames are almost
+all of one kind: a free-standing floor fan blocking two of the six doors, an
+object outside the prompt vocabulary. Adding explicit prompts for it
+(\emph{ventilator, medical equipment, machine}) recovers almost nothing
+($4$ weak detections out of $18$ frames), showing the object is intrinsically
+hard for the open-vocabulary embedding, not merely un-prompted.
+
+\paragraph{Frozen ceiling.} Table~\ref{tab:p1-frozen} collects all frozen
+baselines on the real set. No frozen model exceeds F1 $0.52$; the differences
+among them reflect mostly how liberally each fires generic COCO classes, not
+their learning capacity. The conclusion of Phase~1 is structural: the
+obstruction vocabulary of this domain (wheelchair, cart, stretcher, bin, box,
+fan) is essentially absent from COCO, so no mapping or prompt engineering can
+close the gap - the detector must be fine-tuned.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{llccccc}
+    \hline
+    Model & Type & Recall & Precision & F1 & FPR & Param.\ \\
+    \hline
+    YOLO-World-S & open-vocab.\ transformer & $0.400$ & $0.750$ & $\mathbf{0.520}$ & $0.111$ & $13.4$M \\
+    Faster R-CNN MobileNet & CNN two-stage & $0.400$ & $0.545$ & $0.462$ & $0.278$ & $\sim$$19$M \\
+    RT-DETR-L & transformer & $0.367$ & $0.440$ & $0.400$ & $0.389$ & $33$M \\
+    Faster R-CNN ResNet50 & CNN two-stage & $0.267$ & $0.667$ & $0.381$ & $0.111$ & $\sim$$41$M \\
+    YOLO11n & CNN one-stage & $0.200$ & $0.667$ & $0.308$ & $0.083$ & $2.6$M \\
+    YOLO26n & CNN one-stage & $0.167$ & $1.000$ & $0.286$ & $0.000$ & $2.5$M \\
+    \hline
+  \end{tabular}
+  \caption{Phase 1: all frozen baselines on the real test set (D2), image-level,
+  $\tau_{\mathrm{conf}} = 0.25$, refined mapping (YOLO-World uses direct prompts
+  instead). No frozen model reaches operational accuracy.}
+  \label{tab:p1-frozen}
+\end{table}
+
+\subsubsection{Phase 2: fine-tuning}
+
+\paragraph{Real-world accuracy (D2).} The fine-tuned YOLO11n, trained on the
+full synthetic corpus, doubles the recall of its frozen counterpart on the real
+set ($0.200 \to 0.400$) at F1 $0.490$ (Table~\ref{tab:p1-ft-poli}). The raw
+recall, however, understates what the fine-tuning achieved, because the false
+negatives are not uniformly distributed: of the $18$ missed obstructed frames,
+$16$ contain the same free-standing floor fan already identified in Phase~1 -
+an object belonging to \emph{none} of the five training categories, hence pure
+out-of-distribution content - and only $2$ are genuine misses of an in-training
+category (a waste bin, missed in two frames of one door). Restricted to the
+frames whose obstacle belongs to a trained category, recall is $10/12 = 0.833$.
+The fan is the same physical object that defeats P3's spatial gating
+(Section~\ref{sec:p3-results}), but through an entirely different mechanism:
+P3 detects it and loses it to a geometric rule, P1 simply has never seen one.
+The comparison with Phase~1 is nonetheless sobering: the raw F1 of the
+fine-tuned nano ($0.490$) does not clearly beat the best frozen baseline
+(YOLO-World, $0.520$), and the advantage emerges only once the
+out-of-vocabulary frames are accounted for - coverage of the object vocabulary,
+not model quality, is the binding constraint on this test set.
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lcccccc}
+    \hline
+    YOLO11n on D2 & TP & FP & TN & FN & Recall & F1 \\
+    \hline
+    Frozen (refined mapping) & $6$ & $3$ & $33$ & $24$ & $0.200$ & $0.308$ \\
+    Fine-tuned & $12$ & $7$ & $29$ & $18$ & $0.400$ & $0.490$ \\
+    Fine-tuned, trained categories only & $10$ & -- & -- & $2$ & $0.833$ & -- \\
+    \hline
+  \end{tabular}
+  \caption{Phase 2 on the real test set ($30$ obstructed, $36$ clear frames):
+  fine-tuning versus the frozen baseline, and the recall restricted to frames
+  whose obstacle belongs to a training category ($16$ of the $18$ false
+  negatives contain the out-of-vocabulary floor fan).}
+  \label{tab:p1-ft-poli}
+\end{table}
+
+\paragraph{Detection quality (D3).} On the generative test set the fine-tuned
+YOLO11n reaches mAP$@50 = 0.866$ and mAP$@50$--$95 = 0.703$, with precision
+$0.963$ and recall $0.831$ at the F1-optimal confidence. The gap between the
+two mAP levels indicates that the residual weakness is localisation tightness
+rather than object finding - a reading the next analysis makes precise. (An
+earlier run of this evaluation forced $\tau_{\mathrm{conf}} = 0.25$ during mAP
+computation and underestimated mAP$@50$ by about six points; all reported
+values follow the correct protocol of Chapter~\ref{chap:setup}.)
+
+\subsubsection{Instance-level versus scene-level reading}
+\label{sssec:p1-metrics}
+
+Qualitative inspection of the D3 errors shows a characteristic failure mode:
+stacked cardboard boxes are detected as \emph{one} box spanning the pile
+instead of $N$ separate instances. This section quantifies that observation
+and, more importantly, examines what it does - and does not - imply for the
+task. The analysis was run on the first release of D3 ($94$ images, $187$
+instances, hand-assigned category tags).
+
+Each ground-truth instance is classified by matching predictions at
+$\mathrm{IoU} \geq 0.5$ (the mAP$@50$ rule) and, for the misses, by inspecting
+the best-overlapping prediction: a miss is \emph{fused} when that prediction
+overlaps the instance but was already claimed by a different ground-truth
+object (one predicted box spanning several objects), \emph{loose} when a
+prediction overlaps it without being matched to anything (imprecise
+localisation), and \emph{isolated} when no prediction lies anywhere near.
+Of $79$ misses, $16$ ($20\%$) are fused, $41$ ($52\%$) loose, and $22$
+($28\%$) isolated - so nearly three quarters of the ``missed'' instances have
+a prediction in their vicinity. The per-category breakdown is stark: the
+\texttt{box} category has instance recall $0.281$ ($27/96$) against
+$0.83$--$0.96$ for the other four categories, and \emph{all} fused misses
+belong to it. The root cause is in the training data: the copy-paste generator
+enforces a maximum pairwise IoU of $0.10$ between pasted objects
+(Table~\ref{tab:ds-copypaste}), so the configuration ``several heavily
+overlapping same-class objects'' is absent from training by construction, and
+boxes are the only category the generative model habitually stacks.
+
+Two observations prevent over-correcting for this. First, for heavily occluded
+stacked objects the ground truth itself is ambiguous: whether three stacked
+boxes ``are'' one object or three is an annotation convention (amodal versus
+modal boxes), and either convention penalises one of the two plausible model
+behaviours - the instance-level metric is partly ill-posed on such scenes,
+independently of the model. Second, at the level that matters operationally -
+is the route obstructed? - the failure disappears entirely: every scene of the
+first release containing at least one box is flagged ($30/30$), a higher scene
+rate than for scenes without boxes ($60/64$). The scene-level metric, however,
+is biased in the opposite direction (a scene with five objects counts as
+detected if one is found), so neither number alone is honest: the two bracket
+the truth, and the clean signal in between is the \emph{isolated} miss count -
+$22$ instances ($12$ of them boxes) that no prediction approaches, the only
+misses that are genuine blind spots under any annotation convention. For a
+single-class presence task, the stacked-box fusion is thus a metric artefact
+rather than a functional defect, and no NMS or data intervention targeting it
+was pursued.
+
+\subsubsection{Background-leakage control}
+
+As anticipated in Section~\ref{ssec:ds-gemini}, every D3 background also
+appears in the training pool of the copy-paste corpus ($107$ stems as
+composite backgrounds, $13$ as clean negatives): D3 could reward background
+memorisation rather than object detection. The control is direct: YOLO11n was
+retrained on the purged training set ($883$ positives, $97$ negatives) and
+compared, on the identical D3 release, with the model trained on the full
+corpus (Table~\ref{tab:p1-leak}).
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lcccc}
+    \hline
+    YOLO11n training set & mAP$@50$ & mAP$@50$--$95$ & Precision & Recall \\
+    \hline
+    Full corpus ($990/110$) & $0.863$ & $0.709$ & $0.951$ & $0.789$ \\
+    Purged ($883/97$) & $0.866$ & $0.703$ & $0.963$ & $0.831$ \\
+    \hline
+  \end{tabular}
+  \caption{Background-leakage control on D3: removing every training image that
+  shares a background with the test set leaves the results unchanged.}
+  \label{tab:p1-leak}
+\end{table}
+
+The two models are statistically indistinguishable - the purged model is even
+marginally better. A complementary check on the first release found no recall
+advantage on backgrounds seen as training positives over backgrounds seen only
+as clean negatives ($0.588$ versus $0.545$). Background overlap therefore does
+\emph{not} inflate the D3 numbers: the detector is reading the objects, not
+recognising the scenes. All subsequent experiments nevertheless use the purged
+training set, as the more defensible protocol.
+
+\subsubsection{Capacity and architecture study}
+
+With the protocol fixed, the remaining question is whether the choice of
+detector matters: does more capacity, or a different architecture, buy real
+generalisation? Seven models - three sizes per YOLO generation plus RT-DETR-L -
+were trained identically on the purged corpus and evaluated on D3
+(Table~\ref{tab:p1-scaling}).
+
+\begin{table}[h]
+  \centering
+  \begin{tabular}{lcccccc}
+    \hline
+    Model & Param.\ & Synth.\ mAP$@50$--$95$ & \multicolumn{4}{c}{Generative test set (D3)} \\
+     & & (internal val) & mAP$@50$ & mAP$@50$--$95$ & Prec.\ & Recall \\
+    \hline
+    YOLO11n & $2.6$M & $0.972$ & $\mathbf{0.866}$ & $0.703$ & $0.963$ & $0.831$ \\
+    YOLO11s & $9.4$M & $0.986$ & $0.867$ & $0.709$ & $0.923$ & $0.837$ \\
+    YOLO11m & $20.1$M & $0.984$ & $0.856$ & $0.708$ & $0.965$ & $0.837$ \\
+    YOLO26n & $2.5$M & $0.982$ & $0.852$ & $0.708$ & $0.969$ & $0.789$ \\
+    YOLO26s & $9.9$M & $0.978$ & $0.854$ & $0.698$ & $0.952$ & $0.840$ \\
+    YOLO26m & $21.8$M & $0.982$ & $0.855$ & $\mathbf{0.716}$ & $0.952$ & $0.833$ \\
+    RT-DETR-L & $32.8$M & $\mathbf{0.991}$ & $0.847$ & $0.702$ & $0.943$ & $0.801$ \\
+    \hline
+  \end{tabular}
+  \caption{Capacity and architecture study, all models trained identically on
+  the purged corpus. A $12.6\times$ parameter range moves D3 mAP$@50$ by two
+  points with no monotone trend, while the internal synthetic validation is
+  saturated for every model.}
+  \label{tab:p1-scaling}
+\end{table}
+
+Three findings emerge. First, \emph{capacity buys nothing}: across a
+$12.6\times$ parameter range, D3 mAP$@50$ spans $0.847$--$0.867$ with no
+monotone trend - the spread is fold-to-fold noise, not signal. This echoes, in
+a more extreme form, the small nano-to-XLarge gain ($+3.5$ mAP points)
+reported by Miglionico et al.\ on real PPE data \cite{Miglionico2025}: on a
+synthetic training corpus the capacity axis saturates entirely. Second,
+\emph{the internal validation is saturated and non-predictive}: every model
+scores $0.97$--$0.99$ on the held-out synthetic fold, and the ranking there
+does not correlate with D3 - RT-DETR-L is the best model on synthetic data and
+the worst on D3. Model selection on the synthetic validation would pick the
+wrong model; only an external test set can rank these detectors. Third, the
+bottleneck is the data, not the model: since no architecture or size moves the
+external metric, the residual gap to perfect detection lies in the
+synthetic-to-real distribution shift and in vocabulary coverage - consistent
+with the fan analysis on D2.
+
+\paragraph{RT-DETR training instability.} The RT-DETR result required one
+protocol repair worth documenting. Trained with the default automatic mixed
+precision, the run collapsed: validation losses turned \texttt{NaN}
+sporadically from epoch $4$ and permanently from epoch $15$, at which point
+every metric dropped to zero and early stopping ended the run at epoch $34$;
+the usable checkpoint was the pre-collapse epoch $14$. This is a documented
+failure mode of RT-DETR under AMP - fp16 overflow in the bipartite-matching
+cost matrix \cite{UltralyticsRTDETRTrainer} - and the fix prescribed by the
+framework documentation, disabling AMP with all else unchanged, resolved it
+completely: the retrained run completed all $150$ epochs with zero \texttt{NaN}
+and improved on D3 from mAP$@50$--$95 = 0.645$ to $0.702$ and recall from
+$0.741$ to $0.801$. The single-variable repair attributes the instability to
+AMP with certainty; Table~\ref{tab:p1-scaling} reports the repaired run. Even
+so repaired, the transformer does not surpass the nano CNNs on D3 while
+costing $12\times$ their memory - reinforcing, now on equal training footing,
+that it is not the right candidate for this deployment.
+
+\subsubsection{Discussion}
+
+Across both phases, the failure modes of the detector pipeline are diagnosable
+and consistent. Phase~1 establishes that the frozen-vocabulary route fails for
+a structural reason - the domain's obstacle categories are absent from COCO -
+and that the failure survives both mapping refinement and open-vocabulary
+prompting; the per-class analysis (wheels detected as bicycles, bins as
+toilets) shows the detectors \emph{see} the objects but cannot name them,
+which is precisely the deficit fine-tuning repairs. Phase~2 shows that
+fine-tuning on synthesis-derived labels transfers to real scenes for the
+categories it covers (recall $0.833$ on trained categories) and fails
+completely outside them (the floor fan, $16$ of $18$ false negatives): the
+binding constraint is vocabulary coverage, not model choice, since a
+$12.6\times$ capacity range and a CNN-to-transformer architecture change leave
+the external metrics unmoved. The practical selection criterion then reduces
+to cost, and the smallest model - YOLO11n, $5$~MB - is the rational deployment
+candidate, a conclusion reached by measurement rather than by assumption.
+
+The metric analysis of Section~\ref{sssec:p1-metrics} carries a lesson that
+extends beyond P1: for a single-class presence task, instance-level detection
+metrics and scene-level ones bracket the operational truth from opposite
+sides, and on scenes with heavily occluded same-class objects the instance
+ground truth is itself convention-dependent. Reporting a single headline
+number would mislead in either direction; the defensible statement is the
+decomposition - which misses are localisation artefacts and which are genuine
+blind spots.
+
+As for P3, the conclusions carry two tiers of statistical weight. The
+synthetic and generative evaluations (D1, D3; hundreds of images) support the
+structural findings - the vocabulary bottleneck, the capacity plateau, the
+saturation of the internal validation. The real-set numbers (D2; tens of
+frames) are a qualitative validation: they confirm the expected behaviour and
+localise the failure modes, but the absolute values are illustrative. The
+natural next step, enabled by the fold infrastructure already in place, is a
+cross-validated estimate of the fold-to-fold variance of the D3 metrics, which
+would put formal uncertainty bounds under the model comparison of
+Table~\ref{tab:p1-scaling}.
+
 \section{Application Results}
 
 [Analysis of the end-to-end application results - to be completed.]

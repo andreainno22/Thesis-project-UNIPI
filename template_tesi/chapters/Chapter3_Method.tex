@@ -5,14 +5,17 @@
 
 The goal of this work is to detect, on an edge device, when an obstacle blocks
 an evacuation route (a door or a corridor). Among the pipelines compared in this
-thesis, this chapter develops the third one,
-\emph{Unsupervised Anomaly Detection with PatchCore} (P3), whose distinctive
-property is that it learns only from normal, unobstructed scenes and requires no
-labelled examples of obstructions. The following sections derive the components
-of the method, their mathematical formulation, and the data on which they
-operate; implementation choices and numerical settings are deferred to
-Chapter~\ref{chap:setup}, and the empirical evaluation to
-Chapter~\ref{chap:analysis}.
+thesis, this chapter develops two complementary ones.
+\emph{Unsupervised Anomaly Detection with PatchCore} (P3) learns only from
+normal, unobstructed scenes and requires no labelled examples of obstructions.
+\emph{Single-Class Obstruction Detection with YOLO} (P1) takes the opposite,
+supervised route: a deep object detector is fine-tuned to localise obstacles
+explicitly, trading annotation effort for the ability to state \emph{where} the
+obstruction is and to ignore scene changes that are not objects. The following
+sections derive the components of each method, their mathematical formulation,
+and the data on which they operate; implementation choices and numerical
+settings are deferred to Chapter~\ref{chap:setup}, and the empirical evaluation
+to Chapter~\ref{chap:analysis}.
 
 \section{Pipeline Overview}
 
@@ -510,6 +513,178 @@ w_i\,\sigma_i$, with the weight $w_i$ rising as a camera accumulates real normal
 frames; full pooling ($w_i = 0$) is the cold-start corner and remains valuable
 for newly installed cameras.
 
+\subsection{Single-Class Obstruction Detection with YOLO (P1)}
+\label{ssec:p1-method}
+
+\subsubsection{Motivation and design rationale}
+
+P1 approaches the same objective from the supervised side: instead of learning
+what the normal scene looks like and flagging deviations, it learns what an
+\emph{obstacle} looks like and localises it directly. This inverts the
+trade-offs of P3. A detector is scene-agnostic - it requires no per-camera
+reference image, no calibration, and keeps working if the camera is moved -
+and it is intrinsically robust to the nuisance variations that challenge a
+reference-based method: a shadow, a light beam, or a background change behind a
+glass panel contains no object and therefore, in principle, triggers no
+detection. The price is the closed vocabulary: a detector can only find what it
+was trained to find, so an obstacle type absent from the training data is
+invisible to it. The two pipelines are thus natural complements, and their
+failure modes are expected to be disjoint - a hypothesis the shared real test
+set of Section~\ref{ssec:ds-poli} makes verifiable.
+
+Two design decisions characterise P1. First, the task is cast as
+\emph{single-class} detection: every obstacle category collapses onto one
+class, \texttt{obstruction}, because the operational question is whether the
+route is blocked, not by what. This concentrates the model capacity on the
+object-versus-background boundary rather than on inter-class discrimination,
+and it simplifies the decision rule at deployment. Second, before any training
+was undertaken, the \emph{frozen-vocabulary hypothesis} was tested: whether a
+detector pre-trained on a generic corpus (MS-COCO \cite{Lin2014coco}), used
+as-is with a suitable mapping of its classes onto the obstruction concept,
+could reach adequate accuracy at zero training cost. As
+Chapter~\ref{chap:analysis} shows, this hypothesis fails - the obstacle
+categories of the evacuation domain are essentially absent from the COCO
+vocabulary - and its failure is what motivates the fine-tuning route developed
+here.
+
+\subsubsection{Key intuition}
+
+The core intuition mirrors, in supervised form, the transferability argument of
+P3: a detector pre-trained on a large natural-image corpus has already learned
+generic objectness - edges, textures, part-whole composition - and needs only
+to re-target its final layers to the specific appearance of evacuation-route
+obstacles. Fine-tuning from pre-trained weights therefore requires orders of
+magnitude fewer labelled images than training from scratch. The labelled data
+itself comes at near-zero manual cost: the copy-paste corpus (D1,
+Section~\ref{sec:dataset}) records the exact position of every pasted object,
+so bounding-box supervision is a by-product of the synthesis rather than a
+manual annotation effort. The open question - whether a detector trained on
+synthetic composites transfers to real scenes - is empirical, and
+Chapter~\ref{chap:analysis} addresses it on two independent test sets.
+
+\subsubsection{One-stage detection: formulation}
+
+All the detectors considered in P1 belong to the one-stage family, which frames
+detection as dense regression over a feature grid rather than as a two-step
+propose-then-classify procedure \cite{Ren2015fasterrcnn}. The input image is
+processed by a convolutional \emph{backbone} that produces feature maps at
+several scales; a \emph{neck} fuses information across scales, so that both
+small and large objects are represented; and a \emph{head} predicts, at every
+location $x$ of each fused map, a classification score $p(x) \in [0,1]$ for
+each class and a bounding box $b(x)$. Modern Ultralytics heads are
+\emph{anchor-free}: instead of regressing offsets from a set of pre-defined
+anchor boxes, the head directly predicts the distances from the grid location
+to the four sides of the box, removing the anchor hyperparameters
+\cite{Jocher2024yolo11}.
+
+During training, each ground-truth box must be assigned to the grid locations
+responsible for predicting it. The assignment follows Task-Aligned Learning
+(TAL) \cite{Feng2021tood}: for every candidate location the alignment metric
+
+\begin{equation}
+  t \;=\; p^{\alpha} \cdot \mathrm{IoU}^{\beta}
+  \label{eq:p1-tal}
+\end{equation}
+
+combines the classification score $p$ for the target class and the
+Intersection-over-Union $\mathrm{IoU}$ between the predicted and ground-truth
+boxes, with exponents $\alpha$ and $\beta$ weighting the two terms. The
+top-scoring locations under $t$ become positives for that object. Because $t$
+is high only when \emph{both} the classification and the localisation are good,
+the assignment explicitly aligns the two sub-tasks - a location that classifies
+well but localises poorly is not reinforced. The loss combines binary
+cross-entropy for classification with an IoU-based loss for box regression; the
+generation-specific regression terms are described below.
+
+At inference, a one-to-many head produces multiple overlapping candidate boxes
+per object, which are pruned by non-maximum suppression (NMS): boxes are ranked
+by confidence and any box whose IoU with an accepted box exceeds a threshold is
+discarded. NMS is a post-processing step external to the network; its removal
+is one of the axes along which the tested architectures differ.
+
+\subsubsection{YOLO11}
+
+YOLO11 \cite{Jocher2024yolo11} is the eleventh Ultralytics iteration of the
+YOLO lineage \cite{Redmon2016} and the reference CNN architecture of this
+study. Relative to its predecessor YOLOv8 it makes three structural changes:
+the backbone and neck adopt the \texttt{C3k2} block, a leaner formulation of
+the Cross-Stage-Partial bottleneck that splits one large convolution into two
+smaller ones; a \texttt{C2PSA} block - Cross-Stage-Partial with spatial
+attention - is inserted after the \texttt{SPPF} multi-scale pooling module,
+letting the network re-weight spatial positions before the neck; and the
+classification branch of the head uses depthwise-separable convolutions,
+cutting its cost. The nano variant used as the primary deployment candidate has
+$2.6$ million parameters and $6.5$ GFLOPs at $640 \times 640$ input. The same
+architecture scales to small ($9.4$M) and medium ($20.1$M) variants by width
+and depth multipliers, a property exploited in Chapter~\ref{chap:analysis} to
+isolate the effect of model capacity at fixed architecture.
+
+\subsubsection{YOLO26: end-to-end NMS-free detection}
+
+YOLO26 \cite{Ultralytics2025yolo26} is the most recent generation of the same
+family and differs from YOLO11 along one architectural axis and three training
+axes. Architecturally, it is \emph{natively end-to-end}: a one-to-one detection
+head outputs at most one box per object directly, so NMS is no longer required
+- the same design goal pioneered by DETR \cite{Carion2020detr}, achieved here
+without a transformer. It also removes the Distribution Focal Loss (DFL) module
+from box regression; DFL discretises each box coordinate into a histogram over
+fixed bins, and its removal simplifies the head, removes the bin-range
+constraint on the regression, and eases export to edge runtimes. On the
+training side, YOLO26 introduces ProgLoss (a progressive re-weighting of the
+loss toward the end-to-end branch), Small-Target-Aware Label assignment (STAL,
+which preserves positive assignments for small objects), and the MuSGD
+optimiser, a hybrid of SGD and Muon-style updates. The nano variant has $2.4$M
+parameters and $5.4$ GFLOPs, with a claimed CPU-inference speed-up of up to
+$43\%$ over YOLO11n \cite{Ultralytics2025yolo26} - a relevant property for the
+Raspberry~Pi deployment target, which has no GPU.
+
+\subsubsection{RT-DETR: a transformer-based comparison point}
+
+To separate what is specific to the YOLO lineage from what any modern detector
+would achieve, the comparison includes RT-DETR \cite{Lv2024rtdetr}, the first
+transformer-based detector designed for real-time use. Like DETR
+\cite{Carion2020detr}, it casts detection as \emph{set prediction}: a fixed set
+of learned object queries attends to the image features in a transformer
+decoder, and training matches queries to ground-truth objects one-to-one by
+solving a bipartite (Hungarian) assignment on a combined
+classification-localisation cost. This makes the model NMS-free by
+construction. Its distinctive component is an \emph{efficient hybrid encoder}
+that decouples the two expensive operations on multi-scale features:
+attention-based intra-scale interaction (AIFI) runs only on the deepest,
+smallest feature map, while cross-scale fusion (CCFM) is handled by lightweight
+convolutional blocks - the design that brings transformer detection within
+real-time budgets. Query initialisation is \emph{IoU-aware}: the decoder starts
+from the encoder locations most likely to contain objects. The variant used
+here, RT-DETR-L, has $32.8$M parameters and $108$ GFLOPs - an order of
+magnitude above the nano CNNs - and serves as the CNN-versus-transformer axis
+of the comparison, not as a deployment candidate.
+
+\subsubsection{Training data and anti-leakage}
+\label{sssec:p1-data}
+
+The detector is trained on the synthetic corpus D1 exclusively; no real test
+frame contributes to training. Positives are the $990$ copy-paste composites
+with their synthesis-derived boxes, all categories collapsed to the single
+\texttt{obstruction} class. Negatives - images with no label file, which the
+Ultralytics loader treats as pure background - are the $110$ reference
+backgrounds that the copy-paste generator deliberately left clean
+(Section~\ref{sec:dataset}). This choice is dictated by leakage: the
+backgrounds actually \emph{used} by the composites cannot serve as negatives,
+because each of them also appears, with an object pasted on it, among the
+positives; a detector could then lower its loss by memorising the background
+identity instead of learning the object appearance. The held-out clean
+backgrounds share the visual distribution of the positives' scenes without
+sharing any specific image.
+
+The same group-key discipline of Section~\ref{ssec:ds-db} governs the
+cross-validation folds: splits are stratified by venue and label but
+\emph{grouped} by the background identifier, so that no background - clean or
+composited - ever spans the training and validation side of a fold. A further
+exclusion, specific to the generative test set introduced in
+Section~\ref{ssec:ds-gemini}, removes from training every composite whose
+background also appears in that test set; its quantitative effect is measured
+in Chapter~\ref{chap:analysis}.
+
 \section{Dataset Description}
 \label{sec:dataset}
 
@@ -798,6 +973,44 @@ blocking the passage.
 \end{figure}
 
 
+
+\subsection{Generative photorealistic test set (D3)}
+\label{ssec:ds-gemini}
+
+The copy-paste corpus D1 and the real set D2 leave a gap between them: D1 is
+large but visually naive (incoherent lighting, no cast shadows), while D2 is
+realistic but small ($30$ obstructed frames) and restricted to doors. A third
+corpus fills this gap for the detector pipeline. Normal background scenes are
+edited by a generative image model (\texttt{gemini-2.5-flash-image}
+\cite{GoogleGeminiImage2025}) instructed, with a fixed prompt and seed, to add
+one to three obstacles of the usual five categories \emph{on the floor,
+blocking the passage}, as a minimal local edit: resolution, framing, camera
+angle, and every pixel outside the added objects must remain identical to the
+original photograph, while the objects themselves must be photorealistic,
+correctly scaled, and consistent with the scene's lighting and perspective -
+including cast shadows, the two cues D1 lacks by construction. A share of the
+prompts additionally requires one object to be partially cut off by the image
+border, mirroring the partial-visibility variants of D1.
+
+The current release comprises $120$ images ($60$ doors, $60$ corridors), all
+positives, with $166$ obstacle instances. Bounding boxes were annotated by
+hand, and each instance additionally carries a hand-assigned \emph{category
+tag} (cart, wheelchair, stretcher, box, waste bin), which enables the
+per-category failure analysis of Chapter~\ref{chap:analysis}; an earlier
+release of $94$ images with $187$ instances was used for part of that analysis
+before the set was extended. Since the set contains no negative frames, it
+supports detection-level metrics (mAP, instance recall) rather than image-level
+classification metrics; the latter remain the province of D2.
+
+One caveat is structural: the background scenes edited by the generative model
+are drawn from the same Pinterest pool that feeds the copy-paste corpus, so a
+model trained on D1 has typically \emph{seen} the test backgrounds - with a
+different pasted object, or clean. D3 therefore measures generalisation to new
+objects on familiar scenes, not to new scenes. Both mitigations are in place:
+the training set is purged of every composite sharing a background with D3
+(Section~\ref{sssec:p1-data}), and the residual effect of this overlap is
+measured empirically in Chapter~\ref{chap:analysis}. D3 is a P1-specific
+evaluation asset and is kept outside the database index of the next subsection.
 
 \subsection{Database organisation and anti-leakage}
 \label{ssec:ds-db}
